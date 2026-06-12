@@ -1,7 +1,12 @@
 """Executor — three step executors for browser, tool, and goal step types.
 
-Each executor returns a result dict in a consistent file-contract format:
-{status, duration_ms, ops/agent_result, error, ...}
+Each executor has two layers:
+- **Core functions** (execute_browser_op / execute_tool / execute_goal):
+  No file I/O, suitable for chat mode tool_executor.
+- **Pipeline wrappers** (execute_browser_step / execute_tool_step / execute_goal_step):
+  Call core functions + write artifacts (step.json, screenshots, output files).
+
+Result dict format: {ok, result, error, duration_ms, ...}
 """
 from __future__ import annotations
 
@@ -56,15 +61,7 @@ DEFAULT_OP_TIMEOUT = 30
 
 
 def mask_sensitive_patterns(text: str) -> str:
-    """Mask sensitive key=value patterns and credential strings in text.
-
-    Args:
-        text: Input string that may contain sensitive data.
-
-    Returns:
-        Masked string with sensitive values replaced by ``***``.
-    """
-
+    """Mask sensitive key=value patterns and credential strings in text."""
     def _replacer(m: re.Match) -> str:
         key = m.group(1).lower()
         sep = m.group(2)
@@ -80,15 +77,7 @@ def mask_sensitive_patterns(text: str) -> str:
 
 
 def sanitize_result(data, sensitive_keys: frozenset = SENSITIVE_KEYS):
-    """Recursively sanitize sensitive values in a nested data structure.
-
-    Args:
-        data: The data to sanitize (dict, list, str, or other).
-        sensitive_keys: Set of lowercase keys whose values should be masked.
-
-    Returns:
-        Sanitized copy of the data.
-    """
+    """Recursively sanitize sensitive values in a nested data structure."""
     from params.manager import ParamRef
 
     if isinstance(data, ParamRef):
@@ -106,7 +95,273 @@ def sanitize_result(data, sensitive_keys: frozenset = SENSITIVE_KEYS):
     return data
 
 
-# ── Browser step executor ──
+# ──────────────────────────────────────────────────────────────
+#  Core execution functions (no file I/O — for chat mode)
+# ──────────────────────────────────────────────────────────────
+
+
+async def execute_browser_op(
+    op_type: str,
+    params: dict,
+    cdp_helpers: object,
+) -> dict:
+    """Execute a single browser operation (goto/click/fill/snapshot/scroll/source/eval).
+
+    Returns: {ok, result, error, duration_ms, screenshot_base64?, html?}
+    Does NOT write files — suitable for chat mode tool_executor.
+    """
+    import base64
+
+    start = time.time()
+    result: dict = {
+        "ok": True,
+        "result": None,
+        "error": None,
+        "duration_ms": 0,
+    }
+
+    try:
+        async with asyncio.timeout(DEFAULT_OP_TIMEOUT):
+            if op_type == "goto":
+                url = params.get("url", "")
+                await cdp_helpers.goto_url(url)  # type: ignore[union-attr]
+                result["result"] = {"url": url}
+
+            elif op_type == "click":
+                selector = params.get("selector", "")
+                if not selector:
+                    raise ValueError("click op missing selector")
+                await cdp_helpers.click_selector(selector)  # type: ignore[union-attr]
+                result["result"] = {"selector": selector}
+
+            elif op_type == "fill":
+                selector = params.get("selector", "")
+                text = params.get("text", params.get("value", ""))
+                await cdp_helpers.fill_input(selector, text)  # type: ignore[union-attr]
+                result["result"] = {"selector": selector}
+
+            elif op_type == "snapshot":
+                snapshot = await cdp_helpers.capture_snapshot()  # type: ignore[union-attr]
+                result["result"] = {}
+                png_data = snapshot.get("screenshot_base64", "")
+                if png_data:
+                    result["screenshot_base64"] = png_data
+                    result["result"]["has_screenshot"] = True
+                html_data = snapshot.get("html", "")
+                if html_data:
+                    result["html"] = html_data
+                    result["result"]["has_html"] = True
+
+            elif op_type == "scroll":
+                direction = params.get("direction", "down")
+                amount = params.get("amount", 300)
+                js_code = _build_scroll_js(direction, amount)
+                await cdp_helpers.js(js_code)  # type: ignore[union-attr]
+                result["result"] = {"direction": direction, "amount": amount}
+
+            elif op_type == "source":
+                html = await cdp_helpers.get_page_html()  # type: ignore[union-attr]
+                result["html"] = html
+                result["result"] = {"length": len(html)}
+
+            elif op_type == "eval":
+                code_str = params.get("code", params.get("js", ""))
+                eval_result = await cdp_helpers.js(code_str)  # type: ignore[union-attr]
+                result["result"] = eval_result
+
+            else:
+                raise ValueError(f"Unknown browser op type: {op_type}")
+
+    except TimeoutError:
+        result["ok"] = False
+        result["error"] = f"Operation timeout ({DEFAULT_OP_TIMEOUT}s)"
+    except Exception as e:
+        result["ok"] = False
+        result["error"] = str(e)
+
+    result["duration_ms"] = int((time.time() - start) * 1000)
+    return result
+
+
+def _build_scroll_js(direction: str, amount: int) -> str:
+    """Build JS code for page scrolling."""
+    if direction == "down":
+        return f"window.scrollBy(0, {amount});"
+    elif direction == "up":
+        return f"window.scrollBy(0, -{amount});"
+    else:
+        return f"window.scrollBy(0, {amount});"
+
+
+async def execute_tool(
+    tool_name: str,
+    params: dict,
+    tools_dir: Path,
+    cdp_helpers: object | None = None,
+) -> dict:
+    """Execute a tool by importing and calling its function.
+
+    No file I/O — returns result dict directly. Suitable for chat mode.
+
+    Returns: {ok, result, error, duration_ms, output_files?}
+    """
+    import importlib.util
+    import sys
+
+    start = time.time()
+    result: dict = {
+        "ok": True,
+        "result": None,
+        "error": None,
+        "duration_ms": 0,
+    }
+
+    if not tool_name:
+        result["ok"] = False
+        result["error"] = "tool_name is required"
+        result["duration_ms"] = int((time.time() - start) * 1000)
+        return result
+
+    tool_path = tools_dir / f"{tool_name}.py"
+    if not tool_path.exists():
+        result["ok"] = False
+        result["error"] = f"Tool file not found: {tool_path}"
+        result["duration_ms"] = int((time.time() - start) * 1000)
+        return result
+
+    try:
+        module_name = f"tools_{tool_name}"
+        if module_name in sys.modules:
+            del sys.modules[module_name]
+        spec = importlib.util.spec_from_file_location(module_name, str(tool_path))
+        if spec is None or spec.loader is None:
+            result["ok"] = False
+            result["error"] = f"Cannot load module: {tool_path}"
+            result["duration_ms"] = int((time.time() - start) * 1000)
+            return result
+        module = importlib.util.module_from_spec(spec)
+        sys.modules[module_name] = module
+        spec.loader.exec_module(module)
+    except Exception as e:
+        result["ok"] = False
+        result["error"] = str(e)
+        result["duration_ms"] = int((time.time() - start) * 1000)
+        return result
+
+    tool_func = getattr(module, tool_name, None)
+    if not tool_func:
+        result["ok"] = False
+        result["error"] = f"Function '{tool_name}' not found in {tool_path}"
+        result["duration_ms"] = int((time.time() - start) * 1000)
+        return result
+
+    capabilities = getattr(module, "CAPABILITIES", [])
+    tool_cdp_instance = None
+
+    if capabilities and "browser" in capabilities:
+        if cdp_helpers is None:
+            result["ok"] = False
+            result["error"] = f"Tool '{tool_name}' requires browser"
+            result["duration_ms"] = int((time.time() - start) * 1000)
+            return result
+        from utils.tool_cdp import ToolCDPHelpers
+        tool_cdp_instance = ToolCDPHelpers(cdp_helpers)
+
+    try:
+        kwargs: dict = {"input_files": params.get("input_files", {}),
+                        "output_dir": params.get("output_dir", ""),
+                        **{k: v for k, v in params.items()
+                           if k not in ("input_files", "output_dir")}}
+        if tool_cdp_instance is not None:
+            kwargs["cdp_helpers"] = tool_cdp_instance
+
+        if asyncio.iscoroutinefunction(tool_func):
+            ret = await tool_func(**kwargs)
+        else:
+            loop = asyncio.get_event_loop()
+            ret = await loop.run_in_executor(None, partial(tool_func, **kwargs))
+        result["result"] = ret
+    except Exception as e:
+        result["ok"] = False
+        result["error"] = str(e)
+
+    result["duration_ms"] = int((time.time() - start) * 1000)
+    return result
+
+
+async def execute_goal(
+    description: str,
+    cdp_helpers: object,
+    pipeline_name: str,
+    tools_dir: Path,
+    frontmatter: dict | None = None,
+    agent_md_path: Path | None = None,
+    system_prompt: str = "",
+) -> dict:
+    """Execute a goal via browser-use Agent integration.
+
+    No file I/O — returns result dict directly. Suitable for chat mode.
+
+    Returns: {ok, result, error, duration_ms, learned_ops?}
+    """
+    start = time.time()
+    result: dict = {
+        "ok": True,
+        "result": None,
+        "error": None,
+        "duration_ms": 0,
+    }
+
+    source_text = ""
+    if agent_md_path and agent_md_path.exists():
+        try:
+            source_text = agent_md_path.read_text(encoding="utf-8")
+        except Exception:
+            pass
+
+    step_def = {
+        "goal_description": description,
+        "name": pipeline_name,
+        "system_prompt": system_prompt,
+    }
+
+    try:
+        from engine.agent import run_goal_step
+
+        agent_result = await run_goal_step(
+            step_def=step_def,
+            cdp_helpers=cdp_helpers,
+            step_dir=Path("."),
+            pipeline_name=pipeline_name,
+            frontmatter=frontmatter,
+            source_text=source_text,
+            tools_dir=tools_dir,
+            agent_md_path=agent_md_path,
+            system_prompt=system_prompt,
+        )
+
+        agent_status = agent_result.get("status", "")
+        if agent_status not in ("success",):
+            result["ok"] = False
+            result["error"] = agent_result.get("error_message", f"Agent status: {agent_status}")
+        else:
+            result["result"] = agent_result.get("result", agent_result)
+
+        learned_ops = agent_result.get("learned_ops", [])
+        if learned_ops:
+            result["learned_ops"] = learned_ops
+
+    except Exception as e:
+        result["ok"] = False
+        result["error"] = str(e)
+
+    result["duration_ms"] = int((time.time() - start) * 1000)
+    return result
+
+
+# ──────────────────────────────────────────────────────────────
+#  Pipeline wrappers (call core functions + write artifacts)
+# ──────────────────────────────────────────────────────────────
 
 
 async def execute_browser_step(
@@ -117,15 +372,11 @@ async def execute_browser_step(
 ) -> dict:
     """Execute a browser step: run ops via CDP, write step.json + artifacts.
 
-    Args:
-        step: Step definition dict containing ``browser_ops`` list.
-        cdp_helpers: CDPHelpers instance for browser operations.
-        step_dir: Directory for step artifacts.
-        run_dir: Run directory (unused here, kept for API consistency).
-
-    Returns:
-        Result dict with status, ops, duration_ms, error, compensation_history.
+    Delegates to execute_browser_op() for each individual operation,
+    then writes screenshots and HTML to step_dir.
     """
+    import base64
+
     ops = step.get("browser_ops", [])
     registry = CompensationRegistry()
     result: dict = {
@@ -141,113 +392,96 @@ async def execute_browser_step(
 
     start = time.time()
     for op in ops:
-        op_start = time.time()
         op_type = op.get("type", "")
         value = op.get("value", "")
-        op_record: dict = {"type": op_type, "ok": True, "duration_ms": 0}
         op_params = {k: v for k, v in op.items() if k != "type"}
         registry.register_op(op_type, op_params)
 
-        try:
-            async with asyncio.timeout(DEFAULT_OP_TIMEOUT):
-                if op_type == "goto" and value:
-                    op_record["url"] = value
-                    await cdp_helpers.goto_url(value)  # type: ignore[union-attr]
-                    result["final_url"] = value
+        op_record: dict = {"type": op_type, "ok": True, "duration_ms": 0}
 
-                elif op_type == "click":
-                    selector = value or op.get("selector", "")
-                    if not selector:
-                        raise ValueError("click op missing selector")
-                    op_record["selector"] = selector
-                    await cdp_helpers.click_selector(selector)  # type: ignore[union-attr]
+        if op_type in ("goto", "click", "fill", "snapshot", "scroll", "source", "eval"):
+            # Normalize params for core function
+            if op_type == "goto":
+                core_params = {"url": value}
+                op_record["url"] = value
+            elif op_type == "click":
+                selector = value or op.get("selector", "")
+                core_params = {"selector": selector}
+                op_record["selector"] = selector
+            elif op_type == "fill":
+                text = value
+                core_params = {"selector": op.get("selector", ""), "text": text}
+                op_record["selector"] = op.get("selector", "")
+                op_record["text"] = text
+            elif op_type == "snapshot":
+                core_params = {}
+            elif op_type == "scroll":
+                core_params = {"direction": op.get("direction", "down"),
+                               "amount": op.get("amount", 300)}
+            elif op_type == "source":
+                core_params = {}
+            elif op_type == "eval":
+                core_params = {"code": op.get("code", op.get("js", value))}
+                op_record["code"] = core_params["code"][:200]
+            else:
+                core_params = {}
 
-                elif op_type == "fill":
-                    selector = op.get("selector", "")
-                    text = value
-                    op_record["selector"] = selector
-                    op_record["text"] = text
-                    await cdp_helpers.fill_input(selector, text)  # type: ignore[union-attr]
+            core_result = await execute_browser_op(op_type, core_params, cdp_helpers)
+            op_record["ok"] = core_result["ok"]
+            op_record["duration_ms"] = core_result["duration_ms"]
 
-                elif op_type == "wait":
-                    await asyncio.sleep(float(value) if value else 1.0)
-
-                elif op_type == "snapshot":
-                    ts = int(time.time())
-                    png_path = step_dir / f"screenshot_{ts}.png"
-                    snapshot = await cdp_helpers.capture_snapshot()  # type: ignore[union-attr]
-                    png_data = snapshot.get("screenshot_base64", "")
+            if core_result["ok"]:
+                # Handle file I/O for snapshot
+                if op_type == "snapshot":
+                    png_data = core_result.get("screenshot_base64", "")
                     if png_data:
-                        import base64
+                        ts = int(time.time())
+                        png_path = step_dir / f"screenshot_{ts}.png"
                         png_path.write_bytes(base64.b64decode(png_data))
-                    html_data = snapshot.get("html", "")
+                    html_data = core_result.get("html", "")
                     if html_data:
                         html_path = step_dir / "page.html"
                         html_path.write_text(html_data, encoding="utf-8")
+                elif op_type == "source":
+                    html_data = core_result.get("html", "")
+                    if html_data:
+                        html_path = step_dir / "page.html"
+                        html_path.write_text(html_data, encoding="utf-8")
+                if op_type == "goto":
+                    result["final_url"] = value
+            else:
+                op_record["error"] = core_result["error"]
+                result["status"] = "failed"
+                result["error"] = {
+                    "code": "TIMEOUT_ERROR" if "timeout" in str(core_result.get("error", "")).lower()
+                            else "BROWSER_ERROR",
+                    "message": core_result["error"],
+                    "stack": None,
+                }
+                result["ops"].append(op_record)
+                result["duration_ms"] = int((time.time() - start) * 1000)
+                result["compensation_history"] = registry.to_list()
+                result["suggest_rollback"] = registry.suggest_rollback(len(registry._ops) - 1)
+                return result
+        elif op_type == "wait":
+            op_start = time.time()
+            await asyncio.sleep(float(value) if value else 1.0)
+            op_record["duration_ms"] = int((time.time() - op_start) * 1000)
+        elif op_type == "wait_for_network":
+            op_start = time.time()
+            await cdp_helpers.wait_for_network_idle()  # type: ignore[union-attr]
+            op_record["duration_ms"] = int((time.time() - op_start) * 1000)
+        elif op_type == "get_html":
+            op_start = time.time()
+            html = await cdp_helpers.get_page_html()  # type: ignore[union-attr]
+            html_path = step_dir / "page.html"
+            html_path.write_text(html, encoding="utf-8")
+            op_record["duration_ms"] = int((time.time() - op_start) * 1000)
 
-                elif op_type == "get_html":
-                    html = await cdp_helpers.get_page_html()  # type: ignore[union-attr]
-                    html_path = step_dir / "page.html"
-                    html_path.write_text(html, encoding="utf-8")
-
-                elif op_type == "wait_for_network":
-                    await cdp_helpers.wait_for_network_idle()  # type: ignore[union-attr]
-
-                elif op_type == "eval":
-                    code_str = op.get("code", op.get("js", op.get("value", "")))
-                    check_raw = op.get("check")
-                    fail_msg = op.get("fail_message", "")
-                    op_record["code"] = code_str[:200]
-                    eval_result = await cdp_helpers.js(code_str)  # type: ignore[union-attr]
-                    op_record["result"] = eval_result
-                    if check_raw is not None:
-                        expected = (
-                            True if check_raw == "true"
-                            else False if check_raw == "false"
-                            else check_raw
-                        )
-                        if eval_result != expected:
-                            msg = fail_msg or f"Check failed: eval expected {expected!r}, got {eval_result!r}"
-                            raise ValueError(msg)
-
-        except TimeoutError:
-            op_record["ok"] = False
-            op_record["error"] = f"Operation timeout ({DEFAULT_OP_TIMEOUT}s)"
-            result["status"] = "failed"
-            result["error"] = {
-                "code": "TIMEOUT_ERROR",
-                "message": f"{op_type} operation timed out",
-                "stack": None,
-            }
-            result["ops"].append(op_record)
-            result["duration_ms"] = int((time.time() - start) * 1000)
-            result["compensation_history"] = registry.to_list()
-            result["suggest_rollback"] = registry.suggest_rollback(len(registry._ops) - 1)
-            return result
-
-        except Exception as e:
-            op_record["ok"] = False
-            op_record["error"] = str(e)
-            result["status"] = "failed"
-            result["error"] = {
-                "code": "BROWSER_ERROR",
-                "message": str(e),
-                "stack": traceback.format_exc(),
-            }
-            result["ops"].append(op_record)
-            result["duration_ms"] = int((time.time() - start) * 1000)
-            result["compensation_history"] = registry.to_list()
-            result["suggest_rollback"] = registry.suggest_rollback(len(registry._ops) - 1)
-            return result
-
-        op_record["duration_ms"] = int((time.time() - op_start) * 1000)
         result["ops"].append(op_record)
 
     result["duration_ms"] = int((time.time() - start) * 1000)
     return result
-
-
-# ── Tool step executor ──
 
 
 async def execute_tool_step(
@@ -259,19 +493,9 @@ async def execute_tool_step(
 ) -> dict:
     """Execute a tool step: import the tool module, call its function, validate output.
 
-    Args:
-        step: Step definition dict with ``tool_name``, ``input``, ``output``, ``params``.
-        tools_dir: Directory containing tool Python files.
-        step_dir: Directory for step artifacts.
-        run_dir: Run directory for input file resolution.
-        cdp_helpers: Optional CDPHelpers instance for browser-enabled tools.
-
-    Returns:
-        Result dict with status, input_files, output_files, duration_ms, error.
+    Delegates to execute_tool() for core execution, then validates
+    output files and writes them to step_dir.
     """
-    import importlib.util
-    import sys
-
     tool_name = step.get("tool_name", "")
     input_ref = step.get("input", {})
     output_files = step.get("output", [])
@@ -289,119 +513,34 @@ async def execute_tool_step(
         "error": {"code": None, "message": None, "stack": None},
     }
 
-    start = time.time()
-
     if not tool_name:
         result["status"] = "failed"
         result["error"] = {"code": "INPUT_ERROR", "message": "tool_name is required", "stack": None}
-        result["duration_ms"] = int((time.time() - start) * 1000)
         return result
 
-    tool_path = tools_dir / f"{tool_name}.py"
-    if not tool_path.exists():
-        result["status"] = "failed"
-        result["error"] = {
-            "code": "INPUT_ERROR",
-            "message": f"Tool file not found: {tool_path}",
-            "stack": None,
-        }
-        result["duration_ms"] = int((time.time() - start) * 1000)
-        return result
-
-    # Dynamic import of the tool module
-    try:
-        module_name = f"tools_{tool_name}"
-        if module_name in sys.modules:
-            del sys.modules[module_name]
-        spec = importlib.util.spec_from_file_location(module_name, str(tool_path))
-        if spec is None or spec.loader is None:
-            result["status"] = "failed"
-            result["error"] = {
-                "code": "SYNTAX_ERROR",
-                "message": f"Cannot load module: {tool_path}",
-                "stack": None,
-            }
-            result["duration_ms"] = int((time.time() - start) * 1000)
-            return result
-        module = importlib.util.module_from_spec(spec)
-        sys.modules[module_name] = module
-        spec.loader.exec_module(module)
-    except Exception as e:
-        result["status"] = "failed"
-        result["error"] = {
-            "code": "SYNTAX_ERROR",
-            "message": str(e),
-            "stack": traceback.format_exc(),
-        }
-        result["duration_ms"] = int((time.time() - start) * 1000)
-        return result
-
-    # Locate the main function (same name as tool)
-    tool_func = getattr(module, tool_name, None)
-    if not tool_func:
-        result["status"] = "failed"
-        result["error"] = {
-            "code": "SYNTAX_ERROR",
-            "message": f"Function '{tool_name}' not found in {tool_path}",
-            "stack": None,
-        }
-        result["duration_ms"] = int((time.time() - start) * 1000)
-        return result
-
-    # Check CAPABILITIES → inject ToolCDPHelpers if 'browser'
-    capabilities = getattr(module, "CAPABILITIES", [])
-    tool_cdp_instance = None
-
-    if capabilities:
-        for cap in capabilities:
-            if cap == "browser":
-                if cdp_helpers is None:
-                    result["status"] = "failed"
-                    result["error"] = {
-                        "code": "BROWSER_UNAVAILABLE",
-                        "message": f"Tool '{tool_name}' requires browser capability but cdp_helpers is unavailable",
-                        "stack": None,
-                    }
-                    result["duration_ms"] = int((time.time() - start) * 1000)
-                    return result
-                from utils.tool_cdp import ToolCDPHelpers
-                tool_cdp_instance = ToolCDPHelpers(cdp_helpers)
-            else:
-                logger.warning("Tool '%s' declares unknown capability: %s", tool_name, cap)
-
-    # Resolve input files
+    start = time.time()
     input_files = _resolve_input_files(input_ref, run_dir)
     result["input_files"] = input_files
 
-    # Call the tool function
-    try:
-        kwargs: dict = {"input_files": input_files, "output_dir": str(step_dir), **params}
-        if tool_cdp_instance is not None:
-            kwargs["cdp_helpers"] = tool_cdp_instance
-        if asyncio.iscoroutinefunction(tool_func):
-            await tool_func(**kwargs)
-        else:
-            loop = asyncio.get_event_loop()
-            await loop.run_in_executor(None, partial(tool_func, **kwargs))
-    except TimeoutError:
+    core_params = {
+        "input_files": input_files,
+        "output_dir": str(step_dir),
+        **params,
+    }
+
+    core_result = await execute_tool(tool_name, core_params, tools_dir, cdp_helpers)
+    result["duration_ms"] = core_result["duration_ms"]
+
+    if not core_result["ok"]:
         result["status"] = "failed"
-        result["error"] = {
-            "code": "TIMEOUT_ERROR",
-            "message": "Tool execution timed out",
-            "stack": None,
-        }
-    except Exception as e:
-        is_timeout = "timeout" in str(e).lower() or "timed out" in str(e).lower()
-        result["status"] = "failed"
+        is_timeout = "timeout" in str(core_result.get("error", "")).lower()
         result["error"] = {
             "code": "TIMEOUT_ERROR" if is_timeout else "RUNTIME_ERROR",
-            "message": str(e),
-            "stack": traceback.format_exc(),
+            "message": core_result["error"],
+            "stack": None,
         }
-        result["duration_ms"] = int((time.time() - start) * 1000)
         return result
 
-    # Validate output files exist
     missing = _check_outputs(output_files, step_dir)
     if missing:
         result["status"] = "failed"
@@ -413,11 +552,7 @@ async def execute_tool_step(
     else:
         result["output_files"] = [str(step_dir / f) for f in output_files]
 
-    result["duration_ms"] = int((time.time() - start) * 1000)
     return result
-
-
-# ── Goal step executor ──
 
 
 async def execute_goal_step(
@@ -430,33 +565,16 @@ async def execute_goal_step(
     frontmatter: dict | None = None,
     agent_md_path: Path | None = None,
 ) -> dict:
-    """Execute a goal step: call browser-use Agent, write learned_ops.json + agent_history.json.
+    """Execute a goal step: call browser-use Agent, write learned_ops.json.
 
-    Args:
-        step_def: Step definition dict with ``goal_description`` or ``description``.
-        cdp_helpers: CDPHelpers instance.
-        step_dir: Step artifact directory.
-        run_dir: Run directory (unused here, for API consistency).
-        tools_dir: Directory containing tool modules.
-        pipeline_name: Pipeline name.
-        frontmatter: Optional pipeline frontmatter.
-        agent_md_path: Optional path to agent.md for learned op write-back.
-
-    Returns:
-        Result dict with status, agent_result, goal_description, duration_ms, error.
+    Delegates to execute_goal() for core execution, then writes
+    learned_ops.json and agent_history.json to step_dir.
     """
     import json as _json
 
     goal_description = step_def.get("goal_description", "")
     if not goal_description:
         goal_description = step_def.get("description", "")
-
-    source_text = ""
-    if agent_md_path and agent_md_path.exists():
-        try:
-            source_text = agent_md_path.read_text(encoding="utf-8")
-        except Exception:
-            pass
 
     system_prompt = step_def.get("system_prompt", "")
 
@@ -471,60 +589,33 @@ async def execute_goal_step(
         "error": {"code": None, "message": None, "stack": None},
     }
 
-    start = time.time()
-    try:
-        from engine.agent import run_goal_step
+    core_result = await execute_goal(
+        description=goal_description,
+        cdp_helpers=cdp_helpers,
+        pipeline_name=pipeline_name,
+        tools_dir=tools_dir,
+        frontmatter=frontmatter,
+        agent_md_path=agent_md_path,
+        system_prompt=system_prompt,
+    )
+    result["duration_ms"] = core_result["duration_ms"]
 
-        agent_result = await run_goal_step(
-            step_def=step_def,
-            cdp_helpers=cdp_helpers,
-            step_dir=step_dir,
-            pipeline_name=pipeline_name,
-            frontmatter=frontmatter,
-            source_text=source_text,
-            tools_dir=tools_dir,
-            agent_md_path=agent_md_path,
-            system_prompt=system_prompt,
-        )
-        result["agent_result"] = agent_result
-
-        # Write learned_ops.json if present
-        learned_ops = agent_result.get("learned_ops", [])
+    if core_result["ok"]:
+        result["agent_result"] = core_result.get("result", {})
+        learned_ops = core_result.get("learned_ops", [])
         if learned_ops:
             learned_path = step_dir / "learned_ops.json"
             with open(learned_path, "w", encoding="utf-8") as f:
                 _json.dump(learned_ops, f, ensure_ascii=False, indent=2)
             result.setdefault("output_files", []).append(str(learned_path))
-
-        # Check agent status
-        agent_status = agent_result.get("status", "")
-        if agent_status not in ("success",):
-            result["status"] = "failed"
-            err_info = agent_result.get("error_message", "")
-            err_code = agent_result.get("error_code", "RUNTIME_ERROR")
-            result["error"] = {
-                "code": err_code,
-                "message": err_info or f"Agent finished with status: {agent_status}",
-                "stack": None,
-            }
-
-    except TimeoutError:
+    else:
         result["status"] = "failed"
         result["error"] = {
-            "code": "TIMEOUT_ERROR",
-            "message": "Agent execution timed out",
+            "code": "RUNTIME_ERROR",
+            "message": core_result.get("error", ""),
             "stack": None,
         }
-    except Exception as e:
-        is_timeout = "timeout" in str(e).lower() or "timed out" in str(e).lower()
-        result["status"] = "failed"
-        result["error"] = {
-            "code": "TIMEOUT_ERROR" if is_timeout else "RUNTIME_ERROR",
-            "message": str(e),
-            "stack": traceback.format_exc(),
-        }
 
-    result["duration_ms"] = int((time.time() - start) * 1000)
     return result
 
 
@@ -532,12 +623,7 @@ async def execute_goal_step(
 
 
 def write_step_json(step_dir: Path, result: dict) -> None:
-    """Atomically write the step result to ``step.json`` via ``.tmp`` rename.
-
-    Args:
-        step_dir: Step artifact directory.
-        result: Result dict to serialize.
-    """
+    """Atomically write the step result to ``step.json`` via ``.tmp`` rename."""
     import shutil
 
     tmp_path = step_dir / "step.json.tmp"

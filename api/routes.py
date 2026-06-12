@@ -494,6 +494,146 @@ def register_all_routes(app: FastAPI) -> None:
             raise ServerError(str(exc))
 
     # =================================================================
+    # CHAT — interactive conversation endpoints
+    # =================================================================
+
+    @app.post("/api/chat")
+    async def chat_message(request: dict) -> JSONResponse:
+        """Process a chat message through the conversation engine.
+
+        Request: {"message": "open baidu and search coffee"}
+        Response: {"ok": true, "response": "...", "turn_count": 3, ...}
+        """
+        from api.service import Service
+        from engine.agent import _create_chat_llm_call
+
+        message = request.get("message", "").strip()
+        if not message:
+            raise APIError("message is required")
+
+        service = Service(engine_state)
+        try:
+            from cdp.helpers import CDPHelpers
+
+            browser = CDPHelpers(engine_state.chrome_daemon) if engine_state.chrome_daemon else None
+
+            result = await service.process_chat_message(
+                message=message,
+                cdp_helpers=browser,
+                tools_dir=Path("tools"),
+                pipeline_name="chat",
+                llm_call=_create_chat_llm_call(),
+            )
+            return JSONResponse(result)
+        except Exception as exc:
+            logger.exception("Chat processing failed")
+            raise ServerError(str(exc))
+
+    @app.post("/api/chat/reset")
+    async def chat_reset() -> JSONResponse:
+        """Reset the current chat session and start fresh."""
+        from api.service import Service
+
+        service = Service(engine_state)
+        session = service.reset_session()
+        return JSONResponse({
+            "ok": True,
+            "session_id": session.session_id,
+            "status": session.status,
+        })
+
+    @app.post("/api/chat/cancel")
+    async def chat_cancel() -> JSONResponse:
+        """Cancel the current chat session."""
+        from api.service import Service
+
+        service = Service(engine_state)
+        service.cancel_session()
+        return JSONResponse({"ok": True})
+
+    @app.get("/api/session")
+    async def get_session() -> JSONResponse:
+        """Get the current session state."""
+        from api.service import Service
+
+        service = Service(engine_state)
+        session = service.get_session()
+        if session is None:
+            return JSONResponse({"session": None})
+        return JSONResponse({
+            "session": {
+                "session_id": session.session_id,
+                "pipeline_name": session.pipeline_name,
+                "status": session.status,
+                "message_count": len(session.messages),
+            },
+        })
+
+    # =================================================================
+    # PRESET — save/load/list pipeline presets
+    # =================================================================
+
+    @app.get("/api/presets")
+    async def list_presets() -> JSONResponse:
+        """List all saved preset pipelines."""
+        from api.service import Service
+
+        service = Service(engine_state)
+        presets = service.list_presets()
+        return JSONResponse({"presets": presets})
+
+    @app.post("/api/presets")
+    async def save_preset(request: dict) -> JSONResponse:
+        """Save a preset (agent.md format).
+
+        Request: {"name": "my-preset", "content": "..."}
+        """
+        from api.service import Service
+
+        name = request.get("name", "").strip()
+        content = request.get("content", "")
+        if not name:
+            raise APIError("name is required")
+        if not content:
+            raise APIError("content is required")
+
+        service = Service(engine_state)
+        path = service.save_preset(name, content)
+        return JSONResponse({"ok": True, "path": str(path)})
+
+    @app.delete("/api/presets/{name}")
+    async def delete_preset(name: str) -> JSONResponse:
+        """Delete a saved preset."""
+        import os
+        presets_dir = Path.home() / ".lbu" / "sessions" / "presets"
+        path = presets_dir / f"{name}.agent.md"
+        if path.exists():
+            os.remove(str(path))
+            return JSONResponse({"ok": True})
+        raise APIError(f"Preset '{name}' not found", 404)
+
+    @app.post("/api/presets/compile")
+    async def compile_preset(request: dict) -> JSONResponse:
+        """Compile current session into agent.md and save as preset.
+
+        Request: {"name": "my-preset"}
+        """
+        from api.service import Service
+
+        name = request.get("name", "").strip()
+        if not name:
+            raise APIError("name is required")
+
+        service = Service(engine_state)
+        session = service.get_session()
+        if session is None:
+            raise APIError("No active session to compile")
+
+        agent_md_text = service.compile_session_to_preset(session)
+        path = service.save_preset(name, agent_md_text)
+        return JSONResponse({"ok": True, "path": str(path), "content": agent_md_text})
+
+    # =================================================================
     # WEB SOCKET — real-time event stream
     # =================================================================
 
