@@ -24,9 +24,9 @@ export default function StageList({ stages, events }: StageListProps) {
   if (stageNames.length === 0) {
     return (
       <div className="card">
-        <div className="card-title">执行阶段</div>
+        <div className="card-title">Execution Stages</div>
         <div style={{ fontSize: 11, color: 'var(--text-muted)', textAlign: 'center', padding: '8px 0' }}>
-          等待执行…
+          Waiting to start…
         </div>
       </div>
     );
@@ -34,7 +34,7 @@ export default function StageList({ stages, events }: StageListProps) {
 
   return (
     <div className="card">
-      <div className="card-title">执行阶段</div>
+      <div className="card-title">Execution Stages</div>
       <div className="stage-list">
         {stageNames.map((name, i) => {
           const status = getStageStatus(name);
@@ -49,7 +49,7 @@ export default function StageList({ stages, events }: StageListProps) {
                 fontWeight: status === 'current' ? 600 : 400,
               }}>{name}</span>
               <span className="stage-status-text">
-                {status === 'done' ? '完成' : status === 'current' ? '执行中…' : status === 'error' ? '失败' : '待执行'}
+                {status === 'done' ? 'Done' : status === 'current' ? 'Running…' : status === 'error' ? 'Failed' : 'Pending'}
               </span>
             </div>
           );

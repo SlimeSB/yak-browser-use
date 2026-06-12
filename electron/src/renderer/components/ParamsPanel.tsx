@@ -13,11 +13,11 @@ export default function ParamsPanel({
 
   return (
     <div className="panel">
-      <div className="panel-title">参数</div>
+      <div className="panel-title">Params</div>
       <div className="panel-body">
         {keys.length === 0 ? (
           <div style={{ fontSize: 11, color: 'var(--text-muted)', textAlign: 'center', padding: '6px 0' }}>
-            无参数
+            No params
           </div>
         ) : (
           <div className="param-grid">

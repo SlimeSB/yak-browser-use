@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import './styles/global.css';
-import { getLogger } from '../../utils/logger';
+import { getLogger } from '../utils/logger';
 import type { PipelineMeta, EventData, ChatPendingDiff, DiffLine } from './types';
 import TitleBar from './components/TitleBar';
 import ConnectionBar from './components/ConnectionBar';
@@ -31,8 +31,8 @@ export default function App() {
   const [wsUrl, setWsUrl] = useState('');
   const [connectionError, setConnectionError] = useState<string | null>(null);
   const [connectMode, setConnectMode] = useState<'user' | 'isolated'>('user');
-  const [selectedProfile, setSelectedProfile] = useState('默认临时目录');
-  const [profiles, setProfiles] = useState<string[]>(['默认临时目录']);
+  const [selectedProfile, setSelectedProfile] = useState('Default Temp');
+  const [profiles, setProfiles] = useState<string[]>(['Default Temp']);
   const [params, setParams] = useState<Record<string, string>>({});
   const [restartDialog, setRestartDialog] = useState<{ browserName: string } | null>(null);
   const [restarting, setRestarting] = useState(false);
@@ -53,7 +53,7 @@ export default function App() {
 
   const [agentMdEditor, setAgentMdEditor] = useState('');
   const [chatMessages, setChatMessages] = useState<Array<{role: string; content: string}>>([
-    {role: 'system', content: '选择上方管线后，可以用对话修改 agent.md。也可以直接改右侧编辑器。'}
+    {role: 'system', content: 'Select a pipeline above, then use chat to modify agent.md. You can also edit directly in the right editor.'}
   ]);
   const [chatInput, setChatInput] = useState('');
   const [chatSending, setChatSending] = useState(false);
@@ -185,7 +185,7 @@ export default function App() {
       }
     }
     if (missingKeys.length > 0) {
-      window.electronAPI.showAlert(`请填写以下参数：${missingKeys.join('、')}`);
+      window.electronAPI.showAlert(`Please fill in the following parameters: ${missingKeys.join(', ')}`);
       return;
     }
 
@@ -198,12 +198,12 @@ export default function App() {
           setAgentMdCache(prev => ({ ...prev, [activePreset]: agentMd }));
           setAgentMdEditor(agentMd);
         } else {
-          window.electronAPI.showAlert('无法加载管线定义');
+          window.electronAPI.showAlert('Failed to load pipeline definition');
           return;
         }
       } catch (e) {
         logger.error('getPipeline failed in handleRun: %s', String(e));
-        window.electronAPI.showAlert('加载管线定义失败');
+        window.electronAPI.showAlert('Failed to load pipeline definition');
         return;
       }
     }
@@ -263,7 +263,7 @@ export default function App() {
         setWsUrl(resp.wsUrl || '');
         setConnectionError(null);
       } else {
-        setConnectionError(resp.error || '连接失败，请检查 Chrome 是否正在运行');
+        setConnectionError(resp.error || 'Connection failed. Make sure Chrome is running');
       }
     } catch (e) {
       logger.error('Connect failed: %s', String(e));
@@ -282,10 +282,10 @@ export default function App() {
         });
         setSelectedProfile(resp.profile_name);
       } else {
-        window.electronAPI.showAlert('创建失败: ' + (resp.error || '未知错误'));
+        window.electronAPI.showAlert('Creation failed: ' + (resp.error || 'Unknown error'));
       }
     } catch (e) {
-      window.electronAPI.showAlert('创建失败: ' + String(e));
+      window.electronAPI.showAlert('Creation failed: ' + String(e));
     }
   }, []);
 
@@ -300,7 +300,7 @@ export default function App() {
         setWsUrl(resp.wsUrl || '');
         setConnectionError(null);
       } else {
-        setConnectionError(resp.error || '重启失败');
+        setConnectionError(resp.error || 'Restart failed');
       }
     } catch (e) {
       logger.error('Restart failed: %s', String(e));
@@ -410,13 +410,13 @@ export default function App() {
           setChatMessages(prev => [...prev, { role: 'assistant', content: streamingMsgRef.current }]);
           setStreamingMsg('');
         }
-        setChatMessages(prev => [...prev, { role: 'assistant', content: '连接中断或请求失败' }]);
+        setChatMessages(prev => [...prev, { role: 'assistant', content: 'Connection interrupted or request failed' }]);
         setChatSending(false);
         es.close();
         esRef.current = null;
       });
     } catch (e) {
-      setChatMessages(prev => [...prev, { role: 'assistant', content: `请求失败: ${String(e)}` }]);
+      setChatMessages(prev => [...prev, { role: 'assistant', content: `Request failed: ${String(e)}` }]);
       setChatSending(false);
     }
   }, [chatInput, chatSending, activePreset]);
@@ -563,18 +563,18 @@ export default function App() {
           <div className="modal-box" onClick={e => e.stopPropagation()}>
             <div className="modal-header">
               <span className="modal-icon">⚠</span>
-              <span>需要重启浏览器</span>
+              <span>Browser restart required</span>
             </div>
             <div className="modal-body">
-              <p>检测到 <strong>{restartDialog.browserName}</strong> 正在运行，但未开启调试模式。</p>
-              <p>要连接到用户浏览器，需要先关闭并重新启动 {restartDialog.browserName}（带调试端口）。</p>
-              {restarting && <p className="modal-loading">正在重启 {restartDialog.browserName}...</p>}
+              <p><strong>{restartDialog.browserName}</strong> is running but debug mode is not enabled.</p>
+              <p>To connect to a user browser, close and restart {restartDialog.browserName} (with debug port).</p>
+              {restarting && <p className="modal-loading">Restarting {restartDialog.browserName}...</p>}
             </div>
             <div className="modal-footer">
-              <button className="btn btn-secondary" onClick={handleRestartCancel} disabled={restarting}>取消</button>
-              <button className="btn btn-secondary" onClick={handleRestartIsolated} disabled={restarting}>使用隔离浏览器</button>
+              <button className="btn btn-secondary" onClick={handleRestartCancel} disabled={restarting}>Cancel</button>
+              <button className="btn btn-secondary" onClick={handleRestartIsolated} disabled={restarting}>Use Isolated Browser</button>
               <button className="btn btn-primary" onClick={handleRestartConfirm} disabled={restarting}>
-                {restarting ? '重启中...' : '关闭并重启'}
+                {restarting ? 'Restarting...' : 'Close & Restart'}
               </button>
             </div>
           </div>
@@ -596,25 +596,25 @@ export default function App() {
 
       <div className="tab-bar">
         <div className={`tab ${activeTab === 'exec' ? 'active' : ''}`} onClick={() => setActiveTab('exec')}>
-          <span className="tab-icon">🎯</span> 执行
-          {loading && <span className="tab-badge">运行中</span>}
+          <span className="tab-icon">🎯</span> Run
+          {loading && <span className="tab-badge">Running</span>}
         </div>
         <div className={`tab ${activeTab === 'agentmd' ? 'active' : ''}`} onClick={() => setActiveTab('agentmd')}>
-          <span className="tab-icon">💬</span> 对话
+          <span className="tab-icon">💬</span> Chat
         </div>
         <div className={`tab ${activeTab === 'log' ? 'active' : ''}`} onClick={() => setActiveTab('log')}>
-          <span className="tab-icon">📋</span> 日志
+          <span className="tab-icon">📋</span> Log
           {pendingReview && <span className="tab-dot" />}
         </div>
         <div className="tab-spacer" />
         <div className={`tab ${activeTab === 'pipelines' ? 'active' : ''}`} onClick={() => setActiveTab('pipelines')}>
-          <span className="tab-icon">📦</span> 管线
+          <span className="tab-icon">📦</span> Pipelines
         </div>
         <div className={`tab ${activeTab === 'params' ? 'active' : ''}`} onClick={() => setActiveTab('params')}>
-          <span className="tab-icon">⚙</span> 参数
+          <span className="tab-icon">⚙</span> Params
         </div>
         <div className={`tab ${activeTab === 'settings' ? 'active' : ''}`} onClick={() => setActiveTab('settings')}>
-          <span className="tab-icon">⚙</span> 设置
+          <span className="tab-icon">⚙</span> Settings
         </div>
       </div>
 

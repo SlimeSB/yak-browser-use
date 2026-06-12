@@ -26,7 +26,7 @@ export default function ResultTable({ data, errors, columnSchema }: ResultTableP
 
   return (
     <div className="card">
-      <div className="card-title">执行结果</div>
+      <div className="card-title">Results</div>
       {errors && errors.length > 0 && (
         <div style={{ color: 'var(--danger)', fontSize: 11, marginBottom: 6 }}>
           {errors.map((e, i) => <div key={i}>{e}</div>)}
@@ -51,12 +51,12 @@ export default function ResultTable({ data, errors, columnSchema }: ResultTableP
             </table>
           </div>
           <div className="table-footer">
-            <span>共 {rows.length} 条</span>
+            <span>{rows.length} results</span>
           </div>
         </>
       ) : (
         <div style={{ fontSize: 11, color: 'var(--text-muted)', textAlign: 'center', padding: '8px 0' }}>
-          等待执行…
+          Waiting for results…
         </div>
       )}
     </div>

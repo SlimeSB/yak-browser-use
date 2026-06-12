@@ -13,9 +13,9 @@ export default function StatusBar({ events, connected }: StatusBarProps) {
     <div className="status-bar">
       <span>
         <span className={`conn-dot ${connected ? 'ok' : ''}`} />
-        {connected ? '已连接' : '未连接'}
+        {connected ? 'Connected' : 'Disconnected'}
       </span>
-      <span>{stepTotal > 0 ? `步骤 ${stepDone}/${stepTotal}` : '就绪'}</span>
+      <span>{stepTotal > 0 ? `Step ${stepDone}/${stepTotal}` : 'Ready'}</span>
     </div>
   );
 }

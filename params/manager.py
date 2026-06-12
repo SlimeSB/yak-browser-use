@@ -97,7 +97,7 @@ class ParamManager:
         key = ref.key if isinstance(ref, ParamRef) else ref
         value = self.get(key)
         if value is None:
-            raise RuntimeError(f"参数 '{key}' 未找到（存储文件: {self._path}）")
+            raise RuntimeError(f"Parameter '{key}' not found (store: {self._path})")
         return value
 
 

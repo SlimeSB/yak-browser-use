@@ -41,7 +41,7 @@ export default function ConnectionBar({
     <div className="connection-bar">
       <span className={`conn-dot ${connected ? 'ok' : ''}`} />
       <span className="conn-label">
-        {connected ? '已连接' : '未连接'}
+        {connected ? 'Connected' : 'Disconnected'}
       </span>
       {connected && wsUrl && (
         <span className="conn-url" title={wsUrl}>{wsUrl}</span>
@@ -54,15 +54,15 @@ export default function ConnectionBar({
           )}
 
           <div className="conn-segment">
-            <span className="conn-status-text">模式:</span>
+            <span className="conn-status-text">Mode:</span>
             <div className="mode-switch">
               <label className={connectMode === 'user' ? 'active' : ''}>
                 <input type="radio" checked={connectMode === 'user'} onChange={() => onModeChange('user')} />
-                <span className="radio-dot" /> 用户浏览器
+                <span className="radio-dot" /> User Browser
               </label>
               <label className={connectMode === 'isolated' ? 'active' : ''}>
                 <input type="radio" checked={connectMode === 'isolated'} onChange={() => onModeChange('isolated')} />
-                <span className="radio-dot" /> 隔离浏览器
+                <span className="radio-dot" /> Isolated Browser
               </label>
             </div>
           </div>
@@ -70,9 +70,9 @@ export default function ConnectionBar({
           {connectMode === 'user' ? (
             <div className="conn-segment">
               <button className="btn btn-primary btn-sm" onClick={() => onConnect('user')}>
-                连接到 Chrome
+                Connect to Chrome
               </button>
-              <span className="conn-status-text">自动发现正在运行的 Chrome</span>
+              <span className="conn-status-text">Auto-discover running Chrome</span>
             </div>
           ) : (
             <div className="conn-segment">
@@ -90,18 +90,18 @@ export default function ConnectionBar({
                       value={newProfileName}
                       onChange={e => setNewProfileName(e.target.value)}
                       onKeyDown={handleCreateKeyDown}
-                      placeholder="输入名称后回车"
+                      placeholder="Enter name and press Enter"
                       className="input-sm"
                     />
-                    <button className="btn btn-secondary btn-sm" onClick={() => handleCreateConfirm(newProfileName)}>确定</button>
-                    <button className="btn btn-secondary btn-sm" onClick={() => { setShowNewProfileInput(false); setNewProfileName(''); }}>取消</button>
+                    <button className="btn btn-secondary btn-sm" onClick={() => handleCreateConfirm(newProfileName)}>OK</button>
+                    <button className="btn btn-secondary btn-sm" onClick={() => { setShowNewProfileInput(false); setNewProfileName(''); }}>Cancel</button>
                   </span>
                 ) : (
-                  <button className="btn btn-secondary btn-sm" onClick={handleNewProfile}>新建</button>
+                  <button className="btn btn-secondary btn-sm" onClick={handleNewProfile}>New</button>
                 )}
               </div>
               <button className="btn btn-primary btn-sm" onClick={() => onConnect('isolated', selectedProfile)}>
-                启动并连接
+                Start & Connect
               </button>
             </div>
           )}
@@ -110,7 +110,7 @@ export default function ConnectionBar({
 
       {connected && (
         <div className="conn-actions">
-          <button className="btn btn-danger btn-sm" onClick={onDisconnect}>断开</button>
+          <button className="btn btn-danger btn-sm" onClick={onDisconnect}>Disconnect</button>
         </div>
       )}
     </div>

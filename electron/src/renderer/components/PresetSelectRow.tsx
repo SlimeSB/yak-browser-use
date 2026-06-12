@@ -17,9 +17,9 @@ export default function PresetSelectRow({
   return (
     <div className="panel">
       <div className="panel-title">
-        <span>管线</span>
+        <span>Pipeline</span>
         <span style={{ fontWeight: 400, textTransform: 'none', letterSpacing: 0 }}>
-          {pipelines.length} 可用
+          {pipelines.length} available
         </span>
       </div>
       <div className="panel-body" style={{ paddingBottom: 10 }}>
@@ -30,7 +30,7 @@ export default function PresetSelectRow({
             onChange={e => onSelect(e.target.value)}
             disabled={loading}
           >
-            {pipelines.length === 0 && <option value="">无可用管线</option>}
+            {pipelines.length === 0 && <option value="">No pipelines available</option>}
             {pipelines.map(t => (
               <option key={t.name} value={t.name}>{t.title}</option>
             ))}
@@ -40,12 +40,12 @@ export default function PresetSelectRow({
             onClick={onRun}
             disabled={loading || !connected}
           >
-            {loading ? '执行中…' : '▶ 执行'}
+            {loading ? 'Running…' : '▶ Run'}
           </button>
         </div>
         {preset && (
           <div className="pipeline-meta">
-            <span>{preset.step_count} 步骤</span>
+            <span>{preset.step_count} steps</span>
             {preset.description && <span>{preset.description}</span>}
           </div>
         )}

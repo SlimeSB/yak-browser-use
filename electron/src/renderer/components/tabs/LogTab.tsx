@@ -54,13 +54,13 @@ export default function LogTab({
     <div className="log-layout">
       <div className="log-left">
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 10px 4px', borderBottom: '1px solid var(--border)' }}>
-          <span style={{ fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px', color: 'var(--text-muted)' }}>步骤</span>
+          <span style={{ fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px', color: 'var(--text-muted)' }}>Steps</span>
           {currentRunId && <span style={{ fontSize: 9, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>{currentRunId.slice(0, 8)}</span>}
         </div>
         <div className="log-steps">
           {stepNames.length === 0 ? (
             <div style={{ fontSize: 10, color: 'var(--text-muted)', textAlign: 'center', padding: 12 }}>
-              暂无步骤数据
+              No step data
             </div>
           ) : (
             stepNames.map((name, i) => {
@@ -72,7 +72,7 @@ export default function LogTab({
                   </span>
                   <span className="log-step-name">{name}</span>
                   <span className="log-step-time">
-                    {status === 'done' ? '完成' : status === 'review' ? '待审批' : status === 'current' ? '执行中' : status === 'error' ? '失败' : '—'}
+                    {status === 'done' ? 'Done' : status === 'review' ? 'Pending Review' : status === 'current' ? 'Running' : status === 'error' ? 'Failed' : '—'}
                   </span>
                 </div>
               );
@@ -82,16 +82,16 @@ export default function LogTab({
       </div>
       <div className="log-main">
         <div className="log-toolbar">
-          <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)' }}>📋 实时日志</span>
+          <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)' }}>📋 Live Log</span>
           <span style={{ flex: 1 }} />
-          <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>{events.length} 条日志</span>
-          <button className="btn btn-secondary btn-xs" onClick={onClearEvents}>清空</button>
+          <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>{events.length} events</span>
+          <button className="btn btn-secondary btn-xs" onClick={onClearEvents}>Clear</button>
         </div>
         {pendingReview && (
           <div className="review-card">
             <div className="review-card-header">
               <div className="review-card-title">
-                <span>⚠</span> 待审批操作
+                <span>⚠</span> Pending Review
               </div>
               <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>{pendingReview.guardLayer || 'guardian'}</span>
             </div>
@@ -108,20 +108,20 @@ export default function LogTab({
                 </div>
               )}
               <div className="review-card-footer">
-                <button className="btn btn-success btn-sm" onClick={handleApprove}>✓ 批准</button>
+                <button className="btn btn-success btn-sm" onClick={handleApprove}>✓ Approve</button>
                 {!showingLogReject ? (
-                  <button className="btn btn-danger btn-sm" onClick={() => setShowingLogReject(true)}>✗ 拒绝</button>
+                  <button className="btn btn-danger btn-sm" onClick={() => setShowingLogReject(true)}>✗ Reject</button>
                 ) : (
                   <div style={{ display: 'flex', gap: 6, flex: 1 }}>
                     <input
                       className="param-input" style={{ flex: 1, fontSize: 11 }}
-                      placeholder="拒绝理由（必填）"
+                      placeholder="Rejection reason (required)"
                       value={logRejectReason}
                       onChange={e => setLogRejectReason(e.target.value)}
                       onKeyDown={e => { if (e.key === 'Enter') handleReject(); }}
                     />
-                    <button className="btn btn-danger btn-sm" onClick={handleReject}>确认拒绝</button>
-                    <button className="btn btn-secondary btn-sm" onClick={() => { setShowingLogReject(false); setLogRejectReason(''); }}>取消</button>
+                    <button className="btn btn-danger btn-sm" onClick={handleReject}>Confirm Reject</button>
+                    <button className="btn btn-secondary btn-sm" onClick={() => { setShowingLogReject(false); setLogRejectReason(''); }}>Cancel</button>
                   </div>
                 )}
               </div>
@@ -133,31 +133,31 @@ export default function LogTab({
       <div className="log-right">
         {pendingReview && diffLines.length > 0 && (
           <div className="artifact-section">
-            <div className="artifact-title">📄 变更 diff</div>
+            <div className="artifact-title">📄 Diff</div>
             <DiffView lines={diffLines} maxHeight={200} />
           </div>
         )}
         <div className="artifact-section">
-          <div className="artifact-title">📦 产物</div>
+          <div className="artifact-title">📦 Artifacts</div>
           {result ? (
             <ResultTable data={result} errors={resultErrors} />
           ) : (
             <div className="artifact-card">
-              <div className="artifact-name">暂无产物</div>
-              <div className="artifact-meta">执行管线后将在此显示结果</div>
+              <div className="artifact-name">No artifacts</div>
+              <div className="artifact-meta">Results will appear here after running a pipeline</div>
             </div>
           )}
         </div>
         <div className="artifact-section">
-          <div className="artifact-title">📊 摘要</div>
+          <div className="artifact-title">📊 Summary</div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, fontSize: 11 }}>
-            <div><span style={{ color: 'var(--text-muted)' }}>步骤</span> {stepEnds.length}/{stepStarts.length}</div>
-            <div><span style={{ color: 'var(--text-muted)' }}>管线</span> {preset?.title || '—'}</div>
-            <div><span style={{ color: 'var(--text-muted)' }}>日志数</span> {events.length}</div>
-            <div><span style={{ color: 'var(--text-muted)' }}>状态</span>{' '}
-              {loading ? <span style={{ color: 'var(--primary)' }}>运行中</span>
-                : stepStarts.length > 0 ? <span style={{ color: 'var(--success)' }}>已完成</span>
-                : <span style={{ color: 'var(--text-muted)' }}>就绪</span>}
+            <div><span style={{ color: 'var(--text-muted)' }}>Steps</span> {stepEnds.length}/{stepStarts.length}</div>
+            <div><span style={{ color: 'var(--text-muted)' }}>Pipeline</span> {preset?.title || '—'}</div>
+            <div><span style={{ color: 'var(--text-muted)' }}>Events</span> {events.length}</div>
+            <div><span style={{ color: 'var(--text-muted)' }}>Status</span>{' '}
+              {loading ? <span style={{ color: 'var(--primary)' }}>Running</span>
+                : stepStarts.length > 0 ? <span style={{ color: 'var(--success)' }}>Completed</span>
+                : <span style={{ color: 'var(--text-muted)' }}>Ready</span>}
             </div>
           </div>
         </div>

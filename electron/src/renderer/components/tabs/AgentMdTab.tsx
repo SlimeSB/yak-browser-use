@@ -39,12 +39,12 @@ export default function AgentMdTab({
       <div className="gen-left">
         <div className="gen-panel" style={{ display: 'flex', flexDirection: 'column' }}>
           <div className="gen-panel-header">
-            <span className="gen-panel-title">💬 对话修改 agent.md</span>
+            <span className="gen-panel-title">💬 Chat to modify agent.md</span>
             <select className="select" style={{ fontSize: 10, padding: '2px 6px', width: 140 }}
               value={activePreset}
               onChange={e => {
                 onPresetChange(e.target.value);
-                onChatMessagesChange([{role: 'system', content: '选择上方管线后，可以用对话修改 agent.md。也可以直接改右侧编辑器。'}]);
+                onChatMessagesChange([{role: 'system', content: 'Select a pipeline above, then use chat to modify agent.md. You can also edit directly in the right editor.'}]);
                 onChatInputChange('');
               }}
             >
@@ -82,7 +82,7 @@ export default function AgentMdTab({
                 <div className="gen-chat-msg assistant">
                   <span className="gen-chat-avatar assistant">A</span>
                   <div className="gen-chat-bubble assistant" style={{ color: 'var(--text-muted)' }}>
-                    <span className="thinking-dot" /> 处理中…
+                    <span className="thinking-dot" /> Processing…
                   </div>
                 </div>
               )}
@@ -92,8 +92,8 @@ export default function AgentMdTab({
                 <div className="chat-review-bar-left">
                   <span className="chat-review-dot" />
                   {pendingCount === 1
-                    ? 'AI 建议了修改，右侧可预览 diff'
-                    : `${pendingCount} 项修改待确认`}
+                    ? 'AI suggested changes, preview diff on the right'
+                    : `${pendingCount} changes pending`}
                   {pendingCount > 1 && (
                     <span style={{ display: 'flex', gap: 4, marginLeft: 8 }}>
                       {chatPendingDiffs.map((_, i) => (
@@ -116,8 +116,8 @@ export default function AgentMdTab({
                   )}
                 </div>
                 <div className="chat-review-bar-right">
-                  <button className="btn btn-success btn-sm" onClick={() => onChatDismiss(activeDiffIndex)}>✓ 确认</button>
-                  <button className="btn btn-danger btn-sm" onClick={() => onChatRollback(activeDiffIndex)}>↩ 回退</button>
+                  <button className="btn btn-success btn-sm" onClick={() => onChatDismiss(activeDiffIndex)}>✓ Confirm</button>
+                  <button className="btn btn-danger btn-sm" onClick={() => onChatRollback(activeDiffIndex)}>↩ Revert</button>
                 </div>
               </div>
             )}
@@ -128,16 +128,16 @@ export default function AgentMdTab({
                     value={chatInput}
                     onChange={e => onChatInputChange(e.target.value)}
                     onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); onChatSend(); } }}
-                    placeholder="描述修改…（如：步骤 2 的 URL 改成 xxx）"
+                    placeholder="Describe changes... (e.g., step 2 URL to xxx)"
                   />
                 </div>
                 <button className="gen-chat-send" onClick={onChatSend} disabled={chatSending || !chatInput.trim()}>➤</button>
               </div>
               <div style={{ display: 'flex', gap: 4, marginTop: 4, flexWrap: 'wrap' }}>
-                <span className="gen-hint" onClick={() => onChatInputChange('修改步骤 2 的字段')}>修改步骤 2 的字段</span>
-                <span className="gen-hint" onClick={() => onChatInputChange('添加一个过滤步骤')}>添加一个过滤步骤</span>
-                <span className="gen-hint" onClick={() => onChatInputChange('重命名步骤 3')}>重命名步骤 3</span>
-                <span className="gen-hint" onClick={() => onChatInputChange('从文档生成')}>从文档生成</span>
+                <span className="gen-hint" onClick={() => onChatInputChange('Modify step 2 fields')}>Modify step 2 fields</span>
+                <span className="gen-hint" onClick={() => onChatInputChange('Add a filter step')}>Add a filter step</span>
+                <span className="gen-hint" onClick={() => onChatInputChange('Rename step 3')}>Rename step 3</span>
+                <span className="gen-hint" onClick={() => onChatInputChange('Generate from doc')}>Generate from doc</span>
               </div>
             </div>
           </div>
@@ -150,7 +150,7 @@ export default function AgentMdTab({
               📄 agent.md
               {pendingCount > 0 && (
                 <span style={{ color: '#f59e0b', fontWeight: 400, fontSize: 10 }}>
-                  — {pendingCount} 项待确认
+                  — {pendingCount} pending
                 </span>
               )}
               {pendingCount === 0 && (
@@ -163,12 +163,12 @@ export default function AgentMdTab({
               <button className="btn btn-secondary btn-xs" onClick={() => {
                 if (preset) {
                   window.electronAPI.getPipeline(activePreset).then(resp => {
-                    if (resp.agent_md) { onAgentMdEditorChange(resp.agent_md); onChatMessagesChange([{role: 'system', content: '已刷新 agent.md，可以继续对话修改。'}]); }
+                    if (resp.agent_md) { onAgentMdEditorChange(resp.agent_md); onChatMessagesChange([{role: 'system', content: 'agent.md refreshed, you can continue chatting to modify.'}]); }
                   }).catch(() => {});
                 }
-              }}>↩ 刷新</button>
-              <button className="btn btn-secondary btn-xs" onClick={() => { navigator.clipboard.writeText(agentMdEditor); }}>📋 复制</button>
-              <button className="btn btn-primary btn-xs" onClick={() => { onTabChange('exec'); }}>▶ 执行</button>
+              }}>↩ Refresh</button>
+              <button className="btn btn-secondary btn-xs" onClick={() => { navigator.clipboard.writeText(agentMdEditor); }}>📋 Copy</button>
+              <button className="btn btn-primary btn-xs" onClick={() => { onTabChange('exec'); }}>▶ Run</button>
             </div>
           </div>
           <div className="gen-panel-body" style={{ padding: 0, flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
@@ -179,7 +179,7 @@ export default function AgentMdTab({
                 className="gen-editor"
                 value={agentMdEditor}
                 onChange={e => onAgentMdEditorChange(e.target.value)}
-                placeholder="选择一个管线来查看和编辑 agent.md…"
+                placeholder="Select a pipeline to view and edit agent.md..."
                 spellCheck={false}
               />
             )}

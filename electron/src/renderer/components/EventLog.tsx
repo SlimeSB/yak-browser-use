@@ -36,7 +36,7 @@ export default function EventLog({ events, maxHeight }: EventLogProps) {
 
   return (
     <div className="log-terminal" ref={logRef} style={maxHeight ? { maxHeight, overflow: 'auto' } : { flex: 1 }}>
-      {events.length === 0 && <div style={{ color: 'var(--text-muted)' }}>暂无日志…</div>}
+      {events.length === 0 && <div style={{ color: 'var(--text-muted)' }}>No events yet…</div>}
       {events.map((ev, i) => {
         const cls = getTypeClass(ev);
         const isThought = ev.data?.type === 'thought' || ev.data?.thought;

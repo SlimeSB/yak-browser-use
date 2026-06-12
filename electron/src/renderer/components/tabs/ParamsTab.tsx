@@ -17,16 +17,16 @@ export default function ParamsTab({
   return (
     <div className="cred-layout">
       <div className="cred-toolbar">
-        <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)' }}>⚙ 参数管理</span>
+        <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)' }}>⚙ Params Manager</span>
         <div style={{ flex: 1 }} />
-        <input className="input" style={{ width: 160 }} placeholder="参数名" value={credKey} onChange={e => onCredKeyChange(e.target.value)} />
-        <input className="input" style={{ width: 200 }} placeholder="参数值" value={credValue} onChange={e => onCredValueChange(e.target.value)} />
-        <button className="btn btn-primary btn-sm" onClick={onCredSet}>+ 添加</button>
+        <input className="input" style={{ width: 160 }} placeholder="Key" value={credKey} onChange={e => onCredKeyChange(e.target.value)} />
+        <input className="input" style={{ width: 200 }} placeholder="Value" value={credValue} onChange={e => onCredValueChange(e.target.value)} />
+        <button className="btn btn-primary btn-sm" onClick={onCredSet}>+ Add</button>
       </div>
       <div className="cred-content">
         {credKeys.length === 0 ? (
           <div style={{ fontSize: 11, color: 'var(--text-muted)', textAlign: 'center', padding: 20 }}>
-            暂无参数
+            No params
           </div>
         ) : (
           credKeys.map(k => (

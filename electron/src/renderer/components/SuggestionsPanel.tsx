@@ -17,7 +17,7 @@ export default function SuggestionsPanel({
   return (
     <div className="card" style={{ borderColor: '#f59e0b', borderWidth: 2 }}>
       <div className="card-title" style={{ color: '#f59e0b' }}>
-        待审批操作
+        Pending Review
         {guardLayer && <span style={{ fontSize: 10, marginLeft: 8 }}>[{guardLayer}]</span>}
       </div>
       <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginBottom: 8 }}>
@@ -27,8 +27,8 @@ export default function SuggestionsPanel({
         <table className="result-table" style={{ fontSize: 10 }}>
           <thead>
             <tr>
-              <th>类型</th>
-              <th>选择器/值</th>
+              <th>Type</th>
+              <th>Selector/Value</th>
             </tr>
           </thead>
           <tbody>
@@ -46,18 +46,18 @@ export default function SuggestionsPanel({
           className="btn btn-primary btn-sm"
           onClick={() => onApprove('approved via UI')}
         >
-          批准
+          Approve
         </button>
         {!showingReject ? (
           <button className="btn btn-danger btn-sm" onClick={() => setShowingReject(true)}>
-            拒绝
+            Reject
           </button>
         ) : (
           <div style={{ display: 'flex', gap: 4, flex: 1 }}>
             <input
               className="param-input"
               style={{ flex: 1 }}
-              placeholder="拒绝理由（必填）"
+              placeholder="Rejection reason (required)"
               value={rejectReason}
               onChange={e => setRejectReason(e.target.value)}
             />
@@ -65,7 +65,7 @@ export default function SuggestionsPanel({
               className="btn btn-danger btn-sm"
               onClick={() => {
                 if (!rejectReason.trim()) {
-                  window.electronAPI.showAlert('请填写拒绝理由');
+                  window.electronAPI.showAlert('Please provide a rejection reason');
                   return;
                 }
                 onReject(rejectReason);
@@ -73,13 +73,13 @@ export default function SuggestionsPanel({
                 setRejectReason('');
               }}
             >
-              确认拒绝
+              Confirm Reject
             </button>
             <button
               className="btn btn-secondary btn-sm"
               onClick={() => { setShowingReject(false); setRejectReason(''); }}
             >
-              取消
+              Cancel
             </button>
           </div>
         )}

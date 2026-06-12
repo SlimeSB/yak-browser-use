@@ -51,7 +51,7 @@ export default function DiffView({ lines, maxHeight }: DiffViewProps) {
   if (!lines || lines.length === 0) {
     return (
       <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', fontSize: 12 }}>
-        暂无变更
+        No changes
       </div>
     );
   }

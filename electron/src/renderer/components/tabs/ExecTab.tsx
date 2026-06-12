@@ -56,15 +56,15 @@ export default function ExecTab({
         {loading && currentRunId && (
           <div style={{ display: 'flex', gap: 6, justifyContent: 'center' }}>
             <button className="btn btn-danger btn-sm" onClick={onCancel} disabled={cancelling}>
-              {cancelling ? '取消中...' : '⏹ 取消执行'}
+              {cancelling ? 'Cancelling...' : '⏹ Cancel'}
             </button>
           </div>
         )}
         <div className="quick-actions">
-          <button className="qa-btn" onClick={() => onTabChange('agentmd')}>📄 生成 agent.md</button>
-          <button className="qa-btn" onClick={() => onTabChange('params')}>⚙ 管理参数</button>
-          <button className="qa-btn" onClick={() => onTabChange('pipelines')}>📦 管线管理</button>
-          <button className="qa-btn" onClick={() => onTabChange('settings')}>⚙ 设置</button>
+          <button className="qa-btn" onClick={() => onTabChange('agentmd')}>📄 Generate agent.md</button>
+          <button className="qa-btn" onClick={() => onTabChange('params')}>⚙ Manage Params</button>
+          <button className="qa-btn" onClick={() => onTabChange('pipelines')}>📦 Manage Pipelines</button>
+          <button className="qa-btn" onClick={() => onTabChange('settings')}>⚙ Settings</button>
         </div>
         {preset && (
           <ParamsPanel
@@ -87,13 +87,13 @@ export default function ExecTab({
         <StageList stages={stages} events={events} />
         <ProgressBar events={events} />
         <div className="card">
-          <div className="card-title">实时日志</div>
+          <div className="card-title">Live Log</div>
           <EventLog events={events} maxHeight={140} />
         </div>
         <ResultTable data={result} errors={resultErrors} />
         {loading && (
           <div className="loading-overlay">
-            <div className="spinner" /> 处理中…
+            <div className="spinner" /> Processing…
           </div>
         )}
       </div>

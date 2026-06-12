@@ -46,8 +46,8 @@ export default function VersionPanel({ pipelineName, onRefresh }: VersionPanelPr
   return (
     <div className="card">
       <div className="card-title">
-        学习版本
-        <button className="btn btn-sm btn-secondary" onClick={load} style={{ marginLeft: 8 }}>刷新</button>
+        Learned Versions
+        <button className="btn btn-sm btn-secondary" onClick={load} style={{ marginLeft: 8 }}>Refresh</button>
       </div>
       <div className="version-list">
         {versions.map(v => (
@@ -55,23 +55,23 @@ export default function VersionPanel({ pipelineName, onRefresh }: VersionPanelPr
             <span className="version-num">v{v.version}</span>
             <span className="version-date">{v.created_at?.slice(0, 19) || ''}</span>
             <span className="version-size">{(v.size / 1024).toFixed(1)}KB</span>
-            <button className="btn btn-xs btn-secondary" onClick={() => handleView(v.version)}>查看</button>
+            <button className="btn btn-xs btn-secondary" onClick={() => handleView(v.version)}>View</button>
           </div>
         ))}
       </div>
       <div style={{ marginTop: 6 }}>
         <button className="btn btn-danger btn-sm" onClick={handleRelearn} disabled={loading}>
-          {loading ? '处理中…' : '重学'}
+          {loading ? 'Processing…' : 'Re-learn'}
         </button>
         <span style={{ fontSize: 11, color: 'var(--text-muted)', marginLeft: 8 }}>
-          删除最新学习版本
+          Delete latest learned version
         </span>
       </div>
       {viewing && (
         <div className="version-preview" style={{ marginTop: 8, maxHeight: 200, overflow: 'auto', background: 'var(--bg-subtle)', padding: 8, borderRadius: 4 }}>
-          <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 4 }}>查看 v{viewing.version}</div>
+          <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 4 }}>Viewing v{viewing.version}</div>
           <pre style={{ fontSize: 10, whiteSpace: 'pre-wrap', margin: 0 }}>{viewing.content.slice(0, 2000)}{viewing.content.length > 2000 ? '...' : ''}</pre>
-          <button className="btn btn-sm btn-secondary" onClick={() => setViewing(null)} style={{ marginTop: 4 }}>关闭</button>
+          <button className="btn btn-sm btn-secondary" onClick={() => setViewing(null)} style={{ marginTop: 4 }}>Close</button>
         </div>
       )}
     </div>

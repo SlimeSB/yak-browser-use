@@ -15,9 +15,9 @@ export default function ProgressBar({ events }: ProgressBarProps) {
   if (total === 0) {
     return (
       <div className="card">
-        <div className="card-title">执行进度</div>
+        <div className="card-title">Progress</div>
         <div style={{ fontSize: 11, color: 'var(--text-muted)', textAlign: 'center', padding: '8px 0' }}>
-          等待执行…
+          Waiting to start…
         </div>
       </div>
     );
@@ -27,7 +27,7 @@ export default function ProgressBar({ events }: ProgressBarProps) {
 
   return (
     <div className="card">
-      <div className="card-title">执行进度</div>
+      <div className="card-title">Progress</div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
         <div className="progress-bar">
           <div className={`progress-bar-fill ${stepErrors.length > 0 ? 'error' : ''}`} style={{ width: `${pct}%` }} />
