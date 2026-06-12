@@ -91,7 +91,7 @@
     "cancel": "Cancel",
     "processing": "Processing…",
     "liveLog": "Live Log",
-    "generateAgentMd": "Generate agent.md",
+    "generatePipeline": "Generate pipeline.yaml",
     "manageParams": "Manage Params"
   },
   "pipelineManager": {
@@ -101,15 +101,6 @@
     "run": "Run",
     "edit": "Edit",
     "compile": "Compile"
-  },
-  "agentMdEditor": {
-    "placeholder": "Type a message to modify the agent.md…",
-    "hint": "Select a pipeline above, then use chat to modify agent.md.",
-    "send": "Send",
-    "generating": "Generating…",
-    "error": "Request failed",
-    "connectionLost": "Connection interrupted or request failed",
-    "systemMessage": "Select a pipeline above, then use chat to modify agent.md. You can also edit the editor directly."
   },
   "paramsTab": {
     "title": "Params Manager",

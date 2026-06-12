@@ -22,31 +22,12 @@ export interface VersionInfo {
   created_at: string;
 }
 
-export interface DiffLine {
-  type: 'add' | 'del' | 'ctx';
-  line: string;
-  oldLineNum?: number;
-  newLineNum?: number;
-  highlights?: Array<{
-    start: number;
-    end: number;
-    type: 'insert' | 'delete';
-  }>;
-}
-
 export interface ChatMessage {
   role: 'user' | 'assistant' | 'tool' | 'system';
   content: string;
   toolName?: string;
   toolOk?: boolean;
   toolDuration?: number;
-}
-
-export interface ChatPendingDiff {
-  id: string;
-  explanation: string;
-  action: string;
-  diff: DiffLine[];
 }
 
 export interface ChatAgentEvent {

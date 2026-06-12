@@ -2,7 +2,7 @@ import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import './styles/global.css';
 import { getLogger } from '../utils/logger';
-import type { PipelineMeta, EventData, ChatPendingDiff, DiffLine, ChatMessage } from './types';
+import type { PipelineMeta, EventData, ChatMessage } from './types';
 import TitleBar from './components/TitleBar';
 import ConnectionBar from './components/ConnectionBar';
 import StatusBar from './components/StatusBar';
@@ -28,7 +28,7 @@ export default function App() {
   const [resultErrors, setResultErrors] = useState<string[] | null>(null);
   const [loading, setLoading] = useState(false);
   const [activePreset, setActivePreset] = useState('');
-  const [agentMdCache, setAgentMdCache] = useState<Record<string, string>>({});
+  const [pipelineCache, setPipelineCache] = useState<Record<string, string>>({});
   const [connected, setConnected] = useState(false);
   const [wsUrl, setWsUrl] = useState('');
   const [connectionError, setConnectionError] = useState<string | null>(null);
@@ -53,11 +53,10 @@ export default function App() {
     threadId: string;
   } | null>(null);
 
-  const [agentMdEditor, setAgentMdEditor] = useState('');
+  const [pipelineEditor, setPipelineEditor] = useState('');
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [chatInput, setChatInput] = useState('');
   const [chatSending, setChatSending] = useState(false);
-  const [chatPendingDiffs, setChatPendingDiffs] = useState<ChatPendingDiff[]>([]);
   const [streamingMsg, setStreamingMsg] = useState('');
   const [sessionStatus, setSessionStatus] = useState('idle');
   const esRef = useRef<EventSource | null>(null);
@@ -82,14 +81,14 @@ export default function App() {
   useEffect(() => {
     const preset = pipelines.find(p => p.name === activePreset);
     if (preset) {
-      let agentMd = agentMdCache[activePreset];
-      if (agentMd) {
-        setAgentMdEditor(agentMd);
+      let pipelineContent = pipelineCache[activePreset];
+      if (pipelineContent) {
+        setPipelineEditor(pipelineContent);
       } else {
         window.electronAPI.getPipeline(activePreset).then(resp => {
           if (resp.agent_md) {
-            setAgentMdCache(prev => ({ ...prev, [activePreset]: resp.agent_md }));
-            setAgentMdEditor(resp.agent_md);
+            setPipelineCache(prev => ({ ...prev, [activePreset]: resp.agent_md }));
+            setPipelineEditor(resp.agent_md);
           }
     }).catch((e) => { logger.error('getPipeline failed: %s', String(e)); });
       }
@@ -230,14 +229,14 @@ export default function App() {
       return;
     }
 
-    let agentMd = agentMdCache[activePreset];
-    if (!agentMd) {
+    let pipelineContent = pipelineCache[activePreset];
+    if (!pipelineContent) {
       try {
         const resp = await window.electronAPI.getPipeline(activePreset);
         if (resp.agent_md) {
-          agentMd = resp.agent_md;
-          setAgentMdCache(prev => ({ ...prev, [activePreset]: agentMd }));
-          setAgentMdEditor(agentMd);
+          pipelineContent = resp.agent_md;
+          setPipelineCache(prev => ({ ...prev, [activePreset]: pipelineContent }));
+          setPipelineEditor(pipelineContent);
         } else {
           window.electronAPI.showAlert(t('common.loadFailed'));
           return;
@@ -249,8 +248,8 @@ export default function App() {
       }
     }
 
-    const agentMdResolved = interpolateTemplate(agentMd, params);
-    const agentMdWithMode = agentMdResolved.replace(
+    const pipelineResolved = interpolateTemplate(pipelineContent, params);
+    const pipelineWithMode = pipelineResolved.replace(
       /^---\n/,
       `---\nreview_mode: "${reviewMode}"\n`
     );
@@ -260,7 +259,7 @@ export default function App() {
     setEvents([]);
     try {
       addEvent('engine_start', 'pipeline', {});
-      const resp = await window.electronAPI.run(agentMdWithMode, params);
+      const resp = await window.electronAPI.run(pipelineWithMode, params);
       if (resp.run_id) setCurrentRunId(resp.run_id);
       if (resp.pipeline) setCurrentPipeline(resp.pipeline);
       if (resp.error) {
@@ -289,7 +288,7 @@ export default function App() {
       addEvent('step_error', 'runner', { error: msg });
       setResultErrors([msg]);
     } finally { setLoading(false); }
-  }, [activePreset, params, pipelines, agentMdCache, addEvent, reviewMode]);
+  }, [activePreset, params, pipelines, pipelineCache, addEvent, reviewMode]);
 
   const handleConnect = useCallback(async (mode: 'user' | 'isolated', profile?: string) => {
     setConnectionError(null);
@@ -387,40 +386,16 @@ export default function App() {
   const streamingMsgRef = useRef('');
   useEffect(() => { streamingMsgRef.current = streamingMsg; }, [streamingMsg]);
 
-  const refreshAgentMd = useCallback(async () => {
+  const refreshPipeline = useCallback(async () => {
     if (!activePreset) return;
     try {
       const resp = await window.electronAPI.getPipeline(activePreset);
       if (resp.agent_md) {
-        setAgentMdCache(prev => ({ ...prev, [activePreset]: resp.agent_md }));
-        setAgentMdEditor(resp.agent_md);
+        setPipelineCache(prev => ({ ...prev, [activePreset]: resp.agent_md }));
+        setPipelineEditor(resp.agent_md);
       }
-    } catch (e) { logger.error('refreshAgentMd failed: %s', String(e)); }
+    } catch (e) { logger.error('refreshPipeline failed: %s', String(e)); }
   }, [activePreset]);
-
-  const handleChatDismiss = useCallback(async (index: number) => {
-    const item = chatPendingDiffs[index];
-    if (!item || !item.id) return;
-    try {
-      await fetch(`http://127.0.0.1:${await window.electronAPI.getPort()}/api/chat/agent/${activePreset}/patch/${item.id}/dismiss`, { method: 'POST' });
-    } catch (e) { logger.error('handleChatDismiss failed: %s', String(e)); }
-    setChatPendingDiffs(prev => prev.filter((_, i) => i !== index));
-    await refreshAgentMd();
-  }, [chatPendingDiffs, activePreset, refreshAgentMd]);
-
-  const handleChatRollback = useCallback(async (index: number) => {
-    const item = chatPendingDiffs[index];
-    if (!item || !item.id) return;
-    let removedCount = 1;
-    try {
-      const port = await window.electronAPI.getPort();
-      const resp = await fetch(`http://127.0.0.1:${port}/api/chat/agent/${activePreset}/patch/${item.id}/rollback`, { method: 'POST' });
-      const data = await resp.json();
-      removedCount = data.removed_count || 1;
-    } catch (e) { logger.error('handleChatRollback failed: %s', String(e)); }
-    setChatPendingDiffs(prev => prev.filter((_, i) => i < index || i >= index + removedCount));
-    await refreshAgentMd();
-  }, [chatPendingDiffs, activePreset, refreshAgentMd]);
 
   const handleDisconnect = useCallback(async () => {
     try {
@@ -605,9 +580,9 @@ export default function App() {
           pipelines={pipelines}
           activePreset={activePreset}
           onPresetChange={setActivePreset}
-          agentMdEditor={agentMdEditor}
-          onAgentMdEditorChange={setAgentMdEditor}
-          onRefreshPipeline={refreshAgentMd}
+          pipelineEditor={pipelineEditor}
+          onPipelineEditorChange={setPipelineEditor}
+          onRefreshPipeline={refreshPipeline}
         />
       </div>
 

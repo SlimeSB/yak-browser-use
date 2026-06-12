@@ -91,7 +91,7 @@
     "cancel": "取消执行",
     "processing": "处理中…",
     "liveLog": "实时日志",
-    "generateAgentMd": "生成 agent.md",
+    "generatePipeline": "生成 pipeline.yaml",
     "manageParams": "管理参数"
   },
   "pipelineManager": {
@@ -101,15 +101,6 @@
     "run": "执行",
     "edit": "编辑",
     "compile": "编译"
-  },
-  "agentMdEditor": {
-    "placeholder": "输入消息以修改 agent.md…",
-    "hint": "选择上方管线后，可以用对话修改 agent.md。",
-    "send": "发送",
-    "generating": "生成中…",
-    "error": "请求失败",
-    "connectionLost": "连接中断或请求失败",
-    "systemMessage": "选择上方管线后，可以用对话修改 agent.md。也可以直接改右侧编辑器。"
   },
   "paramsTab": {
     "title": "参数管理",

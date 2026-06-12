@@ -9,15 +9,15 @@ interface ChatTabProps {
   pipelines: PipelineMeta[];
   activePreset: string;
   onPresetChange: (name: string) => void;
-  agentMdEditor: string;
-  onAgentMdEditorChange: (text: string) => void;
+  pipelineEditor: string;
+  onPipelineEditorChange: (text: string) => void;
   onRefreshPipeline: () => void;
 }
 
 export default function ChatTab({
   messages, setMessages, connected,
   pipelines, activePreset, onPresetChange,
-  agentMdEditor, onAgentMdEditorChange, onRefreshPipeline,
+  pipelineEditor, onPipelineEditorChange, onRefreshPipeline,
 }: ChatTabProps) {
   const { t } = useTranslation();
   const [input, setInput] = useState('');
@@ -81,7 +81,7 @@ export default function ChatTab({
 
   const handleSavePipeline = async () => {
     try {
-      await window.electronAPI.savePreset(activePreset, agentMdEditor);
+      await window.electronAPI.savePreset(activePreset, pipelineEditor);
       setEditorSaved(true);
       setTimeout(() => setEditorSaved(false), 2000);
     } catch (e) {
@@ -233,9 +233,9 @@ export default function ChatTab({
             </div>
             <textarea
               className="chat-pipeline-textarea"
-              value={agentMdEditor}
-              onChange={e => onAgentMdEditorChange(e.target.value)}
-              placeholder="# Pipeline name&#10;# Describe steps..."
+              value={pipelineEditor}
+              onChange={e => onPipelineEditorChange(e.target.value)}
+              placeholder="name: my-pipeline&#10;description: ...&#10;steps:&#10;  - name: step-1&#10;    goal_description: Describe what to do..."
               spellCheck={false}
             />
           </div>

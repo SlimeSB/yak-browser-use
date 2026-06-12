@@ -63,7 +63,7 @@ export default function ExecTab({
           </div>
         )}
         <div className="quick-actions">
-          <button className="qa-btn" onClick={() => onTabChange('agentmd')}>📄 {t('exec.generateAgentMd')}</button>
+          <button className="qa-btn" onClick={() => onTabChange('agentmd')}>📄 {t('exec.generatePipeline')}</button>
           <button className="qa-btn" onClick={() => onTabChange('params')}>⚙ {t('exec.manageParams')}</button>
           <button className="qa-btn" onClick={() => onTabChange('pipelines')}>📦 Manage Pipelines</button>
           <button className="qa-btn" onClick={() => onTabChange('settings')}>⚙ Settings</button>
