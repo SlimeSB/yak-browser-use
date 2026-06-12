@@ -46,6 +46,20 @@ export default function App() {
   const [credKey, setCredKey] = useState('');
   const [credValue, setCredValue] = useState('');
 
+  const [theme, setTheme] = useState<'dark' | 'light'>(() => {
+    try { return (localStorage.getItem('theme') as 'dark' | 'light') || 'dark'; } catch { return 'dark'; }
+  });
+
+  const setThemePersist = useCallback((t: 'dark' | 'light') => {
+    setTheme(t);
+    document.documentElement.setAttribute('data-theme', t);
+    try { localStorage.setItem('theme', t); } catch { /* ok */ }
+  }, []);
+
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme);
+  }, [theme]);
+
   const [chatLayoutReversed, setChatLayoutReversed] = useState(() => {
     try { return localStorage.getItem('chat-layout-reversed') === 'true'; } catch { return false; }
   });
@@ -645,6 +659,7 @@ export default function App() {
           onConfirmEdit={handleChatConfirm}
           onRevertEdit={handleChatRevert}
           reversed={chatLayoutReversed}
+          theme={theme}
         />
       </div>
 
@@ -692,6 +707,7 @@ export default function App() {
             setChatLayoutReversed(v);
             try { localStorage.setItem('chat-layout-reversed', String(v)); } catch { /* ok */ }
           }}
+          theme={theme} onThemeChange={setThemePersist}
         />
       </div>
 

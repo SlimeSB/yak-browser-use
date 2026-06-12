@@ -6,13 +6,17 @@ interface MonacoYamlEditorProps {
   original?: string;
   modified?: string;
   onChange?: (text: string) => void;
+  theme?: string;
 }
+
+const monacoTheme = (t: string) => t === 'light' ? 'vs' : 'vs-dark';
 
 export default function MonacoYamlEditor({
   value,
   original,
   modified,
   onChange,
+  theme,
 }: MonacoYamlEditorProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const editorRef = useRef<monaco.editor.IStandaloneDiffEditor | null>(null);
@@ -40,7 +44,7 @@ export default function MonacoYamlEditor({
     );
 
     const editor = monaco.editor.createDiffEditor(containerRef.current, {
-      theme: 'vs-dark',
+      theme: monacoTheme(theme || 'dark'),
       renderSideBySide: false,
       readOnly: false,
       automaticLayout: true,
@@ -125,6 +129,11 @@ export default function MonacoYamlEditor({
     },
     []
   );
+
+  useEffect(() => {
+    if (!editorRef.current || disposedRef.current) return;
+    monaco.editor.setTheme(monacoTheme(theme || 'dark'));
+  }, [theme]);
 
   useEffect(() => {
     if (!editorRef.current || disposedRef.current) return;

@@ -7,16 +7,53 @@ interface SettingsTabProps {
   onReviewModeChange: (mode: string) => void;
   chatLayoutReversed: boolean;
   onChatLayoutReversedChange: (v: boolean) => void;
+  theme: string;
+  onThemeChange: (t: 'dark' | 'light') => void;
 }
 
 export default function SettingsTab({
   reviewMode, onReviewModeChange,
   chatLayoutReversed, onChatLayoutReversedChange,
+  theme, onThemeChange,
 }: SettingsTabProps) {
   const { t } = useTranslation();
   return (
     <div className="set-layout">
       <div className="set-content">
+        <div className="set-group">
+          <div className="set-group-title">{t('settingsTab.theme')}</div>
+          <div className="set-row">
+            <div>
+              <div className="set-label">{t('settingsTab.colorMode')}</div>
+              <div className="set-desc">{theme === 'dark' ? 'Dark — black & orange' : 'Light — white & blue'}</div>
+            </div>
+            <div style={{ display: 'flex', gap: 4 }}>
+              <button
+                className={`btn btn-xs ${theme === 'dark' ? 'btn-primary' : 'btn-secondary'}`}
+                onClick={() => onThemeChange('dark')}
+              >Dark</button>
+              <button
+                className={`btn btn-xs ${theme === 'light' ? 'btn-primary' : 'btn-secondary'}`}
+                onClick={() => onThemeChange('light')}
+              >Light</button>
+            </div>
+          </div>
+        </div>
+        <div className="set-group">
+          <div className="set-group-title">{t('settingsTab.language')}</div>
+          <div className="set-row">
+            <div style={{ display: 'flex', gap: 4 }}>
+              <button
+                className={`btn btn-xs ${i18n.language === 'en' ? 'btn-primary' : 'btn-secondary'}`}
+                onClick={() => i18n.changeLanguage('en')}
+              >English</button>
+              <button
+                className={`btn btn-xs ${i18n.language === 'zh' ? 'btn-primary' : 'btn-secondary'}`}
+                onClick={() => i18n.changeLanguage('zh')}
+              >中文</button>
+            </div>
+          </div>
+        </div>
         <div className="set-group">
           <div className="set-group-title">{t('settingsTab.review')}</div>
           <div className="set-row">
@@ -59,15 +96,6 @@ export default function SettingsTab({
                 onClick={() => onChatLayoutReversedChange(true)}
               >Editor | Chat</button>
             </div>
-          </div>
-        </div>
-        <div className="set-group">
-          <div className="set-group-title">{t('settingsTab.language')}</div>
-          <div className="set-row">
-            <select value={i18n.language} onChange={(e) => i18n.changeLanguage(e.target.value)}>
-              <option value="en">English</option>
-              <option value="zh">中文</option>
-            </select>
           </div>
         </div>
       </div>

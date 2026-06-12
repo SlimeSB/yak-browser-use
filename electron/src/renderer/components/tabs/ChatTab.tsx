@@ -17,6 +17,7 @@ interface ChatTabProps {
   onConfirmEdit?: (editId: string) => Promise<string | null>;
   onRevertEdit?: (editId: string) => Promise<string | null>;
   reversed?: boolean;
+  theme?: string;
 }
 
 export default function ChatTab({
@@ -24,7 +25,7 @@ export default function ChatTab({
   pipelines, activePreset, onPresetChange,
   pipelineEditor, onPipelineEditorChange, onRefreshPipeline,
   pendingEdit, onConfirmEdit, onRevertEdit,
-  reversed,
+  reversed, theme,
 }: ChatTabProps) {
   const { t } = useTranslation();
   const [input, setInput] = useState('');
@@ -199,6 +200,7 @@ export default function ChatTab({
             original={pendingEdit.original}
             modified={pendingEdit.modified}
             onChange={onPipelineEditorChange}
+            theme={theme}
           />
         </>
       ) : (
@@ -222,6 +224,7 @@ export default function ChatTab({
           <MonacoYamlEditor
             value={pipelineEditor}
             onChange={onPipelineEditorChange}
+            theme={theme}
           />
         </>
       )}
