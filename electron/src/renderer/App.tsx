@@ -2,12 +2,12 @@ import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import './styles/global.css';
 import { getLogger } from '../utils/logger';
-import type { PipelineMeta, EventData, ChatPendingDiff, DiffLine } from './types';
+import type { PipelineMeta, EventData, ChatPendingDiff, DiffLine, ChatMessage } from './types';
 import TitleBar from './components/TitleBar';
 import ConnectionBar from './components/ConnectionBar';
 import StatusBar from './components/StatusBar';
 import ExecTab from './components/tabs/ExecTab';
-import AgentMdTab from './components/tabs/AgentMdTab';
+import ChatTab from './components/tabs/ChatTab';
 import LogTab from './components/tabs/LogTab';
 import PipelinesTab from './components/tabs/PipelinesTab';
 import ParamsTab from './components/tabs/ParamsTab';
@@ -54,13 +54,12 @@ export default function App() {
   } | null>(null);
 
   const [agentMdEditor, setAgentMdEditor] = useState('');
-  const [chatMessages, setChatMessages] = useState<Array<{role: string; content: string}>>([
-    {role: 'system', content: t('agentMdEditor.systemMessage')}
-  ]);
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [chatInput, setChatInput] = useState('');
   const [chatSending, setChatSending] = useState(false);
   const [chatPendingDiffs, setChatPendingDiffs] = useState<ChatPendingDiff[]>([]);
   const [streamingMsg, setStreamingMsg] = useState('');
+  const [sessionStatus, setSessionStatus] = useState('idle');
   const esRef = useRef<EventSource | null>(null);
 
   useEffect(() => {
@@ -145,8 +144,48 @@ export default function App() {
         ws.onmessage = (ev) => {
           try {
             const event = JSON.parse(ev.data);
-            setEvents(prev => [...prev, { type: event.type, timestamp: event.timestamp, node_name: event.step || event.pipeline || '', data: event }]);
-            if (event.type === 'run_end') {
+            const et = event.type;
+
+            // Chat events
+            if (et === 'chat.message') {
+              const c = event.content as string;
+              setChatMessages(prev => [...prev, { role: 'assistant', content: c || '' }]);
+            } else if (et === 'chat.tool_start') {
+              setChatMessages(prev => [...prev, {
+                role: 'tool',
+                content: '',
+                toolName: event.tool_name || '',
+                toolOk: undefined,
+              }]);
+            } else if (et === 'chat.tool_end') {
+              setChatMessages(prev => {
+                const next = [...prev];
+                for (let i = next.length - 1; i >= 0; i--) {
+                  if (next[i].role === 'tool' && next[i].toolName === event.tool_name && next[i].toolOk === undefined) {
+                    next[i] = {
+                      ...next[i],
+                      toolOk: event.ok,
+                      toolDuration: event.duration_ms,
+                      content: event.error || (event.ok ? 'Done' : 'Failed'),
+                    };
+                    break;
+                  }
+                }
+                return next;
+              });
+            } else if (et === 'chat.error') {
+              setChatMessages(prev => [...prev, { role: 'assistant', content: `[Error] ${event.message || ''}` }]);
+            } else if (et === 'session.state') {
+              setSessionStatus(event.status || '');
+              if (event.status === 'completed' || event.status === 'cancelled') {
+                setChatSending(false);
+              }
+            } else {
+              // Pipeline events
+              setEvents(prev => [...prev, { type: et, timestamp: event.timestamp, node_name: event.step || event.pipeline || '', data: event }]);
+            }
+
+            if (et === 'run_end') {
               setLoading(false);
               setCurrentRunId('');
               setCurrentPipeline('');
@@ -322,106 +361,28 @@ export default function App() {
   }, []);
 
   const handleChatSend = useCallback(async () => {
-    if (!chatInput.trim() || chatSending || !activePreset) return;
+    if (!chatInput.trim() || chatSending) return;
     const userMsg = chatInput.trim();
     setChatInput('');
     setChatMessages(prev => [...prev, { role: 'user', content: userMsg }]);
     setChatSending(true);
-    setStreamingMsg('');
-
-    if (esRef.current) {
-      esRef.current.close();
-      esRef.current = null;
-    }
 
     try {
-      const port = await window.electronAPI.getPort();
-      const encodedMsg = encodeURIComponent(userMsg);
-      const url = `http://127.0.0.1:${port}/api/chat/agent/${activePreset}/stream?message=${encodedMsg}`;
-      const es = new EventSource(url);
-      esRef.current = es;
-
-      es.addEventListener('tool_start', (e: MessageEvent) => {
-        try {
-          const data = JSON.parse(e.data);
-          setChatMessages(prev => [...prev, {
-            role: 'tool',
-            content: `🔧 ${data.name}`,
-          }]);
-        } catch (e) { logger.debug('SSE tool_start parse error: %s', String(e)); }
-      });
-
-      es.addEventListener('tool_end', (e: MessageEvent) => {
-        try {
-          const data = JSON.parse(e.data);
-          const result = data.result;
-          const ok = result && !result.error;
-          setChatMessages(prev => {
-            const msgs = [...prev];
-            const lastTool = [...msgs].reverse().find(m => m.role === 'tool');
-            if (lastTool) {
-              const idx = msgs.indexOf(lastTool);
-              msgs[idx] = {
-                role: 'tool',
-                content: `${ok ? '✓' : '✗'} ${data.name}${result?.error ? ': ' + result.error : ''}`,
-              };
-            }
-            return msgs;
-          });
-        } catch (e) { logger.debug('SSE tool_end parse error: %s', String(e)); }
-      });
-
-      es.addEventListener('patch_applied', (e: MessageEvent) => {
-        try {
-          const data = JSON.parse(e.data);
-          const diffLines: DiffLine[] = (data.diff || []).map((d: Record<string, unknown>) => ({
-            type: (d.type as 'add' | 'del' | 'ctx') || 'ctx',
-            line: (d.line as string) || '',
-            oldLineNum: d.oldLineNum as number | undefined,
-            newLineNum: d.newLineNum as number | undefined,
-            highlights: d.highlights as DiffLine['highlights'],
-          }));
-          setChatPendingDiffs(prev => [...prev, {
-            id: data.id || '',
-            explanation: data.explanation || '',
-            action: data.action || '',
-            diff: diffLines,
-          }]);
-        } catch (e) { logger.debug('SSE patch_applied parse error: %s', String(e)); }
-      });
-
-      es.addEventListener('response', (e: MessageEvent) => {
-        try {
-          const data = JSON.parse(e.data);
-          setStreamingMsg(prev => prev + data);
-        } catch (e) { logger.debug('SSE response parse error: %s', String(e)); }
-      });
-
-      es.addEventListener('done', (e: MessageEvent) => {
-        if (streamingMsgRef.current) {
-          setChatMessages(prev => [...prev, { role: 'assistant', content: streamingMsgRef.current }]);
-          setStreamingMsg('');
+      const result = await window.electronAPI.chat(userMsg);
+      if (result.ok) {
+        const resp = result.response;
+        if (resp) {
+          setChatMessages(prev => [...prev, { role: 'assistant', content: resp }]);
         }
-        setChatSending(false);
-        es.close();
-        esRef.current = null;
-      });
-
-      es.addEventListener('error', () => {
-        if (streamingMsgRef.current) {
-          setChatMessages(prev => [...prev, { role: 'assistant', content: streamingMsgRef.current }]);
-          setStreamingMsg('');
-        }
-        setChatMessages(prev => [...prev, { role: 'assistant', content: t('agentMdEditor.connectionLost') }]);
-        setChatSending(false);
-        es.close();
-        esRef.current = null;
-      });
+      } else {
+        setChatMessages(prev => [...prev, { role: 'assistant', content: `Error: ${result.error || 'Unknown'}` }]);
+      }
     } catch (e) {
-      setChatMessages(prev => [...prev, { role: 'assistant', content: `${t('agentMdEditor.error')}: ${String(e)}` }]);
+      setChatMessages(prev => [...prev, { role: 'assistant', content: `Error: ${String(e)}` }]);
+    } finally {
       setChatSending(false);
     }
-  }, [chatInput, chatSending, activePreset]);
+  }, [chatInput, chatSending]);
 
   const streamingMsgRef = useRef('');
   useEffect(() => { streamingMsgRef.current = streamingMsg; }, [streamingMsg]);
@@ -637,24 +598,16 @@ export default function App() {
       </div>
 
       <div className="tab-content" style={{ display: activeTab === 'agentmd' ? 'flex' : 'none' }}>
-        <AgentMdTab
+        <ChatTab
+          messages={chatMessages}
+          setMessages={setChatMessages}
+          connected={connected}
           pipelines={pipelines}
           activePreset={activePreset}
           onPresetChange={setActivePreset}
-          chatMessages={chatMessages}
-          onChatMessagesChange={setChatMessages}
-          chatInput={chatInput}
-          onChatInputChange={setChatInput}
-          chatSending={chatSending}
-          onChatSend={handleChatSend}
-          preset={preset}
           agentMdEditor={agentMdEditor}
           onAgentMdEditorChange={setAgentMdEditor}
-          onTabChange={setActiveTab}
-          chatPendingDiffs={chatPendingDiffs}
-          onChatDismiss={handleChatDismiss}
-          onChatRollback={handleChatRollback}
-          streamingMsg={streamingMsg}
+          onRefreshPipeline={refreshAgentMd}
         />
       </div>
 

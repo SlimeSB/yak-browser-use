@@ -337,6 +337,51 @@ app.whenReady().then(async () => {
     return _apiFetch(`/api/pipelines/${name}`, {}, 'pipelines:get');
   });
 
+  // Chat endpoints
+  ipcMain.handle('api:chat', async (_event, { message }: { message: string }) => {
+    logger.debug('IPC: api:chat called');
+    return _apiFetch('/api/chat', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message }),
+    }, 'api:chat');
+  });
+
+  ipcMain.handle('api:chat-reset', async () => {
+    logger.debug('IPC: api:chat-reset called');
+    return _apiFetch('/api/chat/reset', { method: 'POST' }, 'api:chat-reset');
+  });
+
+  ipcMain.handle('api:chat-cancel', async () => {
+    logger.debug('IPC: api:chat-cancel called');
+    return _apiFetch('/api/chat/cancel', { method: 'POST' }, 'api:chat-cancel');
+  });
+
+  ipcMain.handle('api:session', async () => {
+    logger.debug('IPC: api:session called');
+    return _apiFetch('/api/session', {}, 'api:session');
+  });
+
+  ipcMain.handle('api:presets-list', async () => {
+    logger.debug('IPC: api:presets-list called');
+    return _apiFetch('/api/presets', {}, 'api:presets-list');
+  });
+
+  ipcMain.handle('api:preset-save', async (_event, { name, content }: { name: string; content: string }) => {
+    logger.debug('IPC: api:preset-save called');
+    return _apiFetch('/api/presets', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, content }),
+    }, 'api:preset-save');
+  });
+
+  ipcMain.handle('api:preset-compile', async (_event, { name }: { name: string }) => {
+    logger.debug('IPC: api:preset-compile called');
+    return _apiFetch('/api/presets/compile', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name }),
+    }, 'api:preset-compile');
+  });
+
   await createWindow();
 }).catch((e) => {
   logger.error('App startup failed: %s', (e as Error).message);

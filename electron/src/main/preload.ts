@@ -40,6 +40,15 @@ contextBridge.exposeInMainWorld('electronAPI', {
   listPipelines: () => ipcRenderer.invoke('pipelines:list'),
   getPipeline: (name: string) => ipcRenderer.invoke('pipelines:get', name),
 
+  // Chat
+  chat: (message: string) => ipcRenderer.invoke('api:chat', { message }),
+  chatReset: () => ipcRenderer.invoke('api:chat-reset'),
+  chatCancel: () => ipcRenderer.invoke('api:chat-cancel'),
+  getSession: () => ipcRenderer.invoke('api:session'),
+  listPresets: () => ipcRenderer.invoke('api:presets-list'),
+  savePreset: (name: string, content: string) => ipcRenderer.invoke('api:preset-save', { name, content }),
+  compilePreset: (name: string) => ipcRenderer.invoke('api:preset-compile', { name }),
+
   // Dialogs
   showAlert: (message: string) => ipcRenderer.invoke('dialog:alert', message),
 });

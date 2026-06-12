@@ -177,6 +177,15 @@
     "unknownError": "Unknown error",
     "creating": "Creation failed",
     "loadFailed": "Failed to load pipeline definition",
-    "missingParams": "Please fill in the following parameters: {{keys}}"
+    "missingParams": "Please fill in the following parameters: {{keys}}",
+    "cancel": "Cancel",
+    "reset": "Reset"
+  },
+  "chat": {
+    "startPrompt": "Describe what you want the browser to do...",
+    "placeholder": "Type a message... (Enter to send, Shift+Enter for newline)",
+    "send": "Send",
+    "save": "Save",
+    "compilePreset": "Compile Preset"
   }
 }

@@ -1,6 +1,6 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
-import type { PipelineMeta, EventData } from '../types';
+import type { PipelineMeta, EventData } from '../../types';
 import PresetSelectRow from '../PresetSelectRow';
 import ParamsPanel from '../ParamsPanel';
 import StageList from '../StageList';

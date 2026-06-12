@@ -177,6 +177,15 @@
     "unknownError": "未知错误",
     "creating": "创建失败",
     "loadFailed": "加载管线定义失败",
-    "missingParams": "请填写以下参数：{{keys}}"
+    "missingParams": "请填写以下参数：{{keys}}",
+    "cancel": "取消",
+    "reset": "重置"
+  },
+  "chat": {
+    "startPrompt": "告诉我你想让浏览器做什么...",
+    "placeholder": "输入消息... (Enter 发送，Shift+Enter 换行)",
+    "send": "发送",
+    "save": "保存",
+    "compilePreset": "编译为预设"
   }
 }

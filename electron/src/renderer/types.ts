@@ -34,6 +34,14 @@ export interface DiffLine {
   }>;
 }
 
+export interface ChatMessage {
+  role: 'user' | 'assistant' | 'tool' | 'system';
+  content: string;
+  toolName?: string;
+  toolOk?: boolean;
+  toolDuration?: number;
+}
+
 export interface ChatPendingDiff {
   id: string;
   explanation: string;
@@ -68,6 +76,13 @@ declare global {
       exportCsv: (data: unknown) => Promise<{ success: boolean; filePath?: string; rows?: number; error?: string }>;
       listPipelines: () => Promise<{ pipelines: PipelineMeta[]; error?: string }>;
       getPipeline: (name: string) => Promise<{ name: string; agent_md: string; meta: PipelineMeta; error?: string }>;
+      chat: (message: string) => Promise<{ ok?: boolean; response?: string; status?: string; turn_count?: number; duration_ms?: number; error?: string }>;
+      chatReset: () => Promise<{ ok?: boolean; session_id?: string; status?: string }>;
+      chatCancel: () => Promise<{ ok?: boolean }>;
+      getSession: () => Promise<{ session?: { session_id: string; pipeline_name: string; status: string; message_count: number } | null }>;
+      listPresets: () => Promise<{ presets: Array<{ name: string; path: string; modified: number }> }>;
+      savePreset: (name: string, content: string) => Promise<{ ok?: boolean; path?: string }>;
+      compilePreset: (name: string) => Promise<{ ok?: boolean; path?: string; content?: string }>;
       listVersions: (pipelineName: string) => Promise<{ versions: VersionInfo[] }>;
       getVersion: (pipelineName: string, version: string) => Promise<{ version: string; content: string }>;
       relearn: (pipelineName: string) => Promise<{ deleted: boolean; version?: string }>;

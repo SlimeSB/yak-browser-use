@@ -26,18 +26,18 @@
 - [x] 3.1 Rewrite `engine/agent.py` to integrate conversation_loop + tools + goal_run
 - [x] 3.2 Split `engine/runner.py` into `runner.py` (chat mode conversation_loop entry) and `runner_preset.py` (preset replay, reuses existing pipeline logic: StepMachine, retry, recovery, Guardian)
 - [x] 3.3 Implement CDP error handling in tool_executor (capture + normalize + return to Agent, no auto-classification). CDP reconnect with 3x exponential backoff (1s/2s/4s).
-- [ ] 3.4 Implement multi-tab management: Target.createTarget for new sessions, Target.attachToTarget on tab switch, CDP event-based target tracking
+- [ ] 3.4 ~~Implement multi-tab management: Target.createTarget for new sessions, Target.attachToTarget on tab switch, CDP event-based target tracking~~ → 暂缓，见根目录 todo.md
 - [x] 3.5 Implement conversation interrupt save/restore (messages + budget + error state serialization)
 - [x] 3.6 Create `api/service.py` with session/chat/pipeline management
 - [x] 3.7 Add WebSocket event push + chat endpoint to `api/server.py`
-- [ ] 3.8 Implement Electron frontend WebSocket client for IPC
+- [x] 3.8 Implement Electron frontend WebSocket client for IPC
 - [x] 3.9 Create prompt files: `prompts/chat/system.md`, `prompts/preset/system.md`, `prompts/guardrails/{exact_failure,same_tool_failure,no_progress}.md`, `prompts/guidance/{tool_strategy,error_recovery}.md`
 - [x] 3.10 Implement preset save/load (conversation history → agent.md via compiler)
-- [ ] 3.11 Update Electron frontend for chat UI (message list, input, browser preview)
+- [x] 3.11 Update Electron frontend for chat UI (message list, input, browser preview)
 
 ## 4. Phase 3: 收尾
 
-- [ ] 4.1 Integration tests (chat → browser operation → export)
+- [ ] 4.1 ~~Integration tests (chat → browser operation → export)~~ → 需要真实浏览器环境，见根目录 todo.md
 - [x] 4.2 Verify existing tests still pass
-- [ ] 4.3 Clean up deprecated code paths
-- [ ] 4.4 Update docs
+- [ ] 4.3 ~~Clean up deprecated code paths~~ → 旧 pipeline 逻辑保留在 runner_preset.py 用于预设回放，不视为废弃
+- [ ] 4.4 ~~Update docs~~ → 见根目录 todo.md
