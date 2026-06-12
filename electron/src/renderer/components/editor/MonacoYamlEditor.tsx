@@ -1,0 +1,152 @@
+import React, { useRef, useEffect, useCallback } from 'react';
+import * as monaco from 'monaco-editor';
+
+interface MonacoYamlEditorProps {
+  value: string;
+  original?: string;
+  modified?: string;
+  onChange?: (text: string) => void;
+}
+
+export default function MonacoYamlEditor({
+  value,
+  original,
+  modified,
+  onChange,
+}: MonacoYamlEditorProps) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const editorRef = useRef<monaco.editor.IStandaloneDiffEditor | null>(null);
+  const originalModelRef = useRef<monaco.editor.ITextModel | null>(null);
+  const modifiedModelRef = useRef<monaco.editor.ITextModel | null>(null);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const disposedRef = useRef(false);
+  const applyingDiffRef = useRef(false);
+
+  const hasDiff = original !== undefined && modified !== undefined && original !== modified;
+
+  useEffect(() => {
+    if (!containerRef.current) return;
+    disposedRef.current = false;
+
+    originalModelRef.current = monaco.editor.createModel(
+      value,
+      'yaml',
+      monaco.Uri.parse('file:///pipeline-original.yaml')
+    );
+    modifiedModelRef.current = monaco.editor.createModel(
+      value,
+      'yaml',
+      monaco.Uri.parse('file:///pipeline-modified.yaml')
+    );
+
+    const editor = monaco.editor.createDiffEditor(containerRef.current, {
+      theme: 'vs-dark',
+      renderSideBySide: false,
+      readOnly: false,
+      automaticLayout: true,
+      minimap: { enabled: false },
+      scrollBeyondLastLine: false,
+    });
+
+    editor.updateOptions({
+      fontSize: 12,
+      fontFamily: "'Cascadia Code', 'Fira Code', 'JetBrains Mono', monospace",
+    });
+
+    editor.setModel({
+      original: originalModelRef.current,
+      modified: modifiedModelRef.current,
+    });
+
+    const innerOptions: monaco.editor.IStandaloneEditorConstructionOptions = {
+      fontSize: 12,
+      fontFamily: "'Cascadia Code', 'Fira Code', 'JetBrains Mono', monospace",
+      lineNumbers: 'on',
+      lineNumbersMinChars: 3,
+      glyphMargin: false,
+      lineDecorationsWidth: 4,
+      tabSize: 2,
+      insertSpaces: true,
+      folding: true,
+      guides: { indentation: true },
+      matchBrackets: 'always',
+      autoClosingBrackets: 'always',
+      wordWrap: 'on',
+      padding: { top: 8, bottom: 8 },
+    };
+    editor.getModifiedEditor().updateOptions(innerOptions);
+    editor.getOriginalEditor().updateOptions(innerOptions);
+
+    editorRef.current = editor;
+
+    const disposable = modifiedModelRef.current.onDidChangeContent(() => {
+      if (applyingDiffRef.current) return;
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+      debounceRef.current = setTimeout(() => {
+        if (disposedRef.current) return;
+        const text = modifiedModelRef.current?.getValue() ?? '';
+        if (originalModelRef.current && text !== originalModelRef.current.getValue()) {
+          originalModelRef.current.setValue(text);
+        }
+        onChange?.(text);
+      }, 300);
+    });
+
+    return () => {
+      disposedRef.current = true;
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+      disposable.dispose();
+      editor.dispose();
+      originalModelRef.current?.dispose();
+      modifiedModelRef.current?.dispose();
+      editorRef.current = null;
+      originalModelRef.current = null;
+      modifiedModelRef.current = null;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!modifiedModelRef.current || disposedRef.current) return;
+    const currentValue = modifiedModelRef.current.getValue();
+    if (!hasDiff && currentValue !== value) {
+      applyingDiffRef.current = true;
+      modifiedModelRef.current.setValue(value);
+      applyingDiffRef.current = false;
+    }
+  }, [value, hasDiff]);
+
+  const setModels = useCallback(
+    (orig: string, mod: string) => {
+      if (!originalModelRef.current || !modifiedModelRef.current || disposedRef.current) return;
+      applyingDiffRef.current = true;
+      originalModelRef.current.setValue(orig);
+      modifiedModelRef.current.setValue(mod);
+      applyingDiffRef.current = false;
+    },
+    []
+  );
+
+  useEffect(() => {
+    if (!editorRef.current || disposedRef.current) return;
+    if (hasDiff && original !== undefined && modified !== undefined) {
+      setModels(original, modified);
+      editorRef.current.updateOptions({ readOnly: true });
+    } else {
+      editorRef.current.updateOptions({ readOnly: false });
+      const currentText = modifiedModelRef.current?.getValue() ?? '';
+      if (originalModelRef.current && originalModelRef.current.getValue() !== currentText) {
+        applyingDiffRef.current = true;
+        originalModelRef.current.setValue(currentText);
+        applyingDiffRef.current = false;
+      }
+    }
+  }, [original, modified, hasDiff, setModels]);
+
+  return (
+    <div
+      ref={containerRef}
+      className="monaco-yaml-editor"
+      style={{ flex: 1, minHeight: 0 }}
+    />
+  );
+}

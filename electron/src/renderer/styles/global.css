@@ -1891,15 +1891,25 @@ body {
   display: flex;
   flex-direction: column;
   min-width: 0;
-  border-right: 1px solid #30363d;
+}
+
+.chat-split-handle {
+  width: 4px;
+  cursor: col-resize;
+  background: #30363d;
+  flex-shrink: 0;
+  transition: background 0.15s;
+}
+.chat-split-handle:hover,
+.chat-split-handle:active {
+  background: #58a6ff;
 }
 
 .chat-right {
-  width: 35%;
-  min-width: 280px;
-  max-width: 420px;
+  flex: 1;
   display: flex;
   flex-direction: column;
+  min-width: 280px;
   background: #0d1117;
 }
 
@@ -1908,7 +1918,6 @@ body {
   display: flex;
   flex-direction: column;
   min-height: 0;
-  padding: 8px;
 }
 
 .chat-pipeline-toolbar {
@@ -1936,4 +1945,53 @@ body {
 
 .chat-pipeline-textarea:focus {
   border-color: #58a6ff;
+}
+
+.monaco-yaml-editor {
+  flex: 1;
+  min-height: 0;
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.monaco-yaml-editor .monaco-editor {
+  border-radius: 6px;
+}
+
+.chat-diff-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 7px 10px;
+  margin-bottom: 8px;
+  border-radius: 6px;
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  background: rgba(245, 158, 11, 0.08);
+  font-size: 11px;
+  color: #e6edf3;
+  flex-shrink: 0;
+}
+
+.chat-diff-explanation {
+  flex: 1;
+  margin-right: 12px;
+  line-height: 1.4;
+  color: #d2a84e;
+}
+
+.chat-diff-actions {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.chat-diff-error {
+  padding: 6px 10px;
+  margin-bottom: 8px;
+  border-radius: 4px;
+  background: rgba(248, 81, 73, 0.12);
+  border: 1px solid rgba(248, 81, 73, 0.3);
+  color: #ff7b72;
+  font-size: 11px;
+  flex-shrink: 0;
 }

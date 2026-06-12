@@ -2,7 +2,7 @@ import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import './styles/global.css';
 import { getLogger } from '../utils/logger';
-import type { PipelineMeta, EventData, ChatMessage } from './types';
+import type { PipelineMeta, EventData, ChatMessage, PendingEdit } from './types';
 import TitleBar from './components/TitleBar';
 import ConnectionBar from './components/ConnectionBar';
 import StatusBar from './components/StatusBar';
@@ -46,12 +46,21 @@ export default function App() {
   const [credKey, setCredKey] = useState('');
   const [credValue, setCredValue] = useState('');
 
+  const [chatLayoutReversed, setChatLayoutReversed] = useState(() => {
+    try { return localStorage.getItem('chat-layout-reversed') === 'true'; } catch { return false; }
+  });
+
   const [pendingReview, setPendingReview] = useState<{
     extraOps: Array<{ type: string; value?: string; selector?: string }>;
     reason: string;
     guardLayer: string;
     threadId: string;
   } | null>(null);
+
+  const [pendingEdits, setPendingEdits] = useState<PendingEdit[]>([]);
+  const processedEditIdsRef = useRef<Set<string>>(new Set());
+
+  const activePendingEdit = pendingEdits.length > 0 ? pendingEdits[0] : null;
 
   const [pipelineEditor, setPipelineEditor] = useState('');
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
@@ -178,6 +187,27 @@ export default function App() {
               setSessionStatus(event.status || '');
               if (event.status === 'completed' || event.status === 'cancelled') {
                 setChatSending(false);
+              }
+            } else if (et === 'pipeline.edit') {
+              const editId = event.edit_id as string;
+              if (editId && !processedEditIdsRef.current.has(editId)) {
+                processedEditIdsRef.current.add(editId);
+                const edit: PendingEdit = {
+                  edit_id: editId,
+                  original: event.original as string || '',
+                  modified: event.modified as string || '',
+                  explanation: event.explanation as string || '',
+                };
+                setPendingEdits(prev => [...prev, edit]);
+              } else if (editId) {
+                setPendingEdits(prev => prev.map(e =>
+                  e.edit_id === editId
+                    ? { ...e,
+                        modified: event.modified as string || e.modified,
+                        explanation: event.explanation as string || e.explanation,
+                      }
+                    : e
+                ));
               }
             } else {
               // Pipeline events
@@ -397,6 +427,34 @@ export default function App() {
     } catch (e) { logger.error('refreshPipeline failed: %s', String(e)); }
   }, [activePreset]);
 
+  const handleChatConfirm = useCallback(async (editId: string): Promise<string | null> => {
+    try {
+      const result = await window.electronAPI.chatConfirm(editId);
+      if (result.status === 'confirmed' || result.status === 'already_confirmed') {
+        await refreshPipeline();
+        setPendingEdits(prev => prev.filter(e => e.edit_id !== editId));
+        return null;
+      }
+      return result.error || 'Confirm failed';
+    } catch (e) {
+      return String(e);
+    }
+  }, [refreshPipeline]);
+
+  const handleChatRevert = useCallback(async (editId: string): Promise<string | null> => {
+    try {
+      const result = await window.electronAPI.chatRevert(editId);
+      if (result.status === 'reverted' || result.status === 'already_reverted') {
+        await refreshPipeline();
+        setPendingEdits(prev => prev.filter(e => e.edit_id !== editId));
+        return null;
+      }
+      return result.error || 'Revert failed';
+    } catch (e) {
+      return String(e);
+    }
+  }, [refreshPipeline]);
+
   const handleDisconnect = useCallback(async () => {
     try {
       await window.electronAPI.disconnectBrowser();
@@ -583,6 +641,10 @@ export default function App() {
           pipelineEditor={pipelineEditor}
           onPipelineEditorChange={setPipelineEditor}
           onRefreshPipeline={refreshPipeline}
+          pendingEdit={activePendingEdit}
+          onConfirmEdit={handleChatConfirm}
+          onRevertEdit={handleChatRevert}
+          reversed={chatLayoutReversed}
         />
       </div>
 
@@ -625,6 +687,11 @@ export default function App() {
       <div className="tab-content" style={{ display: activeTab === 'settings' ? 'flex' : 'none' }}>
         <SettingsTab
           reviewMode={reviewMode} onReviewModeChange={setReviewMode}
+          chatLayoutReversed={chatLayoutReversed}
+          onChatLayoutReversedChange={(v) => {
+            setChatLayoutReversed(v);
+            try { localStorage.setItem('chat-layout-reversed', String(v)); } catch { /* ok */ }
+          }}
         />
       </div>
 

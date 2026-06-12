@@ -10,6 +10,9 @@ if (process.platform === 'win32') {
   try { execSync('chcp 65001 > nul', { stdio: 'ignore' }); } catch { /* ok */ }
 }
 
+app.commandLine.appendSwitch('lang', 'en-US');
+app.commandLine.appendSwitch('disable-direct-composition');
+
 const logger = getLogger('main');
 
 let py: PythonBackend;
@@ -33,6 +36,7 @@ async function createWindow() {
 
   if (process.env.VITE_DEV_SERVER_URL) {
     mainWindow.loadURL(process.env.VITE_DEV_SERVER_URL);
+    mainWindow.webContents.openDevTools();
   } else {
     mainWindow.loadFile(path.join(__dirname, '../renderer/index.html'));
   }
@@ -104,12 +108,40 @@ app.whenReady().then(async () => {
     }, 'api:convert');
   });
 
-  ipcMain.handle('api:chatEdit', async (_event, { agentMd, instruction, history }: { agentMd: string; instruction: string; history?: Record<string, string>[] }) => {
-    logger.debug('IPC: api:chatEdit called with instruction=%s', instruction.slice(0, 80));
-    return _apiFetch('/api/chat/edit', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ agent_md: agentMd, instruction, history }),
-    }, 'api:chatEdit');
+  ipcMain.handle('api:chatConfirm', async (_event, { edit_id }: { edit_id: string }) => {
+    logger.debug('IPC: api:chatConfirm edit_id=%s', edit_id);
+    try {
+      const resp = await fetch(_url('/api/chat/confirm'), {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ edit_id }),
+      });
+      const body = await resp.json() as Record<string, unknown>;
+      if (!resp.ok) {
+        return { status: 'error', error: (body.error as string) || `HTTP ${resp.status}` };
+      }
+      return body;
+    } catch (e) {
+      logger.error('api:chatConfirm failed: %s', (e as Error).message);
+      return { status: 'error', error: String(e) };
+    }
+  });
+
+  ipcMain.handle('api:chatRevert', async (_event, { edit_id }: { edit_id: string }) => {
+    logger.debug('IPC: api:chatRevert edit_id=%s', edit_id);
+    try {
+      const resp = await fetch(_url('/api/chat/revert'), {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ edit_id }),
+      });
+      const body = await resp.json() as Record<string, unknown>;
+      if (!resp.ok) {
+        return { status: 'error', error: (body.error as string) || `HTTP ${resp.status}` };
+      }
+      return body;
+    } catch (e) {
+      logger.error('api:chatRevert failed: %s', (e as Error).message);
+      return { status: 'error', error: String(e) };
+    }
   });
 
   ipcMain.handle('api:status', async () => {

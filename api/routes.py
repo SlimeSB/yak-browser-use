@@ -14,6 +14,10 @@ from fastapi.responses import JSONResponse
 
 from api.errors import APIError, ServerError
 from api.state import engine_state
+from tools.edit_pipeline import (
+    delete_checkpoint, get_checkpoint_path,
+    get_edit_status, set_edit_status,
+)
 from utils.logging import get_logger
 
 logger = get_logger(__name__)
@@ -545,6 +549,82 @@ def register_all_routes(app: FastAPI) -> None:
         service = Service(engine_state)
         service.cancel_session()
         return JSONResponse({"ok": True})
+
+    @app.post("/api/chat/confirm")
+    async def chat_confirm(request: dict) -> JSONResponse:
+        """Confirm a pipeline edit — delete the checkpoint file.
+
+        Request body: {"edit_id": "..."}
+
+        Idempotent: repeated calls return {"status": "already_confirmed"}.
+        """
+        edit_id = request.get("edit_id", "").strip()
+        if not edit_id:
+            return JSONResponse({"status": "error", "error": "edit_id is required"}, status_code=400)
+
+        try:
+            status = get_edit_status(edit_id)
+            if status == "confirmed":
+                return JSONResponse({"status": "already_confirmed"})
+            if status == "reverted":
+                return JSONResponse({"status": "error", "error": "Edit was already reverted"}, status_code=409)
+
+            cp = get_checkpoint_path(edit_id)
+            if cp and cp.exists():
+                delete_checkpoint(edit_id)
+
+            set_edit_status(edit_id, "confirmed")
+            logger.info("Edit %s confirmed, checkpoint deleted", edit_id)
+            return JSONResponse({"status": "confirmed"})
+        except Exception as exc:
+            logger.exception("Confirm edit %s failed", edit_id)
+            raise ServerError(str(exc))
+
+    @app.post("/api/chat/revert")
+    async def chat_revert(request: dict) -> JSONResponse:
+        """Revert a pipeline edit — restore the checkpoint file.
+
+        Request body: {"edit_id": "..."}
+
+        Copies the checkpoint back to pipeline.yaml and deletes the checkpoint.
+        Idempotent: repeated calls return {"status": "already_reverted"}.
+        Returns error if the edit was already confirmed.
+        """
+        edit_id = request.get("edit_id", "").strip()
+        if not edit_id:
+            return JSONResponse({"status": "error", "error": "edit_id is required"}, status_code=400)
+
+        try:
+            status = get_edit_status(edit_id)
+            if status == "confirmed":
+                return JSONResponse({"status": "error", "error": "already_confirmed"}, status_code=409)
+            if status == "reverted":
+                return JSONResponse({"status": "already_reverted"})
+
+            cp = get_checkpoint_path(edit_id)
+            if not cp or not cp.exists():
+                set_edit_status(edit_id, "reverted")
+                return JSONResponse({"status": "already_reverted"})
+
+            original = cp.read_text(encoding="utf-8")
+
+            checkpoint_name = cp.name
+            suffix = f".{edit_id}.orig"
+            if checkpoint_name.endswith(suffix):
+                preset_name = checkpoint_name[:-len(suffix)]
+            else:
+                preset_name = checkpoint_name.rsplit(".", 1)[0]
+
+            preset_path = cp.parent / preset_name
+            preset_path.write_text(original, encoding="utf-8")
+
+            delete_checkpoint(edit_id)
+            set_edit_status(edit_id, "reverted")
+            logger.info("Edit %s reverted, checkpoint restored to %s", edit_id, preset_path)
+            return JSONResponse({"status": "reverted"})
+        except Exception as exc:
+            logger.exception("Revert edit %s failed", edit_id)
+            raise ServerError(str(exc))
 
     @app.get("/api/session")
     async def get_session() -> JSONResponse:

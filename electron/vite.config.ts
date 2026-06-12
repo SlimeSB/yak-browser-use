@@ -2,11 +2,16 @@ import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import electron from 'vite-plugin-electron';
 import renderer from 'vite-plugin-electron-renderer';
+import monacoEditorPlugin from 'vite-plugin-monaco-editor';
 import path from 'path';
 
 export default defineConfig({
   plugins: [
     react(),
+    monacoEditorPlugin({
+      languageWorkers: ['editorWorkerService'],
+      customDistPath: (root, buildOutDir) => buildOutDir,
+    }),
     electron([
       {
         entry: 'src/main/index.ts',
@@ -34,8 +39,18 @@ export default defineConfig({
   ],
   root: 'src/renderer',
   base: './',
+  optimizeDeps: {
+    include: ['monaco-editor'],
+  },
   build: {
     outDir: path.resolve(__dirname, 'dist/renderer'),
-    emptyOutDir: true,
+    emptyOutDir: false,
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          monaco: ['monaco-editor'],
+        },
+      },
+    },
   },
 });

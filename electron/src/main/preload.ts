@@ -9,7 +9,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // API
   run: (agentMd: string, params?: Record<string, string>) => ipcRenderer.invoke('api:run', { agentMd, params }),
   convert: (document: string) => ipcRenderer.invoke('api:convert', document),
-  chatEdit: (agentMd: string, instruction: string, history?: Record<string, string>[]) => ipcRenderer.invoke('api:chatEdit', { agentMd, instruction, history }),
+  chatConfirm: (editId: string) => ipcRenderer.invoke('api:chatConfirm', { edit_id: editId }),
+  chatRevert: (editId: string) => ipcRenderer.invoke('api:chatRevert', { edit_id: editId }),
   status: () => ipcRenderer.invoke('api:status'),
   chromeStatus: () => ipcRenderer.invoke('api:chrome-status'),
   connectBrowser: (mode: string, profileName?: string) => ipcRenderer.invoke('browser:connect', { mode, profileName }),

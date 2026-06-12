@@ -5,10 +5,13 @@ import i18n from '../../i18n';
 interface SettingsTabProps {
   reviewMode: string;
   onReviewModeChange: (mode: string) => void;
+  chatLayoutReversed: boolean;
+  onChatLayoutReversedChange: (v: boolean) => void;
 }
 
 export default function SettingsTab({
   reviewMode, onReviewModeChange,
+  chatLayoutReversed, onChatLayoutReversedChange,
 }: SettingsTabProps) {
   const { t } = useTranslation();
   return (
@@ -36,6 +39,25 @@ export default function SettingsTab({
                 className={`btn btn-xs ${reviewMode === 'hybrid' ? 'btn-primary' : 'btn-secondary'}`}
                 onClick={() => onReviewModeChange('hybrid')}
               >{t('settingsTab.hybrid')}</button>
+            </div>
+          </div>
+        </div>
+        <div className="set-group">
+          <div className="set-group-title">Chat Layout</div>
+          <div className="set-row">
+            <div>
+              <div className="set-label">Panel order</div>
+              <div className="set-desc">{chatLayoutReversed ? 'Editor left, Chat right' : 'Chat left, Editor right'}</div>
+            </div>
+            <div style={{ display: 'flex', gap: 4 }}>
+              <button
+                className={`btn btn-xs ${!chatLayoutReversed ? 'btn-primary' : 'btn-secondary'}`}
+                onClick={() => onChatLayoutReversedChange(false)}
+              >Chat | Editor</button>
+              <button
+                className={`btn btn-xs ${chatLayoutReversed ? 'btn-primary' : 'btn-secondary'}`}
+                onClick={() => onChatLayoutReversedChange(true)}
+              >Editor | Chat</button>
             </div>
           </div>
         </div>

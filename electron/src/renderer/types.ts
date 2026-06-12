@@ -40,6 +40,13 @@ export interface Param {
   value: string;
 }
 
+export interface PendingEdit {
+  edit_id: string;
+  original: string;
+  modified: string;
+  explanation: string;
+}
+
 declare global {
   interface Window {
     electronAPI: {
@@ -74,7 +81,8 @@ declare global {
       listCredentials: () => Promise<{ credentials: string[]; error?: string }>;
       setCredential: (key: string, value: string) => Promise<{ key: string; set: boolean; error?: string }>;
       deleteCredential: (key: string) => Promise<{ key: string; deleted: boolean; error?: string }>;
-      chatEdit: (agentMd: string, instruction: string, history?: Array<{role: string; content: string}>) => Promise<{ agent_md?: string; diff?: Array<{type: string; line: string}>; explanation?: string; error?: string }>;
+      chatConfirm: (editId: string) => Promise<{ status?: string; error?: string }>;
+      chatRevert: (editId: string) => Promise<{ status?: string; error?: string }>;
       reviewPipeline: (threadId: string, action: string, reason?: string) => Promise<{ status?: string; error?: string }>;
       getPort: () => Promise<number>;
       showAlert: (message: string) => Promise<void>;
