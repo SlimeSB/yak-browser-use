@@ -10,23 +10,23 @@ from utils.logging import get_logger
 logger = get_logger(__name__)
 
 
-async def _cmd_tool_prompt(agent_md_path: str, step_key: str | None = None) -> None:
+async def _cmd_tool_prompt(pipeline_path: str, step_key: str | None = None) -> None:
     """Generate LLM prompts for all _PH- tool steps (no LLM call).
 
     Args:
-        agent_md_path: Path to the agent.md file.
+        pipeline_path: Path to the pipeline.yaml file.
         step_key: Optional step key to filter on.
     """
     from api.service import PipelineService
     from engine._lifecycle.tool_runner import _build_generation_prompt as build_generation_prompt
 
-    path = Path(agent_md_path)
+    path = Path(pipeline_path)
     if not path.exists():
         logger.error("File not found: %s", path)
         sys.exit(1)
 
     content = path.read_text(encoding="utf-8")
-    parsed, steps_data = PipelineService.prepare_steps(content, agent_md_path=path)
+    parsed, steps_data = PipelineService.prepare_steps(content, pipeline_path=path)
 
     tool_steps = [s for s in steps_data if s.get("tool_name", "").startswith("_PH-")]
     if not tool_steps:
@@ -69,23 +69,23 @@ async def _cmd_tool_prompt(agent_md_path: str, step_key: str | None = None) -> N
         sys.exit(1)
 
 
-async def _cmd_tool_dry_run(agent_md_path: str) -> None:
-    """Compile agent.md without executing — display the full DAG and step info.
+async def _cmd_tool_dry_run(pipeline_path: str) -> None:
+    """Compile pipeline.yaml without executing — display the full DAG and step info.
 
     Args:
-        agent_md_path: Path to the agent.md file.
+        pipeline_path: Path to the pipeline.yaml file.
     """
     from api.service import PipelineService
     from compiler.graph import build_graph, get_execution_order, validate_file_refs
 
-    path = Path(agent_md_path)
+    path = Path(pipeline_path)
     if not path.exists():
         logger.error("File not found: %s", path)
         sys.exit(1)
 
     from engine.runner import _step_type
     content = path.read_text(encoding="utf-8")
-    parsed, steps_data = PipelineService.prepare_steps(content, agent_md_path=path)
+    parsed, steps_data = PipelineService.prepare_steps(content, pipeline_path=path)
 
     print(f"\n\u2550\u2550\u2550 Pipeline Dry-Run: {parsed.name} \u2550\u2550\u2550\n")
 
@@ -141,11 +141,11 @@ async def _cmd_tool_dry_run(agent_md_path: str) -> None:
             print(f"  - {tn}")
 
 
-async def _cmd_tool_run_ph(agent_md_path: str, step_key: str, llm_response_path: str | None = None) -> None:
+async def _cmd_tool_run_ph(pipeline_path: str, step_key: str, llm_response_path: str | None = None) -> None:
     """Single-step execute a _PH- tool lifecycle.
 
     Args:
-        agent_md_path: Path to the agent.md file.
+        pipeline_path: Path to the pipeline.yaml file.
         step_key: Step key or name to run.
         llm_response_path: Optional path to a preset LLM response file (skips real call).
     """
@@ -155,13 +155,13 @@ async def _cmd_tool_run_ph(agent_md_path: str, step_key: str, llm_response_path:
     from engine.events import EventSink
     from workspace.manager import WorkspaceManager
 
-    path = Path(agent_md_path)
+    path = Path(pipeline_path)
     if not path.exists():
         logger.error("File not found: %s", path)
         sys.exit(1)
 
     content = path.read_text(encoding="utf-8")
-    parsed, steps_data = PipelineService.prepare_steps(content, agent_md_path=path)
+    parsed, steps_data = PipelineService.prepare_steps(content, pipeline_path=path)
 
     # Find the target step
     target_step = None
@@ -229,7 +229,7 @@ async def _cmd_tool_run_ph(agent_md_path: str, step_key: str, llm_response_path:
         input_files=input_files,
         output_dir=str(step_dir),
         llm_call_fn=llm_call_fn,
-        agent_md_path=path,
+        pipeline_path=path,
         cdp_helpers=None,
         max_retries=1,
     )

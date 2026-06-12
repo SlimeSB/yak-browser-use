@@ -295,7 +295,7 @@ async def execute_goal(
     pipeline_name: str,
     tools_dir: Path,
     frontmatter: dict | None = None,
-    agent_md_path: Path | None = None,
+    pipeline_path: Path | None = None,
     system_prompt: str = "",
 ) -> dict:
     """Execute a goal via browser-use Agent integration.
@@ -313,9 +313,9 @@ async def execute_goal(
     }
 
     source_text = ""
-    if agent_md_path and agent_md_path.exists():
+    if pipeline_path and pipeline_path.exists():
         try:
-            source_text = agent_md_path.read_text(encoding="utf-8")
+            source_text = pipeline_path.read_text(encoding="utf-8")
         except Exception:
             pass
 
@@ -336,7 +336,7 @@ async def execute_goal(
             frontmatter=frontmatter,
             source_text=source_text,
             tools_dir=tools_dir,
-            agent_md_path=agent_md_path,
+            pipeline_path=pipeline_path,
             system_prompt=system_prompt,
         )
 
@@ -563,7 +563,7 @@ async def execute_goal_step(
     tools_dir: Path,
     pipeline_name: str,
     frontmatter: dict | None = None,
-    agent_md_path: Path | None = None,
+    pipeline_path: Path | None = None,
 ) -> dict:
     """Execute a goal step: call browser-use Agent, write learned_ops.json.
 
@@ -595,7 +595,7 @@ async def execute_goal_step(
         pipeline_name=pipeline_name,
         tools_dir=tools_dir,
         frontmatter=frontmatter,
-        agent_md_path=agent_md_path,
+        pipeline_path=pipeline_path,
         system_prompt=system_prompt,
     )
     result["duration_ms"] = core_result["duration_ms"]

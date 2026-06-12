@@ -8,6 +8,8 @@ import sys
 import traceback
 from pathlib import Path
 
+import yaml
+
 from engine._lifecycle.guardian import Guardian
 from utils.logging import get_logger
 
@@ -195,12 +197,12 @@ class ToolRunner:
 
         return {"ok": True, "code": code, "tool_path": tool_path}
 
-    def atomic_rename_ph(self, ph_name: str, agent_md_path: Path | None) -> dict:
-        """Atomically rename _PH-tool → normal tool and update agent.md references.
+    def atomic_rename_ph(self, ph_name: str, pipeline_path: Path | None) -> dict:
+        """Atomically rename _PH-tool → normal tool and update pipeline.yaml references.
 
         Args:
             ph_name: Tool name with _PH- prefix (e.g. ``_PH-my_tool``).
-            agent_md_path: Optional path to agent.md to update references.
+            pipeline_path: Optional path to pipeline.yaml to update references.
 
         Returns:
             Dict with ``ok`` (bool) and optional ``error``, ``old``, ``new``.
@@ -215,12 +217,15 @@ class ToolRunner:
 
         shutil.move(str(ph_path), str(real_path))
 
-        if agent_md_path and agent_md_path.exists():
-            tmp_path = agent_md_path.with_suffix(agent_md_path.suffix + ".tmp")
-            content = agent_md_path.read_text(encoding="utf-8")
-            content = content.replace(ph_name, real_name)
-            tmp_path.write_text(content, encoding="utf-8")
-            shutil.move(str(tmp_path), str(agent_md_path))
+        if pipeline_path and pipeline_path.exists():
+            try:
+                data = yaml.safe_load(pipeline_path.read_text(encoding="utf-8"))
+                data = _replace_ph_refs(data, ph_name, real_name)
+                tmp_path = pipeline_path.with_suffix(pipeline_path.suffix + ".tmp")
+                tmp_path.write_text(yaml.dump(data, default_flow_style=False, allow_unicode=True), encoding="utf-8")
+                shutil.move(str(tmp_path), str(pipeline_path))
+            except Exception as e:
+                logger.warning("tool_runner: failed to update pipeline.yaml references: %s", e)
 
         logger.info("tool_runner: renamed %s → %s", ph_name, real_name)
         return {"ok": True, "old": ph_name, "new": real_name}
@@ -232,7 +237,7 @@ class ToolRunner:
         input_files: dict[str, str],
         output_dir: str,
         llm_call_fn: object | None = None,
-        agent_md_path: Path | None = None,
+        pipeline_path: Path | None = None,
         max_retries: int = DEFAULT_MAX_RETRIES,
         cdp_helpers: object | None = None,
     ) -> dict:
@@ -244,7 +249,7 @@ class ToolRunner:
             input_files: Dict of input file key → path.
             output_dir: Output directory path.
             llm_call_fn: Callable for LLM code generation.
-            agent_md_path: Optional path to agent.md for reference updates.
+            pipeline_path: Optional path to pipeline.yaml for reference updates.
             max_retries: Maximum retry attempts (default: 3).
             cdp_helpers: Optional CDP helpers for browser-enabled tools.
 
@@ -312,7 +317,7 @@ class ToolRunner:
                 )
 
             if guard_result.get("ok"):
-                rename_result = self.atomic_rename_ph(ph_name, agent_md_path)
+                rename_result = self.atomic_rename_ph(ph_name, pipeline_path)
                 if rename_result.get("ok"):
                     return {
                         "status": "completed",
@@ -394,6 +399,26 @@ def _sniff_input_file(input_files: dict[str, str]) -> str:
             logger.debug("Cannot read input file %s: %s", key, e)
             parts.append(f"### {key}: (unreadable)")
     return "\n\n".join(parts)
+
+
+def _replace_ph_refs(data, ph_name: str, real_name: str):
+    """Recursively replace placeholder name references in a YAML data structure.
+
+    Args:
+        data: Parsed YAML structure (dict, list, str, etc.).
+        ph_name: _PH- prefixed name to replace.
+        real_name: Unprefixed replacement name.
+
+    Returns:
+        The data structure with all string references updated.
+    """
+    if isinstance(data, dict):
+        return {k: _replace_ph_refs(v, ph_name, real_name) for k, v in data.items()}
+    if isinstance(data, list):
+        return [_replace_ph_refs(item, ph_name, real_name) for item in data]
+    if isinstance(data, str):
+        return data.replace(ph_name, real_name)
+    return data
 
 
 def _build_generation_prompt(

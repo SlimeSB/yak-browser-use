@@ -3,7 +3,7 @@ generator.py — LLM-driven code generation and Action→Ops mapping.
 
 Generates Python handler code from step descriptions and browser_ops,
 maps CDP/Selenium actions to the browser_ops format, extracts selectors
-from interacted elements, and writes learned ops back to agent.md files.
+from interacted elements, and writes learned ops back to pipeline.yaml files.
 """
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ import re
 from pathlib import Path
 from typing import Callable
 
-from compiler.parser import StepDef
+from compiler.models import StepDef
 from prompts._loader import load_prompt
 from utils.logging import get_logger
 
@@ -263,90 +263,44 @@ def model_actions_to_ops(model_actions) -> list[dict]:
     return ops
 
 
-# ── Write-back to agent.md ──
+# ── Write-back to pipeline.yaml ──
+
+import yaml as _yaml
+from compiler.schema import ops_to_yaml as _ops_to_yaml
 
 
-def write_agent_md_learned(
-    original_text: str,
-    goal_step_name: str,
+def write_pipeline_learned(
+    yaml_text: str,
+    step_name: str,
     new_browser_ops: list[dict],
-    pipeline_name: str = "",
 ) -> str:
-    """Write newly learned browser_ops back into a goal step's definition.
+    """Write newly learned browser_ops back into a pipeline.yaml step.
 
-    Replaces the content of the identified step (found by name or key) with
-    a new ``browser:`` block containing the learned ops.
+    Parses the YAML, finds the step by name, adds/replaces browser_ops,
+    and returns the updated YAML text.
 
     Args:
-        original_text: Full agent.md text.
-        goal_step_name: Name or key of the step to update.
-        new_browser_ops: List of op dicts to write.
-        pipeline_name: Used for logging context.
+        yaml_text: Full pipeline.yaml text.
+        step_name: Name of the step to update.
+        new_browser_ops: List of op dicts in internal format {type, value, ...}.
 
     Returns:
-        Updated agent.md text.
+        Updated pipeline.yaml text.
     """
-    logger.debug(
-        "generator: writing %d learned ops back for step '%s'",
-        len(new_browser_ops), goal_step_name,
-    )
+    data = _yaml.safe_load(yaml_text)
+    if not isinstance(data, dict) or "steps" not in data:
+        logger.warning("write_pipeline_learned: invalid YAML structure, returning original")
+        return yaml_text
 
-    lines = original_text.split("\n")
-    result: list[str] = []
-    in_goal_step = False
-    skip_until_next_step = False
-    goal_indent = ""
-
-    for line in lines:
-        if re.match(r"^##\s+", line):
-            if in_goal_step:
-                result.append(line)
-                result.append("browser:")
-                for op in new_browser_ops:
-                    result.append(_format_op_line(op, goal_indent))
-                result.append("")
-                in_goal_step = False
-                skip_until_next_step = False
-                continue
-            step_name_in_line = line[3:].strip()
-            step_key = re.sub(r"[^\w]+", "_", step_name_in_line).strip("_").lower()
-            if step_key == goal_step_name or step_name_in_line == goal_step_name:
-                in_goal_step = True
-                result.append(line)
-                goal_indent = "  "
-                skip_until_next_step = True
-                continue
-
-        if in_goal_step and skip_until_next_step:
+    for step in data["steps"]:
+        if not isinstance(step, dict):
             continue
-
-        result.append(line)
-
-    if in_goal_step:
-        result.append("browser:")
-        for op in new_browser_ops:
-            result.append(_format_op_line(op, goal_indent))
-
-    return "\n".join(result)
-
-
-def _format_op_line(op: dict, indent: str = "  ") -> str:
-    """Format a single browser_ops dict as a YAML line."""
-    op_type = op.get("type", "")
-    if op_type in ("goto", "js", "wait_for_network"):
-        value = op.get("value", op.get("code", ""))
-        return f'{indent}- {op_type}: "{value}"'
-    if op_type == "fill":
-        selector = op.get("selector", "")
-        value = op.get("value", "")
-        return f'{indent}- {op_type}: "{value}"\n{indent}  selector: "{selector}"'
-    if op_type == "click":
-        value = op.get("value", "")
-        return f'{indent}- {op_type}: "{value}"'
+        if step.get("name") == step_name:
+            step["browser_ops"] = _ops_to_yaml(new_browser_ops)
+            logger.debug("write_pipeline_learned: updated step '%s'", step_name)
+            break
     else:
-        parts = [f"{indent}- {op_type}:"]
-        for k, v in op.items():
-            if k == "type":
-                continue
-            parts.append(f'{indent}  {k}: "{v}"')
-        return "\n".join(parts)
+        logger.warning("write_pipeline_learned: step '%s' not found, returning original", step_name)
+        return yaml_text
+
+    return _yaml.dump(data, default_flow_style=False, allow_unicode=True, sort_keys=False)

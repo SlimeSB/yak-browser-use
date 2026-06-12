@@ -9,11 +9,11 @@ logger = get_logger(__name__)
 
 
 async def _cmd_convert(path: str, output: str | None = None, name: str | None = None) -> None:
-    """Convert a natural-language document to agent.md format.
+    """Convert a natural-language document to pipeline.yaml format.
 
     Args:
         path: Path to the input document.
-        output: Output file path (default: <cwd>/<stem>.agent.md).
+        output: Output file path (default: <cwd>/<stem>.pipeline.yaml).
         name: Pipeline name (default: inferred from filename).
     """
     from converter.convert import convert_document
@@ -28,7 +28,7 @@ async def _cmd_convert(path: str, output: str | None = None, name: str | None = 
         name = input_path.stem
 
     if output is None:
-        output_path = Path.cwd() / f"{input_path.stem}.agent.md"
+        output_path = Path.cwd() / f"{input_path.stem}.pipeline.yaml"
     else:
         output_path = Path(output)
         if not output_path.is_absolute():

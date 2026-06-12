@@ -1,39 +1,44 @@
 """
-validate.py — Post-conversion validation for agent.md documents.
+validate.py — Validation for pipeline.yaml documents.
 
-Validates that generated agent.md documents are well-formed, contain
-the required structural elements, and pass basic integrity checks.
+Validates that pipeline.yaml documents are well-formed YAML and
+pass Pydantic schema validation.
 """
 from __future__ import annotations
 
-import re
+import yaml
+from pydantic import ValidationError
 
+from compiler.schema import PipelineYaml
 from utils.logging import get_logger
 
 logger = get_logger(__name__)
 
 
-def validate_agentmd(text: str) -> bool:
-    """Quick validation: check that agent.md has minimum required structure.
+def validate_pipeline(text: str) -> bool:
+    """Quick validation: check that pipeline.yaml is valid.
 
-    Returns True if the text contains frontmatter, a title, and at least
-    one step heading. Returns False otherwise.
+    Returns True if the text is parseable YAML that passes schema validation.
+    Returns False otherwise.
     """
     if not text or not text.strip():
         return False
 
-    has_frontmatter = text.strip().startswith("---")
-    has_steps = bool(re.search(r"^##\s+", text, re.MULTILINE))
-    has_title = bool(re.search(r"^#\s+", text, re.MULTILINE))
+    try:
+        data = yaml.safe_load(text)
+        if not isinstance(data, dict):
+            return False
+        PipelineYaml.model_validate(data)
+        return True
+    except (yaml.YAMLError, ValidationError):
+        return False
 
-    return has_frontmatter and has_title and has_steps
 
-
-def validate_agentmd_strict(text: str) -> tuple[bool, list[str]]:
+def validate_pipeline_strict(text: str) -> tuple[bool, list[str]]:
     """Detailed validation with error messages.
 
     Args:
-        text: The agent.md content to validate.
+        text: The pipeline.yaml content to validate.
 
     Returns:
         (is_valid, error_messages) tuple.
@@ -41,43 +46,50 @@ def validate_agentmd_strict(text: str) -> tuple[bool, list[str]]:
     errors: list[str] = []
 
     if not text or not text.strip():
-        errors.append("agent.md content is empty")
+        errors.append("pipeline.yaml content is empty")
         return False, errors
 
-    lines = text.strip().split("\n")
-    logger.debug("Validating agent.md: %d lines", len(lines))
+    try:
+        data = yaml.safe_load(text)
+    except yaml.YAMLError as e:
+        errors.append(f"YAML syntax error: {e}")
+        return False, errors
 
-    if not lines[0].startswith("---"):
-        errors.append("Missing YAML frontmatter (file should start with ---)")
+    if not isinstance(data, dict):
+        errors.append("Pipeline YAML must be a top-level mapping")
+        return False, errors
 
-    step_count = len(re.findall(r"^##\s+", text, re.MULTILINE))
-    if step_count == 0:
-        errors.append("Missing step definitions (need at least one ## heading)")
+    try:
+        PipelineYaml.model_validate(data)
+    except ValidationError as e:
+        errors.append(f"Schema validation failed: {e}")
+        return False, errors
 
-    if not re.search(r"^#\s+", text, re.MULTILINE):
-        errors.append("Missing pipeline title (need a # level-1 heading)")
-
-    return len(errors) == 0, errors
+    return True, []
 
 
 def show_draft(text: str) -> None:
-    """Display draft agent.md content in terminal with ANSI highlighting."""
+    """Display draft pipeline.yaml content in terminal."""
     logger.debug("Showing draft")
     print("\n" + "=" * 60)
-    print("  Draft agent.md — Review before proceeding")
+    print("  Draft pipeline.yaml — Review before proceeding")
     print("=" * 60 + "\n")
 
     for line in text.split("\n"):
-        if line.startswith("# "):
-            print(f"\033[1;36m{line}\033[0m")
-        elif line.startswith("## "):
-            print(f"\033[1;33m{line}\033[0m")
-        elif line.startswith("> "):
-            print(f"\033[2m{line}\033[0m")
-        elif line.startswith("---"):
-            print(f"\033[2;34m{line}\033[0m")
-        elif line.strip().startswith(("depends_on:", "input:", "output:", "browser:")):
-            print(f"\033[32m{line}\033[0m")
+        stripped = line.lstrip()
+        if stripped.startswith("#"):
+            print(f"\033[2;37m{line}\033[0m")
+        elif ":" in stripped and not stripped.startswith("-"):
+            key_part = stripped.split(":", 1)[0]
+            rest = line[len(key_part):]
+            print(f"\033[32m{key_part}\033[0m{rest}")
+        elif stripped.startswith("- "):
+            inner = stripped[2:]
+            if ":" in inner:
+                k, _, v = inner.partition(":")
+                print(f"  \033[33m- {k}:\033[0m{v}")
+            else:
+                print(line)
         else:
             print(line)
 

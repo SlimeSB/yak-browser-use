@@ -1,9 +1,9 @@
 """
-convert.py — NL → agent.md document conversion pipeline.
+convert.py — NL → pipeline.yaml document conversion pipeline.
 
 Two-phase conversion:
     Phase 1 — Plan:  Call LLM with planner-plan.md prompt to extract steps.
-    Phase 2 — Render: Format the extracted plan as agent.md using render.py.
+    Phase 2 — Render: Format the extracted plan as pipeline.yaml using render.py.
 
 The optional expand phase enriches each step with browser operations
 using the planner-expand.md prompt.
@@ -14,7 +14,7 @@ import json
 import re
 from pathlib import Path
 
-from converter.render import render_steps_to_agent_md
+from converter.render import render_steps_to_pipeline
 from prompts._loader import load_prompt
 from utils.logging import get_logger
 
@@ -30,11 +30,11 @@ def _read_document(input_path: str | Path) -> str:
 
 
 async def convert_document(input_path: str, pipeline_name: str | None = None) -> str:
-    """Convert a natural language document to agent.md format.
+    """Convert a natural language document to pipeline.yaml format.
 
     Two-phase conversion:
     1. Plan — Call LLM with planner-plan.md to extract structured steps.
-    2. Render — Format the extracted steps as agent.md via render.py.
+    2. Render — Format the extracted steps as pipeline.yaml via render.py.
 
     Args:
         input_path: Path to .md/.txt file, or raw text content.
@@ -42,7 +42,7 @@ async def convert_document(input_path: str, pipeline_name: str | None = None) ->
                        If not provided, derived from the file stem.
 
     Returns:
-        Complete agent.md content as a string.
+        Complete pipeline.yaml content as a string.
 
     Raises:
         ValueError: If no steps can be extracted from the document.
@@ -71,8 +71,8 @@ async def convert_document(input_path: str, pipeline_name: str | None = None) ->
         expanded = await _expand_all(plan, content)
         steps = expanded.get("steps", plan.get("steps", []))
 
-        # Render as agent.md
-        result = render_steps_to_agent_md(
+        # Render as pipeline.yaml
+        result = render_steps_to_pipeline(
             steps=steps,
             pipeline_name=expanded.get("pipeline_name", pipeline_name),
             description=expanded.get("description", ""),

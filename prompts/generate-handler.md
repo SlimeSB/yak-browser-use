@@ -1,5 +1,5 @@
 你是一个浏览器自动化 handler 生成器。
-根据以下 agent.md 步骤定义，生成一个可执行的 Python handler 函数。
+根据以下 pipeline.yaml 步骤定义，生成一个可执行的 Python handler 函数。
 
 步骤定义：
 {step_yaml}

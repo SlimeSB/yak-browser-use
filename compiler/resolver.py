@@ -12,7 +12,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Callable
 
-from compiler.parser import StepDef
+from compiler.models import StepDef
 from utils.logging import get_logger
 
 logger = get_logger(__name__)

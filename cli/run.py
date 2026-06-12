@@ -20,11 +20,11 @@ async def _cmd_run(
     mode: str = "auto",
     params: dict | None = None,
 ) -> None:
-    """Execute agent.md or convert + execute.
+    """Execute pipeline.yaml or convert + execute.
 
     Args:
         path: Path to the input file.
-        convert: Force conversion even if the file looks like agent.md.
+        convert: Force conversion even if the file looks like pipeline.yaml.
         verbose: Print full event stream output.
         mode: Pipeline execution mode (auto, static, learn, replay).
         params: Pipeline parameters from CLI (-D key=value).
@@ -35,10 +35,10 @@ async def _cmd_run(
         raise SystemExit(1)
 
     content = input_path.read_text(encoding="utf-8")
-    is_agent_md = _detect_agent_md(input_path, content)
+    is_pipeline = _detect_pipeline(input_path, content)
 
-    if convert or not is_agent_md:
-        content = await _convert_to_agent_md(path, content)
+    if convert or not is_pipeline:
+        content = await _convert_to_pipeline(path, content)
         if content is None:
             raise SystemExit(1)
 
@@ -53,40 +53,40 @@ async def _cmd_run(
     await cleanup_isolated()
 
 
-def _detect_agent_md(input_path: Path, content: str) -> bool:
-    """Determine whether a file is already in agent.md format."""
+def _detect_pipeline(input_path: Path, content: str) -> bool:
+    """Determine whether a file is already in pipeline.yaml format."""
     return (
-        input_path.suffix == ".agent.md"
+        input_path.suffix == ".pipeline.yaml"
         or (content.strip().startswith("---") and "## " in content)
     )
 
 
-async def _convert_to_agent_md(path: str, content: str) -> str | None:
-    """Convert a document to agent.md format.
+async def _convert_to_pipeline(path: str, content: str) -> str | None:
+    """Convert a document to pipeline.yaml format.
 
     Args:
         path: Original file path.
         content: Original file content.
 
     Returns:
-        The converted agent.md text, or None if cancelled/failed.
+        The converted pipeline.yaml text, or None if cancelled/failed.
     """
-    logger.info("Converting document to agent.md: %s", path)
+    logger.info("Converting document to pipeline.yaml: %s", path)
     from converter.convert import convert_document
-    from converter.validate import confirm_execution, show_draft, validate_agentmd_strict
+    from converter.validate import confirm_execution, show_draft, validate_pipeline_strict
 
-    agent_md = await convert_document(path)
-    show_draft(agent_md)
+    pipeline_text = await convert_document(path)
+    show_draft(pipeline_text)
 
-    is_valid, errors = validate_agentmd_strict(agent_md)
+    is_valid, errors = validate_pipeline_strict(pipeline_text)
     if not is_valid:
-        logger.error("Generated agent.md has issues: %s", errors)
+        logger.error("Generated pipeline.yaml has issues: %s", errors)
         return None
 
     if not confirm_execution():
         return None
 
-    return agent_md
+    return pipeline_text
 
 
 async def _execute_pipeline(input_path: Path, content: str, params: dict | None = None) -> dict:
@@ -94,21 +94,21 @@ async def _execute_pipeline(input_path: Path, content: str, params: dict | None 
 
     Args:
         input_path: Path object for the input file.
-        content: agent.md text content.
+        content: pipeline.yaml text content.
         params: CLI-injected parameters.
 
     Returns:
         Dict containing parsed, ctx, browser, daemon, elapsed.
     """
     from api.service import PipelineService
-    from compiler.parser import inject_params_to_frontmatter
+    from compiler.parser import inject_params_to_pipeline
 
     _start_time = time.time()
 
     # Inject params into frontmatter (so goal steps can use them)
-    content = inject_params_to_frontmatter(content, params)
+    content = inject_params_to_pipeline(content, params)
 
-    parsed, resolved_steps = PipelineService.prepare_steps(content, agent_md_path=input_path)
+    parsed, resolved_steps = PipelineService.prepare_steps(content, pipeline_path=input_path)
 
     # ── Validate required params ──
     required = parsed.frontmatter.get("required_params", [])
@@ -130,7 +130,7 @@ async def _execute_pipeline(input_path: Path, content: str, params: dict | None 
                 step["goal_description"] = f"{desc} (args: {extras})"
 
     if not parsed.steps:
-        logger.error("No steps found in agent.md")
+        logger.error("No steps found in pipeline.yaml")
         raise SystemExit(1)
 
     logger.info("\nPipeline: %s", parsed.name)
@@ -182,7 +182,7 @@ async def _execute_pipeline(input_path: Path, content: str, params: dict | None 
         pipeline_name=parsed.name,
         steps=resolved_steps,
         cdp_helpers=browser,
-        agent_md_path=input_path,
+        pipeline_path=input_path,
         frontmatter=parsed.frontmatter,
         guardian=guardian,
     )

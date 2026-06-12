@@ -52,7 +52,7 @@ def diff_ops(agent_ops: list[dict], original_ops: list[dict]) -> tuple[list[dict
 
     Args:
         agent_ops: Ops actually executed by the agent (from execution trace).
-        original_ops: Ops from the original agent.md step definition.
+        original_ops: Ops from the original pipeline.yaml step definition.
 
     Returns:
         (matched_ops, extra_ops). Each op includes an '_index' field
@@ -261,7 +261,7 @@ def merge_extra_ops(matched: list[dict], extra: list[dict], original: list[dict]
     Args:
         matched: Ops that matched the original definition.
         extra: New ops discovered during execution.
-        original: The original ops from agent.md (used as base structure).
+        original: The original ops from pipeline.yaml (used as base structure).
 
     Returns:
         Combined list of ops sorted by execution order.

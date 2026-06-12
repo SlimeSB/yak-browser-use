@@ -22,20 +22,15 @@ logger = get_logger(__name__)
 # ── Helpers ─────────────────────────────────────────────────────────
 
 
-def _extract_pipeline_name(agent_md_text: str) -> str:
-    """Extract pipeline name from agent.md frontmatter or first # heading."""
-    m = re.match(r"^---\s*\n(.*?)\n---", agent_md_text, re.DOTALL)
-    if m:
-        try:
-            import yaml
-            fm = yaml.safe_load(m.group(1))
-            if isinstance(fm, dict) and "name" in fm:
-                return str(fm["name"]).strip().strip('"').strip("'")
-        except Exception:
-            pass
-    m = re.search(r"^#\s+(.+?)\s*$", agent_md_text, re.MULTILINE)
-    if m:
-        return m.group(1).strip().strip('"').strip("'")
+def _extract_pipeline_name(pipeline_text: str) -> str:
+    """Extract pipeline name from pipeline.yaml."""
+    import yaml
+    try:
+        data = yaml.safe_load(pipeline_text)
+        if isinstance(data, dict) and "name" in data:
+            return str(data["name"]).strip().strip('"').strip("'")
+    except Exception:
+        pass
     return "unnamed"
 
 
@@ -51,7 +46,7 @@ def register_all_routes(app: FastAPI) -> None:
 
     @app.post("/api/convert")
     async def api_convert(request: dict) -> JSONResponse:
-        """Convert a natural language document to agent.md format.
+        """Convert a natural language document to pipeline.yaml format.
 
         Request body: ``{"document": "...", "pipeline_name": "..."}``
         """
@@ -62,7 +57,7 @@ def register_all_routes(app: FastAPI) -> None:
         logger.debug("POST /api/convert: document=%s...", document[:80])
         try:
             result = await convert_document(document, pipeline_name=pipeline_name)
-            return JSONResponse({"agent_md": result})
+            return JSONResponse({"pipeline": result})
         except Exception as exc:
             logger.exception("POST /api/convert failed")
             raise ServerError(str(exc))
@@ -73,32 +68,32 @@ def register_all_routes(app: FastAPI) -> None:
 
     @app.post("/api/run")
     async def api_run(request: dict) -> JSONResponse:
-        """Execute an agent.md pipeline (runs as an async background task).
+        """Execute a pipeline.yaml pipeline (runs as an async background task).
 
-        Request body: ``{"agent_md": "...", "params": {...}}``
+        Request body: ``{"pipeline": "...", "params": {...}}``
 
         Returns immediately with a ``run_id``.  Poll ``GET /api/status``
         or subscribe to ``/ws/events`` for completion.
         """
-        agent_md_text = request.get("agent_md", "")
+        pipeline_text = request.get("pipeline", "")
         params = request.get("params", {}) or {}
-        logger.debug("POST /api/run: agent_md=%s... params=%s", agent_md_text[:80], params)
+        logger.debug("POST /api/run: pipeline=%s... params=%s", pipeline_text[:80], params)
 
         if not engine_state.chrome_connected:
             raise APIError("Chrome is not connected — connect first via POST /api/chrome/connect")
 
         try:
-            pipeline_name = _extract_pipeline_name(agent_md_text)
+            pipeline_name = _extract_pipeline_name(pipeline_text)
             wm = _get_workspace_manager(pipeline_name)
             wm.ensure_workspace()
             ts = int(time.time())
-            snapshot_path = wm.versions_dir / f"snapshot_{ts}.agent.md"
-            snapshot_path.write_text(agent_md_text, encoding="utf-8")
+            snapshot_path = wm.versions_dir / f"snapshot_{ts}.pipeline.yaml"
+            snapshot_path.write_text(pipeline_text, encoding="utf-8")
 
-            from compiler.parser import inject_params_to_frontmatter
-            agent_md_text = inject_params_to_frontmatter(agent_md_text, params)
+            from compiler.parser import inject_params_to_pipeline
+            pipeline_text = inject_params_to_pipeline(pipeline_text, params)
 
-            parsed, steps = _prepare_steps(agent_md_text, snapshot_path)
+            parsed, steps = _prepare_steps(pipeline_text, snapshot_path)
 
             if params:
                 for step in steps:
@@ -130,7 +125,7 @@ def register_all_routes(app: FastAPI) -> None:
                 pipeline_name=parsed.name,
                 steps=steps,
                 cdp_helpers=browser,
-                agent_md_path=snapshot_path,
+                pipeline_path=snapshot_path,
                 frontmatter=parsed.frontmatter,
                 guardian=guardian,
             )
@@ -324,8 +319,8 @@ def register_all_routes(app: FastAPI) -> None:
             vm = VersionManager(wm.versions_dir, pipeline_name)
             loaded = vm.load_version(version)
             if loaded:
-                agent_md_path, _ = loaded
-                content = agent_md_path.read_text(encoding="utf-8")
+                pipeline_path, _ = loaded
+                content = pipeline_path.read_text(encoding="utf-8")
                 return JSONResponse({"version": version, "content": content})
             raise APIError("version not found", status_code=404)
         except APIError:
@@ -377,10 +372,10 @@ def register_all_routes(app: FastAPI) -> None:
             loaded = vm.load_version(latest_ver)
             if not loaded:
                 raise APIError("version data not found", status_code=404)
-            agent_md_path, _ = loaded
-            agent_md_text = agent_md_path.read_text(encoding="utf-8")
+            pipeline_path, _ = loaded
+            pipeline_text = pipeline_path.read_text(encoding="utf-8")
 
-            parsed, steps = _prepare_steps(agent_md_text, agent_md_path)
+            parsed, steps = _prepare_steps(pipeline_text, pipeline_path)
 
             from engine._lifecycle.guardian import (
                 create_guardian_from_frontmatter,
@@ -390,8 +385,8 @@ def register_all_routes(app: FastAPI) -> None:
             guardian = create_guardian_from_frontmatter(parsed.frontmatter)
 
             ts = int(time.time())
-            snapshot_path = wm.versions_dir / f"snapshot_{ts}.agent.md"
-            snapshot_path.write_text(agent_md_text, encoding="utf-8")
+            snapshot_path = wm.versions_dir / f"snapshot_{ts}.pipeline.yaml"
+            snapshot_path.write_text(pipeline_text, encoding="utf-8")
 
             try:
                 from engine.runner import run_pipeline
@@ -405,7 +400,7 @@ def register_all_routes(app: FastAPI) -> None:
                 pipeline_name=pipeline_name,
                 steps=steps,
                 cdp_helpers=browser,
-                agent_md_path=snapshot_path,
+                pipeline_path=snapshot_path,
                 frontmatter=parsed.frontmatter,
                 resume_from_index=resume_from_index,
                 guardian=guardian,
@@ -584,7 +579,7 @@ def register_all_routes(app: FastAPI) -> None:
 
     @app.post("/api/presets")
     async def save_preset(request: dict) -> JSONResponse:
-        """Save a preset (agent.md format).
+        """Save a preset (pipeline.yaml format).
 
         Request: {"name": "my-preset", "content": "..."}
         """
@@ -606,7 +601,7 @@ def register_all_routes(app: FastAPI) -> None:
         """Delete a saved preset."""
         import os
         presets_dir = Path.home() / ".lbu" / "sessions" / "presets"
-        path = presets_dir / f"{name}.agent.md"
+        path = presets_dir / f"{name}.pipeline.yaml"
         if path.exists():
             os.remove(str(path))
             return JSONResponse({"ok": True})
@@ -614,7 +609,7 @@ def register_all_routes(app: FastAPI) -> None:
 
     @app.post("/api/presets/compile")
     async def compile_preset(request: dict) -> JSONResponse:
-        """Compile current session into agent.md and save as preset.
+        """Compile current session into pipeline.yaml and save as preset.
 
         Request: {"name": "my-preset"}
         """
@@ -629,9 +624,9 @@ def register_all_routes(app: FastAPI) -> None:
         if session is None:
             raise APIError("No active session to compile")
 
-        agent_md_text = service.compile_session_to_preset(session)
-        path = service.save_preset(name, agent_md_text)
-        return JSONResponse({"ok": True, "path": str(path), "content": agent_md_text})
+        pipeline_text = service.compile_session_to_preset(session)
+        path = service.save_preset(name, pipeline_text)
+        return JSONResponse({"ok": True, "path": str(path), "content": pipeline_text})
 
     # =================================================================
     # WEB SOCKET — real-time event stream
@@ -672,18 +667,18 @@ def _get_workspace_manager(pipeline_name: str) -> Any:
     return WorkspaceManager(pipeline_name)
 
 
-def _prepare_steps(content: str, agent_md_path: Path) -> tuple[Any, list[dict]]:
-    """Parse agent.md and prepare ordered steps.
+def _prepare_steps(content: str, pipeline_path: Path) -> tuple[Any, list[dict]]:
+    """Parse pipeline.yaml and prepare ordered steps.
 
     Returns (parsed_frontmatter_plus, steps_data).
     """
     from compiler.context import resolve_context
     from compiler.graph import build_graph, get_execution_order, validate_file_refs
-    from compiler.parser import parse_agent_md
+    from compiler.parser import parse_pipeline
     from compiler.resolver import resolve
 
-    parsed = parse_agent_md(content)
-    context = resolve_context(parsed.frontmatter, agent_md_path)
+    parsed = parse_pipeline(content)
+    context = resolve_context(parsed.frontmatter, pipeline_path)
     if context:
         for step in parsed.steps:
             step.system_prompt = context

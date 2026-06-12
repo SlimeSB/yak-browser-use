@@ -1,5 +1,5 @@
 """
-graph.py — Dependency graph builder for agent.md step pipelines.
+graph.py — Dependency graph builder for pipeline.yaml step pipelines.
 
 Builds a DAG from step definitions, performs topological sort,
 detects cycles, and validates file reference integrity.
@@ -9,14 +9,14 @@ from __future__ import annotations
 import fnmatch
 from typing import Any
 
-from compiler.parser import StepDef
+from compiler.models import StepDef
 from utils.logging import get_logger
 
 logger = get_logger(__name__)
 
 
 def build_graph(steps: list[StepDef]) -> dict[str, Any]:
-    """Build a DAG from agent.md step definitions.
+    """Build a DAG from pipeline.yaml step definitions.
 
     Returns a dict representation of the graph:
         {

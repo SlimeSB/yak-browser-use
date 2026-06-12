@@ -167,15 +167,15 @@ class Service:
 
     # ── Pipeline management ─────────────────────────────────────────
 
-    def compile_agent_md(self, agent_md_text: str) -> dict:
-        """Compile agent.md text into step definitions."""
+    def compile_pipeline(self, pipeline_text: str) -> dict:
+        """Compile pipeline.yaml text into step definitions."""
         try:
-            from compiler.parser import parse_agent_md
+            from compiler.parser import parse_pipeline
             from compiler.resolver import resolve
-            parsed = parse_agent_md(agent_md_text)
+            parsed = parse_pipeline(pipeline_text)
             return resolve(parsed)
         except Exception as e:
-            raise APIError(f"Failed to compile agent.md: {e}")
+            raise APIError(f"Failed to compile pipeline.yaml: {e}")
 
     def list_presets(self) -> list[dict]:
         """List saved preset pipelines."""
@@ -183,9 +183,9 @@ class Service:
         if not presets_dir.exists():
             return []
         presets: list[dict] = []
-        for f in sorted(presets_dir.glob("*.agent.md"), key=lambda p: p.stat().st_mtime, reverse=True):
+        for f in sorted(presets_dir.glob("*.pipeline.yaml"), key=lambda p: p.stat().st_mtime, reverse=True):
             try:
-                name = f.stem.replace(".agent", "")
+                name = f.stem.replace(".pipeline", "")
                 presets.append({
                     "name": name,
                     "path": str(f),
@@ -195,52 +195,64 @@ class Service:
                 pass
         return presets
 
-    def save_preset(self, name: str, agent_md_text: str) -> Path:
-        """Save conversation history as a preset agent.md file."""
+    def save_preset(self, name: str, pipeline_text: str) -> Path:
+        """Save conversation history as a preset pipeline.yaml file."""
         presets_dir = _SESSIONS_DIR / "presets"
         presets_dir.mkdir(parents=True, exist_ok=True)
-        path = presets_dir / f"{name}.agent.md"
-        path.write_text(agent_md_text, encoding="utf-8")
+        path = presets_dir / f"{name}.pipeline.yaml"
+        path.write_text(pipeline_text, encoding="utf-8")
         return path
 
     def compile_session_to_preset(self, session: SessionState) -> str:
-        """Compile a session's conversation history into agent.md format.
+        """Compile a session's conversation history into pipeline.yaml format.
 
-        Converts browser tool calls from messages into a pipeline
-        step definition in agent.md markdown format.
+        Builds a PipelineYaml object from session tool-call messages
+        and dumps to YAML text.
         """
         import yaml
+        from compiler.schema import PipelineYaml, StepYaml
 
-        lines: list[str] = []
-        fm: dict = {"name": session.pipeline_name or "chat-preset",
-                     "mode": "sequential"}
-        lines.append("---")
-        lines.append(yaml.dump(fm, allow_unicode=True, default_flow_style=False).strip())
-        lines.append("---")
-        lines.append("")
-        lines.append(f"# {session.pipeline_name or 'Chat Preset'}")
-        lines.append("")
+        pipeline_name = session.pipeline_name or "chat-preset"
+        steps: list[StepYaml] = []
 
         step_index = 1
         for msg in session.messages:
             role = msg.get("role", "")
             if role == "tool":
                 tool_name = msg.get("name", "")
-                content = msg.get("content", "")
-                lines.append(f"## Step {step_index}: {tool_name}")
-                lines.append("")
+                content = str(msg.get("content", ""))[:200]
+
                 if tool_name.startswith("browser_"):
                     op_type = tool_name.replace("browser_", "")
-                    lines.append(f"browser:")
-                    lines.append(f"    - {op_type}:")
-                    lines.append(f"        value: \"{content[:80]}\"")
+                    step_yaml = StepYaml(
+                        name=f"step_{step_index}",
+                        description=f"{op_type}: {content[:80]}",
+                        browser_ops=[{op_type: content[:80]}],
+                    )
                 else:
-                    lines.append(f"tool: {tool_name}")
-                    lines.append(f"    input: {content[:80]}")
-                lines.append("")
+                    step_yaml = StepYaml(
+                        name=f"step_{step_index}",
+                        description=f"tool {tool_name}: {content[:80]}",
+                        tool_name=tool_name,
+                    )
+                steps.append(step_yaml)
                 step_index += 1
 
-        return "\n".join(lines)
+        if not steps:
+            steps.append(StepYaml(
+                name="step_1",
+                description="Empty compiled session",
+                goal_description=session.messages[0].get("content", "")[:200] if session.messages else "",
+            ))
+
+        pipeline = PipelineYaml(
+            name=pipeline_name,
+            description=f"Compiled from session {session.session_id}",
+            steps=steps,
+        )
+
+        data = pipeline.model_dump(exclude_none=True)
+        return yaml.dump(data, default_flow_style=False, allow_unicode=True, sort_keys=False)
 
     # ── Events ──────────────────────────────────────────────────────
 

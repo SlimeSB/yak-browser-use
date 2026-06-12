@@ -129,7 +129,7 @@ async def run_goal_step(
     source_text: str = "",
     tools_dir: Path | None = None,
     ws_url: str = "",
-    agent_md_path: Path | None = None,
+    pipeline_path: Path | None = None,
     system_prompt: str = "",
 ) -> dict:
     """Execute a goal step via browser-use Agent and write results.
@@ -140,10 +140,10 @@ async def run_goal_step(
         step_dir: Step output directory for artifacts.
         pipeline_name: Pipeline name for workspace management.
         frontmatter: Optional pipeline frontmatter.
-        source_text: Source agent.md text for diff/guard flow.
+        source_text: Source pipeline.yaml text for diff/guard flow.
         tools_dir: Directory containing tool modules.
         ws_url: WebSocket URL for CDP connection. If empty, will try to discover.
-        agent_md_path: Path to agent.md for writing learned ops.
+        pipeline_path: Path to pipeline.yaml for writing learned ops.
         system_prompt: Optional system prompt extension.
 
     Returns:
@@ -534,7 +534,7 @@ def _save_partial_ops(
         wm = WorkspaceManager(pipeline_name)
         partial_dir = wm.root / "partial"
         partial_dir.mkdir(parents=True, exist_ok=True)
-        (partial_dir / f"{version_tag}.agent.md").write_text(text, encoding="utf-8")
+        (partial_dir / f"{version_tag}.pipeline.yaml").write_text(text, encoding="utf-8")
         logger.info(
             "partial-save: %d ops saved for pipeline '%s' (%s)",
             len(ops),

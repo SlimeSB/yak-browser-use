@@ -47,7 +47,7 @@ class VersionManager:
         self,
         trigger_run_id: str,
         summary: str,
-        pipe_agent_md: Path,
+        pipe_pipeline: Path,
         tools_dir: Path,
         upgraded_tools: list[str] | None = None,
         learned_goals: list[str] | None = None,
@@ -58,8 +58,8 @@ class VersionManager:
         ver_dir = self.versions_dir / version
         ver_dir.mkdir(parents=True, exist_ok=True)
 
-        if pipe_agent_md.exists():
-            shutil.copy2(pipe_agent_md, ver_dir / "pipe.agent.md")
+        if pipe_pipeline.exists():
+            shutil.copy2(pipe_pipeline, ver_dir / "pipe.pipeline.yaml")
 
         ver_tools = ver_dir / "tools"
         ver_tools.mkdir(exist_ok=True)
@@ -89,12 +89,12 @@ class VersionManager:
         return version
 
     def load_version(self, version: str) -> tuple[Path, Path] | None:
-        """Load a version's agent.md and tools directory.
+        """Load a version's pipeline.yaml and tools directory.
 
-        Returns (agent_md_path, tools_dir_path) or None.
+        Returns (pipeline_path, tools_dir_path) or None.
         """
         ver_dir = self.versions_dir / version
-        agent_path = ver_dir / "pipe.agent.md"
+        agent_path = ver_dir / "pipe.pipeline.yaml"
         tools_path = ver_dir / "tools"
         if agent_path.exists():
             return agent_path, tools_path
@@ -154,7 +154,7 @@ class VersionManager:
         trigger_run_id: str,
         upgraded_tools: list[str] | None = None,
         learned_goals: list[str] | None = None,
-        pipe_agent_md: Path | None = None,
+        pipe_pipeline: Path | None = None,
         tools_dir: Path | None = None,
     ) -> str | None:
         """Auto-create a version snapshot if there are upgrades or learned goals.
@@ -168,8 +168,8 @@ class VersionManager:
             )
             return None
 
-        if not pipe_agent_md or not pipe_agent_md.exists():
-            logger.info("version: %s no agent.md, skip versioning", self.pipeline_name)
+        if not pipe_pipeline or not pipe_pipeline.exists():
+            logger.info("version: %s no pipeline.yaml, skip versioning", self.pipeline_name)
             return None
 
         parts = []
@@ -182,7 +182,7 @@ class VersionManager:
         version = self.create_version(
             trigger_run_id,
             summary,
-            pipe_agent_md,
+            pipe_pipeline,
             tools_dir or Path(),
             upgraded_tools=upgraded_tools,
             learned_goals=learned_goals,
@@ -193,15 +193,15 @@ class VersionManager:
         )
         return version
 
-    def save_snapshot(self, agent_md_text: str, summary: str = "chat-edit") -> str:
+    def save_snapshot(self, pipeline_text: str, summary: str = "chat-edit") -> str:
         """Save a manual snapshot of the agent prompt."""
         self.ensure()
         version = str(self._next_version())
         ver_dir = self.versions_dir / version
         ver_dir.mkdir(parents=True, exist_ok=True)
 
-        pipe_path = ver_dir / "pipe.agent.md"
-        pipe_path.write_text(agent_md_text, encoding="utf-8")
+        pipe_path = ver_dir / "pipe.pipeline.yaml"
+        pipe_path.write_text(pipeline_text, encoding="utf-8")
 
         meta: dict[str, object] = {
             "version": version,

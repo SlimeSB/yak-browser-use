@@ -32,8 +32,8 @@ def main() -> None:
     sub = parser.add_subparsers(dest="command", required=True)
 
     # ── run ──
-    run_p = sub.add_parser("run", help="Execute an agent.md or raw document")
-    run_p.add_argument("path", help="Path to agent.md (.agent.md executes directly, other formats are auto-converted)")
+    run_p = sub.add_parser("run", help="Execute a pipeline.yaml or raw document")
+    run_p.add_argument("path", help="Path to pipeline.yaml (.pipeline.yaml executes directly, other formats are auto-converted)")
     run_p.add_argument("--convert", action="store_true", help="Force conversion before execution")
     run_p.add_argument("--verbose", action="store_true", help="Emit full event stream")
     run_p.add_argument("--mode", default="auto", choices=["auto", "static", "learn", "replay"])
@@ -48,9 +48,9 @@ def main() -> None:
     serve_p.add_argument("--host", default="127.0.0.1")
 
     # ── convert ──
-    convert_p = sub.add_parser("convert", help="Convert a natural-language document to agent.md format")
+    convert_p = sub.add_parser("convert", help="Convert a natural-language document to pipeline.yaml format")
     convert_p.add_argument("path", help="Input document path (.md / .txt)")
-    convert_p.add_argument("--output", "-o", default=None, help="Output file path (default: <cwd>/<stem>.agent.md)")
+    convert_p.add_argument("--output", "-o", default=None, help="Output file path (default: <cwd>/<stem>.pipeline.yaml)")
     convert_p.add_argument("--name", "-n", default=None, help="Pipeline name (default: inferred from filename)")
 
     # ── debug ──
@@ -127,14 +127,14 @@ def main() -> None:
     tool_sub = tool_p.add_subparsers(dest="tool_cmd", required=True)
 
     tool_prompt_p = tool_sub.add_parser("prompt", help="Display the LLM generation prompt for _PH- tool steps (no LLM call)")
-    tool_prompt_p.add_argument("path", help="agent.md file path")
+    tool_prompt_p.add_argument("path", help="pipeline.yaml file path")
     tool_prompt_p.add_argument("--step", default=None, help="Only show a specific step (key)")
 
     tool_dryrun_p = tool_sub.add_parser("dry-run", help="Compile without executing, showing DAG and step info")
-    tool_dryrun_p.add_argument("path", help="agent.md file path")
+    tool_dryrun_p.add_argument("path", help="pipeline.yaml file path")
 
     tool_runph_p = tool_sub.add_parser("run-ph", help="Single-step _PH- lifecycle test")
-    tool_runph_p.add_argument("path", help="agent.md file path")
+    tool_runph_p.add_argument("path", help="pipeline.yaml file path")
     tool_runph_p.add_argument("--step", required=True, help="Step key name")
     tool_runph_p.add_argument("--llm-response", default=None, help="Path to a preset LLM response file (skips real call)")
 
@@ -143,7 +143,7 @@ def main() -> None:
     pipeline_sub = pipeline_p.add_subparsers(dest="pipeline_cmd", required=True)
 
     pipeline_compile_p = pipeline_sub.add_parser("compile", help="Compile without executing, showing DAG and step info")
-    pipeline_compile_p.add_argument("path", help="agent.md file path")
+    pipeline_compile_p.add_argument("path", help="pipeline.yaml file path")
 
     pipeline_sub.add_parser("list", help="List all pipelines")
 
@@ -240,7 +240,7 @@ def main() -> None:
             extra = {"step_key": args.step}
         elif args.tool_cmd == "run-ph":
             extra = {"step_key": args.step, "llm_response_path": args.llm_response}
-        asyncio.run(tool_dispatch(args.tool_cmd, agent_md_path=args.path, **extra))
+        asyncio.run(tool_dispatch(args.tool_cmd, pipeline_path=args.path, **extra))
 
     elif args.command == "pipeline":
         from cli.pipeline import dispatch as pipeline_dispatch  # noqa: E402

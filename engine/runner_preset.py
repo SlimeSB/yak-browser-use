@@ -131,7 +131,7 @@ async def _execute_tool_step_with_guardian(
     events: EventSink,
     pg: PathGuard,
     llm_call_fn=None,
-    agent_md_path: Path | None = None,
+    pipeline_path: Path | None = None,
     cdp_helpers=None,
 ) -> dict:
     """Execute a tool step with path validation and guardian checks.
@@ -164,7 +164,7 @@ async def _execute_tool_step_with_guardian(
             input_files=input_files,
             output_dir=str(step_dir),
             llm_call_fn=llm_call_fn or _default_llm_call_fn,
-            agent_md_path=agent_md_path,
+            pipeline_path=pipeline_path,
             cdp_helpers=cdp_helpers,
         )
         if result.get("upgraded"):
@@ -191,7 +191,7 @@ async def run_pipeline(
     cdp_helpers=None,
     max_runs: int = DEFAULT_MAX_RUNS,
     version: str | None = None,
-    agent_md_path: Path | None = None,
+    pipeline_path: Path | None = None,
     frontmatter: dict | None = None,
     llm_call_fn=None,
     resume_from_index: int = 0,
@@ -206,7 +206,7 @@ async def run_pipeline(
         cdp_helpers: CDPHelpers instance for browser operations.
         max_runs: Maximum number of runs to keep in the workspace.
         version: Optional version string override.
-        agent_md_path: Optional path to agent.md for snapshot and goal agent context.
+        pipeline_path: Optional path to pipeline.yaml for snapshot and goal agent context.
         frontmatter: Optional pipeline frontmatter dict.
         llm_call_fn: Callable for LLM-based tool generation (_PH- tools).
         resume_from_index: Step index to resume from (0 = start).
@@ -245,20 +245,20 @@ async def run_pipeline(
 
     events.emit_run_start(pipeline_name, ctx.run_id, ver or "0")
 
-    # ── Snapshot agent.md at start ──
-    if agent_md_path and agent_md_path.exists():
+    # ── Snapshot pipeline.yaml at start ──
+    if pipeline_path and pipeline_path.exists():
         wm.versions_dir.mkdir(parents=True, exist_ok=True)
-        snapshot_path = wm.versions_dir / f"snapshot_{int(time.time())}.agent.md"
+        snapshot_path = wm.versions_dir / f"snapshot_{int(time.time())}.pipeline.yaml"
         try:
-            shutil.copy2(agent_md_path, snapshot_path)
+            shutil.copy2(pipeline_path, snapshot_path)
         except PermissionError:
-            if str(agent_md_path.resolve()) != str(snapshot_path.resolve()):
+            if str(pipeline_path.resolve()) != str(snapshot_path.resolve()):
                 raise
         logger.info("snapshot saved: %s", snapshot_path)
         # Also copy to workspace root
-        pipe_path = wm.root / "agent.md"
-        shutil.copy2(agent_md_path, pipe_path)
-        logger.info("agent.md saved: %s", pipe_path)
+        pipe_path = wm.root / "pipeline.yaml"
+        shutil.copy2(pipeline_path, pipe_path)
+        logger.info("pipeline.yaml saved: %s", pipe_path)
 
     total_start = time.time()
     logger.info(
@@ -346,7 +346,7 @@ async def run_pipeline(
                     tools_dir=wm.tools_dir,
                     pipeline_name=pipeline_name,
                     frontmatter=frontmatter,
-                    agent_md_path=agent_md_path,
+                    pipeline_path=pipeline_path,
                 )
             else:
                 step_result = await _execute_tool_step_with_guardian(
@@ -358,7 +358,7 @@ async def run_pipeline(
                     events,
                     pg,
                     llm_call_fn=llm_call_fn,
-                    agent_md_path=agent_md_path,
+                    pipeline_path=pipeline_path,
                     cdp_helpers=cdp_helpers,
                 )
 
@@ -604,7 +604,7 @@ async def run_pipeline(
             wm.fill_final(run_dir, last_step_dir)
 
         # ── Version snapshot at end ──
-        if agent_md_path and agent_md_path.exists():
+        if pipeline_path and pipeline_path.exists():
             from workspace.version_manager import VersionManager
 
             vm = VersionManager(wm.versions_dir, ctx.pipeline_name)
@@ -620,7 +620,7 @@ async def run_pipeline(
             vm.create_version(
                 trigger_run_id=ctx.run_id,
                 summary="; ".join(summary_parts),
-                pipe_agent_md=agent_md_path,
+                pipe_pipeline=pipeline_path,
                 tools_dir=wm.tools_dir,
                 upgraded_tools=upgraded,
                 learned_goals=learned,

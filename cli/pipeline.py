@@ -15,10 +15,10 @@ logger = get_logger(__name__)
 # ── compile (dry-run) ──
 
 async def _cmd_compile(path: str) -> None:
-    """Compile agent.md without executing — display DAG and step info.
+    """Compile pipeline.yaml without executing — display DAG and step info.
 
     Args:
-        path: Path to agent.md file.
+        path: Path to pipeline.yaml file.
     """
     from cli.tools import _cmd_tool_dry_run
     await _cmd_tool_dry_run(path)
@@ -202,9 +202,9 @@ async def _cmd_restart(pipeline_name: str, run_id: str | None = None) -> None:
         logger.error("Version data not found")
         sys.exit(1)
 
-    agent_md_path, _ = loaded
-    agent_md_text = agent_md_path.read_text(encoding="utf-8")
-    parsed, steps = PipelineService.prepare_steps(agent_md_text, agent_md_path=agent_md_path)
+    pipeline_path, _ = loaded
+    pipeline_text = pipeline_path.read_text(encoding="utf-8")
+    parsed, steps = PipelineService.prepare_steps(pipeline_text, pipeline_path=pipeline_path)
 
     from engine._lifecycle.guardian import create_guardian_from_frontmatter
     guardian = create_guardian_from_frontmatter(parsed.frontmatter)
@@ -214,14 +214,14 @@ async def _cmd_restart(pipeline_name: str, run_id: str | None = None) -> None:
 
     import time
     ts = int(time.time())
-    snapshot_path = wm.versions_dir / f"snapshot_{ts}.agent.md"
-    snapshot_path.write_text(agent_md_text, encoding="utf-8")
+    snapshot_path = wm.versions_dir / f"snapshot_{ts}.pipeline.yaml"
+    snapshot_path.write_text(pipeline_text, encoding="utf-8")
 
     ctx = await run_pipeline(
         pipeline_name=pipeline_name,
         steps=steps,
         cdp_helpers=engine_state.browser,
-        agent_md_path=snapshot_path,
+        pipeline_path=snapshot_path,
         frontmatter=parsed.frontmatter,
         resume_from_index=resume_from_index,
         guardian=guardian,
@@ -306,9 +306,9 @@ def _apply_approval(pipeline_name: str, target: dict, suggestion_id: str) -> Non
 
     from workspace.version_manager import VersionManager
     from workspace.manager import WorkspaceManager
-    from compiler.parser import parse_agent_md, parse_step_browser_ops
+    from compiler.parser import parse_pipeline
     from compiler.diff import merge_extra_ops
-    from compiler.generator import write_agent_md_learned
+    from compiler.generator import write_pipeline_learned
 
     wm = WorkspaceManager(pipeline_name)
     vm = VersionManager(wm.versions_dir, pipeline_name)
@@ -320,30 +320,30 @@ def _apply_approval(pipeline_name: str, target: dict, suggestion_id: str) -> Non
     if not loaded:
         return
 
-    agent_md_path, _ = loaded
-    source_text = agent_md_path.read_text(encoding="utf-8")
-    parsed = parse_agent_md(source_text)
+    pipeline_path, _ = loaded
+    source_text = pipeline_path.read_text(encoding="utf-8")
+    parsed = parse_pipeline(source_text)
 
     step_name = pipeline_name
     if parsed.steps:
         step_name = parsed.steps[-1].name
 
-    original_ops = parse_step_browser_ops(source_text, step_name)
+    original_ops = parsed.steps[-1].browser_ops if parsed.steps else []
     all_ops = merge_extra_ops(original_ops + extra_ops, extra_ops, original_ops)
-    new_text = write_agent_md_learned(source_text, step_name, all_ops, pipeline_name)
+    new_text = write_pipeline_learned(source_text, step_name, all_ops, pipeline_name)
 
-    temp_agent_md = wm.root / f"_review_{suggestion_id}.agent.md"
-    temp_agent_md.write_text(new_text, encoding="utf-8")
+    temp_pipeline = wm.root / f"_review_{suggestion_id}.pipeline.yaml"
+    temp_pipeline.write_text(new_text, encoding="utf-8")
     try:
         vm.create_version(
             trigger_run_id=f"review_{suggestion_id}",
             summary=f"approved via CLI: {target.get('summary', suggestion_id)}",
-            pipe_agent_md=temp_agent_md,
+            pipe_pipeline=temp_pipeline,
             tools_dir=wm.tools_dir,
         )
     finally:
-        if temp_agent_md.exists():
-            temp_agent_md.unlink()
+        if temp_pipeline.exists():
+            temp_pipeline.unlink()
 
 
 # ── dispatch ──
