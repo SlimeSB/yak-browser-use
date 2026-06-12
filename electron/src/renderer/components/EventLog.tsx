@@ -1,4 +1,5 @@
 import React, { useRef, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import type { EventData } from '../types';
 
 interface EventLogProps {
@@ -7,6 +8,7 @@ interface EventLogProps {
 }
 
 export default function EventLog({ events, maxHeight }: EventLogProps) {
+  const { t } = useTranslation();
   const logRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (logRef.current) logRef.current.scrollTop = logRef.current.scrollHeight;
@@ -36,7 +38,7 @@ export default function EventLog({ events, maxHeight }: EventLogProps) {
 
   return (
     <div className="log-terminal" ref={logRef} style={maxHeight ? { maxHeight, overflow: 'auto' } : { flex: 1 }}>
-      {events.length === 0 && <div style={{ color: 'var(--text-muted)' }}>No events yet…</div>}
+      {events.length === 0 && <div style={{ color: 'var(--text-muted)' }}>{t('eventLog.noEvents')}</div>}
       {events.map((ev, i) => {
         const cls = getTypeClass(ev);
         const isThought = ev.data?.type === 'thought' || ev.data?.thought;

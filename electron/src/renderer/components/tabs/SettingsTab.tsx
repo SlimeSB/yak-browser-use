@@ -1,4 +1,6 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
+import i18n from '../../i18n';
 
 interface SettingsTabProps {
   reviewMode: string;
@@ -8,14 +10,15 @@ interface SettingsTabProps {
 export default function SettingsTab({
   reviewMode, onReviewModeChange,
 }: SettingsTabProps) {
+  const { t } = useTranslation();
   return (
     <div className="set-layout">
       <div className="set-content">
         <div className="set-group">
-          <div className="set-group-title">Review</div>
+          <div className="set-group-title">{t('settingsTab.review')}</div>
           <div className="set-row">
             <div>
-              <div className="set-label">Review Mode</div>
+              <div className="set-label">{t('settingsTab.reviewMode')}</div>
               <div className="set-desc">
                 {reviewMode === 'human' ? 'Manual approval for all operations' : reviewMode === 'llm' ? 'LLM auto-review' : 'Hybrid mode'}
               </div>
@@ -24,16 +27,25 @@ export default function SettingsTab({
               <button
                 className={`btn btn-xs ${reviewMode === 'human' ? 'btn-primary' : 'btn-secondary'}`}
                 onClick={() => onReviewModeChange('human')}
-              >Manual</button>
+              >{t('settingsTab.manual')}</button>
               <button
                 className={`btn btn-xs ${reviewMode === 'llm' ? 'btn-primary' : 'btn-secondary'}`}
                 onClick={() => onReviewModeChange('llm')}
-              >LLM</button>
+              >{t('settingsTab.auto')}</button>
               <button
                 className={`btn btn-xs ${reviewMode === 'hybrid' ? 'btn-primary' : 'btn-secondary'}`}
                 onClick={() => onReviewModeChange('hybrid')}
-              >Hybrid</button>
+              >{t('settingsTab.hybrid')}</button>
             </div>
+          </div>
+        </div>
+        <div className="set-group">
+          <div className="set-group-title">{t('settingsTab.language')}</div>
+          <div className="set-row">
+            <select value={i18n.language} onChange={(e) => i18n.changeLanguage(e.target.value)}>
+              <option value="en">English</option>
+              <option value="zh">中文</option>
+            </select>
           </div>
         </div>
       </div>

@@ -1,4 +1,5 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 
 interface ReviewModeToggleProps {
   mode: string;
@@ -8,9 +9,10 @@ interface ReviewModeToggleProps {
 export default function ReviewModeToggle({
   mode, onChange,
 }: ReviewModeToggleProps) {
+  const { t } = useTranslation();
   return (
     <div className="card">
-      <div className="card-title">Review Mode</div>
+      <div className="card-title">{t('review.title')}</div>
       <div className="mode-switch">
         {(['human', 'llm', 'hybrid'] as const).map(m => (
           <label key={m} className={mode === m ? 'active' : ''}>
@@ -20,7 +22,7 @@ export default function ReviewModeToggle({
               onChange={() => onChange(m)}
             />
             <span className="radio-dot" />{' '}
-            {m === 'human' ? 'Manual' : m === 'llm' ? 'LLM' : 'Hybrid'}
+            {m === 'human' ? t('review.manual') : m === 'llm' ? t('review.auto') : t('review.hybrid')}
           </label>
         ))}
       </div>

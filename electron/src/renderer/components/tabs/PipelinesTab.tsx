@@ -1,4 +1,5 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import type { PipelineMeta } from '../../types';
 import VersionPanel from '../VersionPanel';
 
@@ -12,18 +13,19 @@ interface PipelinesTabProps {
 export default function PipelinesTab({
   pipelines, onRefresh, onSelectPreset, onTabChange,
 }: PipelinesTabProps) {
+  const { t } = useTranslation();
   return (
     <div className="mgr-layout">
       <div className="mgr-toolbar">
-        <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)' }}>📦 Pipeline Manager</span>
+        <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)' }}>📦 {t('pipelineManager.title')}</span>
         <div style={{ flex: 1 }} />
-        <button className="btn btn-sm btn-secondary" onClick={onRefresh}>Refresh</button>
+        <button className="btn btn-sm btn-secondary" onClick={onRefresh}>{t('versions.refresh')}</button>
         <button className="btn btn-sm btn-secondary" onClick={() => onTabChange('agentmd')}>📄 Generate from Doc</button>
       </div>
       <div className="mgr-content">
         {pipelines.length === 0 && (
           <div style={{ fontSize: 11, color: 'var(--text-muted)', textAlign: 'center', padding: 20 }}>
-            No pipelines
+            {t('pipelineManager.noPipelines')}
           </div>
         )}
         {pipelines.map(p => (
@@ -32,16 +34,16 @@ export default function PipelinesTab({
               <span className="pipe-card-name">{p.title}</span>
               <span className="pipe-card-meta">{p.step_count} steps · {p.name}</span>
             </div>
-            <div className="pipe-card-desc">{p.description || 'No description'}</div>
+            <div className="pipe-card-desc">{p.description || t('pipelineManager.noDescription')}</div>
             <div className="pipe-card-actions">
               <button className="btn btn-primary btn-xs" onClick={() => {
                 onSelectPreset(p.name);
                 onTabChange('exec');
-              }}>▶ Run</button>
+              }}>▶ {t('pipelineManager.run')}</button>
               <button className="btn btn-secondary btn-xs" onClick={() => {
                 onSelectPreset(p.name);
                 onTabChange('agentmd');
-              }}>✏ Edit</button>
+              }}>✏ {t('pipelineManager.edit')}</button>
               <button className="btn btn-secondary btn-xs" onClick={() => {
                 onSelectPreset(p.name);
                 window.electronAPI.getPipeline(p.name).then(resp => {

@@ -53,7 +53,7 @@ app.whenReady().then(async () => {
     port = await py.start();
   } catch (e) {
     logger.error('Failed to start backend: %s', (e as Error).message);
-    dialog.showErrorBox('启动失败', `无法启动 Python 后端服务:\n${(e as Error).message}\n\n请确认已安装 uv (https://docs.astral.sh/uv/)，并在项目目录下运行 \`uv sync\` 安装依赖。`);
+    dialog.showErrorBox('Startup Failed', `Cannot start Python backend:\n${(e as Error).message}\n\nEnsure uv is installed (https://docs.astral.sh/uv/) and run install.bat first.`);
     app.quit();
     return;
   }
@@ -177,7 +177,7 @@ app.whenReady().then(async () => {
   ipcMain.handle('browser:isolated-profiles-list', async () => {
     logger.debug('IPC: browser:isolated-profiles-list');
     const result = await _safeFetch('/api/chrome/isolated-profiles');
-    if (!result.ok) return { profiles: ['默认临时目录'] };
+    if (!result.ok) return { profiles: ['Default Temp'] };
     const data = result.data || {};
     return { profiles: data.profiles || [] };
   });
@@ -191,15 +191,15 @@ app.whenReady().then(async () => {
 
   ipcMain.handle('dialog:alert', async (_event, message: string) => {
     logger.debug('IPC: dialog:alert');
-    if (mainWindow) dialog.showMessageBox(mainWindow, { type: 'info', title: '提示', message, buttons: ['确定'] });
+    if (mainWindow) dialog.showMessageBox(mainWindow, { type: 'info', title: 'Info', message, buttons: ['OK'] });
   });
 
   ipcMain.handle('dialog:open-csv', async () => {
     logger.debug('IPC: dialog:open-csv');
     try {
       const result = await dialog.showOpenDialog(mainWindow!, {
-        title: '导入 CSV 文件',
-        filters: [{ name: 'CSV 文件', extensions: ['csv'] }],
+        title: 'Import CSV',
+        filters: [{ name: 'CSV Files', extensions: ['csv'] }],
         properties: ['openFile'],
       });
       if (result.canceled || result.filePaths.length === 0) {
@@ -222,9 +222,9 @@ app.whenReady().then(async () => {
       const csvContent = _formatCsv(headers, rows);
 
       const result = await dialog.showSaveDialog(mainWindow!, {
-        title: '导出 CSV',
+        title: 'Export CSV',
         defaultPath: `learning-browser-use_${_dateStr()}.csv`,
-        filters: [{ name: 'CSV 文件', extensions: ['csv'] }],
+        filters: [{ name: 'CSV Files', extensions: ['csv'] }],
       });
       if (result.canceled || !result.filePath) {
         return { success: false, error: 'cancelled' };
@@ -243,9 +243,9 @@ app.whenReady().then(async () => {
     logger.debug('IPC: export:excel');
     try {
       const result = await dialog.showSaveDialog(mainWindow!, {
-        title: '导出 Excel',
+        title: 'Export Excel',
         defaultPath: `learning-browser-use_${_dateStr()}.xlsx`,
-        filters: [{ name: 'Excel 文件', extensions: ['xlsx'] }],
+        filters: [{ name: 'Excel Files', extensions: ['xlsx'] }],
       });
       if (result.canceled || !result.filePath) {
         return { success: false, error: 'cancelled' };
@@ -340,7 +340,7 @@ app.whenReady().then(async () => {
   await createWindow();
 }).catch((e) => {
   logger.error('App startup failed: %s', (e as Error).message);
-  dialog.showErrorBox('启动失败', `应用启动出错:\n${(e as Error).message}`);
+  dialog.showErrorBox('Startup Failed', `Application startup error:\n${(e as Error).message}`);
   app.quit();
 });
 
@@ -419,13 +419,13 @@ function _formatCsv(headers: string[], rows: string[][]): string {
 
 function _buildExcelWorkbook(workbook: ExcelJS.Workbook, data: unknown): void {
   if (!data) {
-    const sheet = workbook.addWorksheet('导出');
-    sheet.addRow(['无数据']);
+    const sheet = workbook.addWorksheet('Export');
+    sheet.addRow(['No Data']);
     return;
   }
 
   if (Array.isArray(data)) {
-    _buildSheet(workbook, '导出', data as Record<string, unknown>[]);
+    _buildSheet(workbook, 'Export', data as Record<string, unknown>[]);
     return;
   }
 
@@ -443,7 +443,7 @@ function _buildExcelWorkbook(workbook: ExcelJS.Workbook, data: unknown): void {
       _buildSheet(workbook, key, obj[key] as Record<string, unknown>[]);
     }
   } else {
-    const sheet = workbook.addWorksheet('数据');
+    const sheet = workbook.addWorksheet('Data');
     for (const [k, v] of Object.entries(obj)) {
       sheet.addRow([k, typeof v === 'object' ? JSON.stringify(v) : String(v)]);
     }

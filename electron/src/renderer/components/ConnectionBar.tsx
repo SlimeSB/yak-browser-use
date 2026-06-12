@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 
 interface ConnectionBarProps {
   connected: boolean; wsUrl: string;
@@ -16,6 +17,7 @@ export default function ConnectionBar({
   connected, wsUrl, connectMode, selectedProfile, connectionError, onConnect, onDisconnect,
   onModeChange, onProfileChange, profiles, onCreateProfile,
 }: ConnectionBarProps) {
+  const { t } = useTranslation();
   const [showNewProfileInput, setShowNewProfileInput] = useState(false);
   const [newProfileName, setNewProfileName] = useState('');
 
@@ -41,7 +43,7 @@ export default function ConnectionBar({
     <div className="connection-bar">
       <span className={`conn-dot ${connected ? 'ok' : ''}`} />
       <span className="conn-label">
-        {connected ? 'Connected' : 'Disconnected'}
+        {connected ? t('connection.connected') : t('connection.disconnected')}
       </span>
       {connected && wsUrl && (
         <span className="conn-url" title={wsUrl}>{wsUrl}</span>
@@ -54,15 +56,15 @@ export default function ConnectionBar({
           )}
 
           <div className="conn-segment">
-            <span className="conn-status-text">Mode:</span>
+            <span className="conn-status-text">{t('connection.mode')}:</span>
             <div className="mode-switch">
               <label className={connectMode === 'user' ? 'active' : ''}>
                 <input type="radio" checked={connectMode === 'user'} onChange={() => onModeChange('user')} />
-                <span className="radio-dot" /> User Browser
+                <span className="radio-dot" /> {t('connection.userBrowser')}
               </label>
               <label className={connectMode === 'isolated' ? 'active' : ''}>
                 <input type="radio" checked={connectMode === 'isolated'} onChange={() => onModeChange('isolated')} />
-                <span className="radio-dot" /> Isolated Browser
+                <span className="radio-dot" /> {t('connection.isolatedBrowser')}
               </label>
             </div>
           </div>
@@ -70,9 +72,9 @@ export default function ConnectionBar({
           {connectMode === 'user' ? (
             <div className="conn-segment">
               <button className="btn btn-primary btn-sm" onClick={() => onConnect('user')}>
-                Connect to Chrome
+                {t('connection.connectToChrome')}
               </button>
-              <span className="conn-status-text">Auto-discover running Chrome</span>
+              <span className="conn-status-text">{t('connection.autoDiscover')}</span>
             </div>
           ) : (
             <div className="conn-segment">
@@ -93,11 +95,11 @@ export default function ConnectionBar({
                       placeholder="Enter name and press Enter"
                       className="input-sm"
                     />
-                    <button className="btn btn-secondary btn-sm" onClick={() => handleCreateConfirm(newProfileName)}>OK</button>
-                    <button className="btn btn-secondary btn-sm" onClick={() => { setShowNewProfileInput(false); setNewProfileName(''); }}>Cancel</button>
+                    <button className="btn btn-secondary btn-sm" onClick={() => handleCreateConfirm(newProfileName)}>{t('connection.ok')}</button>
+                    <button className="btn btn-secondary btn-sm" onClick={() => { setShowNewProfileInput(false); setNewProfileName(''); }}>{t('connection.cancel')}</button>
                   </span>
                 ) : (
-                  <button className="btn btn-secondary btn-sm" onClick={handleNewProfile}>New</button>
+                  <button className="btn btn-secondary btn-sm" onClick={handleNewProfile}>{t('connection.newConnection')}</button>
                 )}
               </div>
               <button className="btn btn-primary btn-sm" onClick={() => onConnect('isolated', selectedProfile)}>
@@ -110,7 +112,7 @@ export default function ConnectionBar({
 
       {connected && (
         <div className="conn-actions">
-          <button className="btn btn-danger btn-sm" onClick={onDisconnect}>Disconnect</button>
+          <button className="btn btn-danger btn-sm" onClick={onDisconnect}>{t('connection.disconnect')}</button>
         </div>
       )}
     </div>

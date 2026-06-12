@@ -1,0 +1,182 @@
+{
+  "app": {
+    "title": "Learning Browser-Use"
+  },
+  "tabs": {
+    "run": "Run",
+    "chat": "Chat",
+    "log": "Log",
+    "pipelines": "Pipelines",
+    "params": "Params",
+    "settings": "Settings",
+    "running": "Running"
+  },
+  "connection": {
+    "connectToChrome": "Connect to Chrome",
+    "connected": "Connected",
+    "disconnected": "Disconnected",
+    "connecting": "Connecting...",
+    "disconnecting": "Disconnecting...",
+    "userBrowser": "User Browser",
+    "isolatedBrowser": "Isolated Browser",
+    "autoDiscover": "Auto-discover",
+    "disconnect": "Disconnect",
+    "mode": "Mode",
+    "newConnection": "New",
+    "ok": "OK",
+    "cancel": "Cancel",
+    "connectionFailed": "Connection failed. Make sure Chrome is running with --remote-debugging-port=9222",
+    "restartFailed": "Restart failed"
+  },
+  "statusBar": {
+    "ready": "Ready",
+    "step": "Step",
+    "steps": "steps"
+  },
+  "stages": {
+    "title": "Execution Stages",
+    "done": "Done",
+    "running": "Running…",
+    "failed": "Failed",
+    "pending": "Pending",
+    "waiting": "Waiting to start…"
+  },
+  "progress": {
+    "title": "Progress",
+    "waiting": "Waiting to start…"
+  },
+  "params": {
+    "title": "Params",
+    "noParams": "No params",
+    "key": "Key",
+    "value": "Value",
+    "add": "+ Add",
+    "save": "Save",
+    "delete": "Delete",
+    "manageParams": "Manage Params"
+  },
+  "preset": {
+    "pipeline": "Pipeline",
+    "available": "available",
+    "noPipelines": "No pipelines available",
+    "run": "Run"
+  },
+  "results": {
+    "title": "Results",
+    "count": "{{count}} results",
+    "waiting": "Waiting for results…"
+  },
+  "diff": {
+    "noChanges": "No changes"
+  },
+  "eventLog": {
+    "noEvents": "No events yet…"
+  },
+  "review": {
+    "title": "Review Mode",
+    "manual": "Manual",
+    "auto": "Auto",
+    "hybrid": "Hybrid",
+    "description": "Review mode controls how pipeline steps are approved before execution."
+  },
+  "versions": {
+    "title": "Learned Versions",
+    "refresh": "Refresh",
+    "view": "View",
+    "relearn": "Re-learn",
+    "deleteLatest": "Delete latest learned version",
+    "close": "Close"
+  },
+  "exec": {
+    "cancel": "Cancel",
+    "processing": "Processing…",
+    "liveLog": "Live Log",
+    "generateAgentMd": "Generate agent.md",
+    "manageParams": "Manage Params"
+  },
+  "pipelineManager": {
+    "title": "Pipeline Manager",
+    "noPipelines": "No pipelines",
+    "noDescription": "No description",
+    "run": "Run",
+    "edit": "Edit",
+    "compile": "Compile"
+  },
+  "agentMdEditor": {
+    "placeholder": "Type a message to modify the agent.md…",
+    "hint": "Select a pipeline above, then use chat to modify agent.md.",
+    "send": "Send",
+    "generating": "Generating…",
+    "error": "Request failed",
+    "connectionLost": "Connection interrupted or request failed",
+    "systemMessage": "Select a pipeline above, then use chat to modify agent.md. You can also edit the editor directly."
+  },
+  "paramsTab": {
+    "title": "Params Manager",
+    "noParams": "No params",
+    "add": "+ Add",
+    "key": "Key",
+    "value": "Value",
+    "actions": "Actions",
+    "delete": "Delete",
+    "save": "Save",
+    "setParam": "Set param",
+    "deleteConfirm": "Delete this param?"
+  },
+  "settingsTab": {
+    "review": "Review",
+    "reviewMode": "Review Mode",
+    "manual": "Manual",
+    "auto": "Auto",
+    "hybrid": "Hybrid",
+    "language": "Language"
+  },
+  "log": {
+    "title": "Log",
+    "noLogs": "No logs",
+    "step": "Step",
+    "type": "Type",
+    "status": "Status",
+    "duration": "Duration",
+    "running": "Running",
+    "completed": "Completed",
+    "failed": "Failed",
+    "paused": "Paused",
+    "cancelled": "Cancelled",
+    "pending": "Pending",
+    "viewDiff": "View Diff",
+    "review": "Review",
+    "approve": "Approve",
+    "reject": "Reject",
+    "reason": "Reason",
+    "startTime": "Start Time",
+    "endTime": "End Time",
+    "summary": "Summary",
+    "outputFiles": "Output Files",
+    "errors": "Errors",
+    "noErrors": "No errors",
+    "executionLog": "Execution Log",
+    "filter": "Filter",
+    "all": "All",
+    "searchSteps": "Search steps…",
+    "rowsPerPage": "Rows per page",
+    "of": "of",
+    "noMatchingSteps": "No matching steps"
+  },
+  "restartDialog": {
+    "title": "Browser restart required",
+    "description": "{{browserName}} is running but the debug port is not open.",
+    "descriptionConnect": "To connect to your browser, close and restart {{browserName}} with the debug port enabled.",
+    "restarting": "Restarting {{browserName}}…",
+    "cancel": "Cancel",
+    "useIsolated": "Use Isolated Browser",
+    "closeAndRestart": "Close & Restart"
+  },
+  "common": {
+    "defaultTemp": "Default Temp",
+    "unknownError": "Unknown error",
+    "creating": "Creation failed",
+    "loadFailed": "Failed to load pipeline definition",
+    "missingParams": "Please fill in the following parameters: {{keys}}"
+  }
+}

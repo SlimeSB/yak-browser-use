@@ -1,4 +1,5 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 
 interface ParamsPanelProps {
   schema: Record<string, string>;
@@ -9,15 +10,16 @@ interface ParamsPanelProps {
 export default function ParamsPanel({
   schema, values, onChange,
 }: ParamsPanelProps) {
+  const { t } = useTranslation();
   const keys = Object.keys(schema);
 
   return (
     <div className="panel">
-      <div className="panel-title">Params</div>
+      <div className="panel-title">{t('params.title')}</div>
       <div className="panel-body">
         {keys.length === 0 ? (
           <div style={{ fontSize: 11, color: 'var(--text-muted)', textAlign: 'center', padding: '6px 0' }}>
-            No params
+            {t('params.noParams')}
           </div>
         ) : (
           <div className="param-grid">

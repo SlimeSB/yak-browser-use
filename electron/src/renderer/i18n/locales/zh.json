@@ -1,0 +1,182 @@
+{
+  "app": {
+    "title": "Learning Browser-Use"
+  },
+  "tabs": {
+    "run": "执行",
+    "chat": "对话",
+    "log": "日志",
+    "pipelines": "管线",
+    "params": "参数",
+    "settings": "设置",
+    "running": "运行中"
+  },
+  "connection": {
+    "connectToChrome": "连接到 Chrome",
+    "connected": "已连接",
+    "disconnected": "未连接",
+    "connecting": "连接中…",
+    "disconnecting": "断开中…",
+    "userBrowser": "用户浏览器",
+    "isolatedBrowser": "隔离浏览器",
+    "autoDiscover": "自动发现",
+    "disconnect": "断开",
+    "mode": "模式",
+    "newConnection": "新建",
+    "ok": "确定",
+    "cancel": "取消",
+    "connectionFailed": "连接失败，请确保 Chrome 以 --remote-debugging-port=9222 参数运行",
+    "restartFailed": "重启失败"
+  },
+  "statusBar": {
+    "ready": "就绪",
+    "step": "步骤",
+    "steps": "个步骤"
+  },
+  "stages": {
+    "title": "执行阶段",
+    "done": "完成",
+    "running": "执行中…",
+    "failed": "失败",
+    "pending": "待执行",
+    "waiting": "等待执行…"
+  },
+  "progress": {
+    "title": "执行进度",
+    "waiting": "等待执行…"
+  },
+  "params": {
+    "title": "参数",
+    "noParams": "无参数",
+    "key": "参数名",
+    "value": "参数值",
+    "add": "+ 添加",
+    "save": "保存",
+    "delete": "删除",
+    "manageParams": "管理参数"
+  },
+  "preset": {
+    "pipeline": "管线",
+    "available": "可用",
+    "noPipelines": "无可用的管线",
+    "run": "执行"
+  },
+  "results": {
+    "title": "执行结果",
+    "count": "共 {{count}} 条",
+    "waiting": "等待执行…"
+  },
+  "diff": {
+    "noChanges": "暂无变更"
+  },
+  "eventLog": {
+    "noEvents": "暂无日志…"
+  },
+  "review": {
+    "title": "审查模式",
+    "manual": "人工",
+    "auto": "自动",
+    "hybrid": "混合",
+    "description": "审查模式控制管线的步骤在执行前如何被批准。"
+  },
+  "versions": {
+    "title": "学习版本",
+    "refresh": "刷新",
+    "view": "查看",
+    "relearn": "重学",
+    "deleteLatest": "删除最新学习版本",
+    "close": "关闭"
+  },
+  "exec": {
+    "cancel": "取消执行",
+    "processing": "处理中…",
+    "liveLog": "实时日志",
+    "generateAgentMd": "生成 agent.md",
+    "manageParams": "管理参数"
+  },
+  "pipelineManager": {
+    "title": "管线管理",
+    "noPipelines": "暂无管线",
+    "noDescription": "无描述",
+    "run": "执行",
+    "edit": "编辑",
+    "compile": "编译"
+  },
+  "agentMdEditor": {
+    "placeholder": "输入消息以修改 agent.md…",
+    "hint": "选择上方管线后，可以用对话修改 agent.md。",
+    "send": "发送",
+    "generating": "生成中…",
+    "error": "请求失败",
+    "connectionLost": "连接中断或请求失败",
+    "systemMessage": "选择上方管线后，可以用对话修改 agent.md。也可以直接改右侧编辑器。"
+  },
+  "paramsTab": {
+    "title": "参数管理",
+    "noParams": "暂无参数",
+    "add": "+ 添加",
+    "key": "参数名",
+    "value": "参数值",
+    "actions": "操作",
+    "delete": "删除",
+    "save": "保存",
+    "setParam": "设置参数",
+    "deleteConfirm": "确定删除此参数？"
+  },
+  "settingsTab": {
+    "review": "审查",
+    "reviewMode": "审查模式",
+    "manual": "人工",
+    "auto": "自动",
+    "hybrid": "混合",
+    "language": "语言"
+  },
+  "log": {
+    "title": "日志",
+    "noLogs": "暂无日志",
+    "step": "步骤",
+    "type": "类型",
+    "status": "状态",
+    "duration": "耗时",
+    "running": "运行中",
+    "completed": "已完成",
+    "failed": "失败",
+    "paused": "已暂停",
+    "cancelled": "已取消",
+    "pending": "待执行",
+    "viewDiff": "查看差异",
+    "review": "审查",
+    "approve": "批准",
+    "reject": "拒绝",
+    "reason": "原因",
+    "startTime": "开始时间",
+    "endTime": "结束时间",
+    "summary": "摘要",
+    "outputFiles": "输出文件",
+    "errors": "错误",
+    "noErrors": "无错误",
+    "executionLog": "执行日志",
+    "filter": "筛选",
+    "all": "全部",
+    "searchSteps": "搜索步骤…",
+    "rowsPerPage": "每页条数",
+    "of": " / ",
+    "noMatchingSteps": "无匹配的步骤"
+  },
+  "restartDialog": {
+    "title": "需要重启浏览器",
+    "description": "{{browserName}} 正在运行，但未开启调试端口。",
+    "descriptionConnect": "要连接到用户浏览器，需要先关闭并重新启动 {{browserName}}（带调试端口）。",
+    "restarting": "正在重启 {{browserName}}…",
+    "cancel": "取消",
+    "useIsolated": "使用隔离浏览器",
+    "closeAndRestart": "关闭并重启"
+  },
+  "common": {
+    "defaultTemp": "默认临时目录",
+    "unknownError": "未知错误",
+    "creating": "创建失败",
+    "loadFailed": "加载管线定义失败",
+    "missingParams": "请填写以下参数：{{keys}}"
+  }
+}

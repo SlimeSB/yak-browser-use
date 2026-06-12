@@ -1,4 +1,5 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 
 export interface DiffLine {
   type: 'add' | 'del' | 'ctx';
@@ -48,10 +49,11 @@ function renderHighlightedLine(line: string, highlights?: DiffLine['highlights']
 }
 
 export default function DiffView({ lines, maxHeight }: DiffViewProps) {
+  const { t } = useTranslation();
   if (!lines || lines.length === 0) {
     return (
       <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', fontSize: 12 }}>
-        No changes
+        {t('diff.noChanges')}
       </div>
     );
   }

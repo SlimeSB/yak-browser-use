@@ -1,4 +1,5 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import type { PipelineMeta } from '../types';
 
 interface PresetSelectRowProps {
@@ -13,13 +14,14 @@ interface PresetSelectRowProps {
 export default function PresetSelectRow({
   activeId, pipelines, onSelect, onRun, loading, connected,
 }: PresetSelectRowProps) {
+  const { t } = useTranslation();
   const preset = pipelines.find(p => p.name === activeId);
   return (
     <div className="panel">
       <div className="panel-title">
-        <span>Pipeline</span>
+        <span>{t('preset.pipeline')}</span>
         <span style={{ fontWeight: 400, textTransform: 'none', letterSpacing: 0 }}>
-          {pipelines.length} available
+          {pipelines.length} {t('preset.available')}
         </span>
       </div>
       <div className="panel-body" style={{ paddingBottom: 10 }}>
@@ -30,7 +32,7 @@ export default function PresetSelectRow({
             onChange={e => onSelect(e.target.value)}
             disabled={loading}
           >
-            {pipelines.length === 0 && <option value="">No pipelines available</option>}
+            {pipelines.length === 0 && <option value="">{t('preset.noPipelines')}</option>}
             {pipelines.map(t => (
               <option key={t.name} value={t.name}>{t.title}</option>
             ))}
@@ -40,12 +42,12 @@ export default function PresetSelectRow({
             onClick={onRun}
             disabled={loading || !connected}
           >
-            {loading ? 'Running…' : '▶ Run'}
+            {loading ? t('exec.processing') : `▶ ${t('preset.run')}`}
           </button>
         </div>
         {preset && (
           <div className="pipeline-meta">
-            <span>{preset.step_count} steps</span>
+            <span>{preset.step_count} {t('statusBar.steps')}</span>
             {preset.description && <span>{preset.description}</span>}
           </div>
         )}

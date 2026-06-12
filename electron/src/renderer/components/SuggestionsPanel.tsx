@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 
 interface SuggestionsPanelProps {
   extraOps: Array<{ type: string; value?: string; selector?: string }>;
@@ -11,6 +12,7 @@ interface SuggestionsPanelProps {
 export default function SuggestionsPanel({
   extraOps, reason, guardLayer, onApprove, onReject,
 }: SuggestionsPanelProps) {
+  const { t } = useTranslation();
   const [rejectReason, setRejectReason] = useState('');
   const [showingReject, setShowingReject] = useState(false);
 
@@ -27,7 +29,7 @@ export default function SuggestionsPanel({
         <table className="result-table" style={{ fontSize: 10 }}>
           <thead>
             <tr>
-              <th>Type</th>
+              <th>{t('log.type')}</th>
               <th>Selector/Value</th>
             </tr>
           </thead>
@@ -46,18 +48,18 @@ export default function SuggestionsPanel({
           className="btn btn-primary btn-sm"
           onClick={() => onApprove('approved via UI')}
         >
-          Approve
+          {t('log.approve')}
         </button>
         {!showingReject ? (
           <button className="btn btn-danger btn-sm" onClick={() => setShowingReject(true)}>
-            Reject
+            {t('log.reject')}
           </button>
         ) : (
           <div style={{ display: 'flex', gap: 4, flex: 1 }}>
             <input
               className="param-input"
               style={{ flex: 1 }}
-              placeholder="Rejection reason (required)"
+              placeholder={t('log.reason') + ' (required)'}
               value={rejectReason}
               onChange={e => setRejectReason(e.target.value)}
             />
@@ -65,7 +67,7 @@ export default function SuggestionsPanel({
               className="btn btn-danger btn-sm"
               onClick={() => {
                 if (!rejectReason.trim()) {
-                  window.electronAPI.showAlert('Please provide a rejection reason');
+                  window.electronAPI.showAlert(t('common.missingParams', { keys: 'Rejection reason' }));
                   return;
                 }
                 onReject(rejectReason);
@@ -79,7 +81,7 @@ export default function SuggestionsPanel({
               className="btn btn-secondary btn-sm"
               onClick={() => { setShowingReject(false); setRejectReason(''); }}
             >
-              Cancel
+              {t('connection.cancel')}
             </button>
           </div>
         )}

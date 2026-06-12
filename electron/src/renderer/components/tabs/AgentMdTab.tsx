@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import type { PipelineMeta, ChatPendingDiff } from '../../types';
 import DiffView from '../DiffView';
 
@@ -28,6 +29,7 @@ export default function AgentMdTab({
   chatSending, onChatSend, preset, agentMdEditor, onAgentMdEditorChange, onTabChange,
   chatPendingDiffs, onChatDismiss, onChatRollback, streamingMsg,
 }: AgentMdTabProps) {
+  const { t } = useTranslation();
   const [activeDiffIndex, setActiveDiffIndex] = useState(0);
 
   const pendingCount = chatPendingDiffs.length;
@@ -44,7 +46,7 @@ export default function AgentMdTab({
               value={activePreset}
               onChange={e => {
                 onPresetChange(e.target.value);
-                onChatMessagesChange([{role: 'system', content: 'Select a pipeline above, then use chat to modify agent.md. You can also edit directly in the right editor.'}]);
+                onChatMessagesChange([{role: 'system', content: t('agentMdEditor.systemMessage')}]);
                 onChatInputChange('');
               }}
             >
@@ -82,7 +84,7 @@ export default function AgentMdTab({
                 <div className="gen-chat-msg assistant">
                   <span className="gen-chat-avatar assistant">A</span>
                   <div className="gen-chat-bubble assistant" style={{ color: 'var(--text-muted)' }}>
-                    <span className="thinking-dot" /> Processing…
+                    <span className="thinking-dot" /> {t('agentMdEditor.generating')}
                   </div>
                 </div>
               )}
@@ -128,7 +130,7 @@ export default function AgentMdTab({
                     value={chatInput}
                     onChange={e => onChatInputChange(e.target.value)}
                     onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); onChatSend(); } }}
-                    placeholder="Describe changes... (e.g., step 2 URL to xxx)"
+                    placeholder={t('agentMdEditor.placeholder')}
                   />
                 </div>
                 <button className="gen-chat-send" onClick={onChatSend} disabled={chatSending || !chatInput.trim()}>➤</button>
@@ -168,7 +170,7 @@ export default function AgentMdTab({
                 }
               }}>↩ Refresh</button>
               <button className="btn btn-secondary btn-xs" onClick={() => { navigator.clipboard.writeText(agentMdEditor); }}>📋 Copy</button>
-              <button className="btn btn-primary btn-xs" onClick={() => { onTabChange('exec'); }}>▶ Run</button>
+              <button className="btn btn-primary btn-xs" onClick={() => { onTabChange('exec'); }}>▶ {t('preset.run')}</button>
             </div>
           </div>
           <div className="gen-panel-body" style={{ padding: 0, flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
@@ -179,7 +181,7 @@ export default function AgentMdTab({
                 className="gen-editor"
                 value={agentMdEditor}
                 onChange={e => onAgentMdEditorChange(e.target.value)}
-                placeholder="Select a pipeline to view and edit agent.md..."
+                placeholder={t('agentMdEditor.hint')}
                 spellCheck={false}
               />
             )}

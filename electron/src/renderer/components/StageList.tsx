@@ -1,4 +1,5 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import type { EventData } from '../types';
 
 interface StageListProps {
@@ -7,6 +8,7 @@ interface StageListProps {
 }
 
 export default function StageList({ stages, events }: StageListProps) {
+  const { t } = useTranslation();
   const getStageStatus = (name: string): 'done' | 'current' | 'pending' | 'error' => {
     const hasStart = events.some(e => e.type === 'step_start' && e.node_name === name);
     const hasEnd = events.some(e => e.type === 'step_end' && e.node_name === name);
@@ -24,9 +26,9 @@ export default function StageList({ stages, events }: StageListProps) {
   if (stageNames.length === 0) {
     return (
       <div className="card">
-        <div className="card-title">Execution Stages</div>
+        <div className="card-title">{t('stages.title')}</div>
         <div style={{ fontSize: 11, color: 'var(--text-muted)', textAlign: 'center', padding: '8px 0' }}>
-          Waiting to start…
+          {t('stages.waiting')}
         </div>
       </div>
     );
@@ -34,7 +36,7 @@ export default function StageList({ stages, events }: StageListProps) {
 
   return (
     <div className="card">
-      <div className="card-title">Execution Stages</div>
+      <div className="card-title">{t('stages.title')}</div>
       <div className="stage-list">
         {stageNames.map((name, i) => {
           const status = getStageStatus(name);
@@ -49,7 +51,7 @@ export default function StageList({ stages, events }: StageListProps) {
                 fontWeight: status === 'current' ? 600 : 400,
               }}>{name}</span>
               <span className="stage-status-text">
-                {status === 'done' ? 'Done' : status === 'current' ? 'Running…' : status === 'error' ? 'Failed' : 'Pending'}
+                {status === 'done' ? t('stages.done') : status === 'current' ? t('stages.running') : status === 'error' ? t('stages.failed') : t('stages.pending')}
               </span>
             </div>
           );

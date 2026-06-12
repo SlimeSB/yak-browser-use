@@ -1,4 +1,5 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import type { EventData } from '../types';
 
 interface ProgressBarProps {
@@ -6,6 +7,7 @@ interface ProgressBarProps {
 }
 
 export default function ProgressBar({ events }: ProgressBarProps) {
+  const { t } = useTranslation();
   const stepStarts = events.filter(e => e.type === 'step_start');
   const stepEnds = events.filter(e => e.type === 'step_end');
   const stepErrors = events.filter(e => e.type === 'step_error');
@@ -15,9 +17,9 @@ export default function ProgressBar({ events }: ProgressBarProps) {
   if (total === 0) {
     return (
       <div className="card">
-        <div className="card-title">Progress</div>
+        <div className="card-title">{t('progress.title')}</div>
         <div style={{ fontSize: 11, color: 'var(--text-muted)', textAlign: 'center', padding: '8px 0' }}>
-          Waiting to start…
+          {t('progress.waiting')}
         </div>
       </div>
     );
@@ -27,7 +29,7 @@ export default function ProgressBar({ events }: ProgressBarProps) {
 
   return (
     <div className="card">
-      <div className="card-title">Progress</div>
+      <div className="card-title">{t('progress.title')}</div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
         <div className="progress-bar">
           <div className={`progress-bar-fill ${stepErrors.length > 0 ? 'error' : ''}`} style={{ width: `${pct}%` }} />

@@ -1,4 +1,5 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 
 interface ResultTableProps {
   data: Record<string, unknown> | null;
@@ -7,6 +8,7 @@ interface ResultTableProps {
 }
 
 export default function ResultTable({ data, errors, columnSchema }: ResultTableProps) {
+  const { t } = useTranslation();
   const extractRows = (): Record<string, unknown>[] | null => {
     if (!data) return null;
     if (Array.isArray(data)) return data as Record<string, unknown>[];
@@ -26,7 +28,7 @@ export default function ResultTable({ data, errors, columnSchema }: ResultTableP
 
   return (
     <div className="card">
-      <div className="card-title">Results</div>
+      <div className="card-title">{t('results.title')}</div>
       {errors && errors.length > 0 && (
         <div style={{ color: 'var(--danger)', fontSize: 11, marginBottom: 6 }}>
           {errors.map((e, i) => <div key={i}>{e}</div>)}
@@ -51,12 +53,12 @@ export default function ResultTable({ data, errors, columnSchema }: ResultTableP
             </table>
           </div>
           <div className="table-footer">
-            <span>{rows.length} results</span>
+            <span>{t('results.count', { count: rows.length })}</span>
           </div>
         </>
       ) : (
         <div style={{ fontSize: 11, color: 'var(--text-muted)', textAlign: 'center', padding: '8px 0' }}>
-          Waiting for results…
+          {t('results.waiting')}
         </div>
       )}
     </div>

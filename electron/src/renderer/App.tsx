@@ -1,4 +1,5 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
 import './styles/global.css';
 import { getLogger } from '../utils/logger';
 import type { PipelineMeta, EventData, ChatPendingDiff, DiffLine } from './types';
@@ -19,6 +20,7 @@ function interpolateTemplate(template: string, ctx: Record<string, string>): str
 }
 
 export default function App() {
+  const { t } = useTranslation();
   const [activeTab, setActiveTab] = useState('exec');
   const [pipelines, setPipelines] = useState<PipelineMeta[]>([]);
   const [events, setEvents] = useState<EventData[]>([]);
@@ -31,8 +33,8 @@ export default function App() {
   const [wsUrl, setWsUrl] = useState('');
   const [connectionError, setConnectionError] = useState<string | null>(null);
   const [connectMode, setConnectMode] = useState<'user' | 'isolated'>('user');
-  const [selectedProfile, setSelectedProfile] = useState('Default Temp');
-  const [profiles, setProfiles] = useState<string[]>(['Default Temp']);
+  const [selectedProfile, setSelectedProfile] = useState(t('common.defaultTemp'));
+  const [profiles, setProfiles] = useState<string[]>([t('common.defaultTemp')]);
   const [params, setParams] = useState<Record<string, string>>({});
   const [restartDialog, setRestartDialog] = useState<{ browserName: string } | null>(null);
   const [restarting, setRestarting] = useState(false);
@@ -53,7 +55,7 @@ export default function App() {
 
   const [agentMdEditor, setAgentMdEditor] = useState('');
   const [chatMessages, setChatMessages] = useState<Array<{role: string; content: string}>>([
-    {role: 'system', content: 'Select a pipeline above, then use chat to modify agent.md. You can also edit directly in the right editor.'}
+    {role: 'system', content: t('agentMdEditor.systemMessage')}
   ]);
   const [chatInput, setChatInput] = useState('');
   const [chatSending, setChatSending] = useState(false);
@@ -185,7 +187,7 @@ export default function App() {
       }
     }
     if (missingKeys.length > 0) {
-      window.electronAPI.showAlert(`Please fill in the following parameters: ${missingKeys.join(', ')}`);
+      window.electronAPI.showAlert(t('common.missingParams', { keys: missingKeys.join(', ') }));
       return;
     }
 
@@ -198,12 +200,12 @@ export default function App() {
           setAgentMdCache(prev => ({ ...prev, [activePreset]: agentMd }));
           setAgentMdEditor(agentMd);
         } else {
-          window.electronAPI.showAlert('Failed to load pipeline definition');
+          window.electronAPI.showAlert(t('common.loadFailed'));
           return;
         }
       } catch (e) {
         logger.error('getPipeline failed in handleRun: %s', String(e));
-        window.electronAPI.showAlert('Failed to load pipeline definition');
+        window.electronAPI.showAlert(t('common.loadFailed'));
         return;
       }
     }
@@ -263,7 +265,7 @@ export default function App() {
         setWsUrl(resp.wsUrl || '');
         setConnectionError(null);
       } else {
-        setConnectionError(resp.error || 'Connection failed. Make sure Chrome is running');
+        setConnectionError(resp.error || t('connection.connectionFailed'));
       }
     } catch (e) {
       logger.error('Connect failed: %s', String(e));
@@ -282,10 +284,10 @@ export default function App() {
         });
         setSelectedProfile(resp.profile_name);
       } else {
-        window.electronAPI.showAlert('Creation failed: ' + (resp.error || 'Unknown error'));
+        window.electronAPI.showAlert(t('common.creating') + ': ' + (resp.error || t('common.unknownError')));
       }
     } catch (e) {
-      window.electronAPI.showAlert('Creation failed: ' + String(e));
+      window.electronAPI.showAlert(t('common.creating') + ': ' + String(e));
     }
   }, []);
 
@@ -300,7 +302,7 @@ export default function App() {
         setWsUrl(resp.wsUrl || '');
         setConnectionError(null);
       } else {
-        setConnectionError(resp.error || 'Restart failed');
+        setConnectionError(resp.error || t('connection.restartFailed'));
       }
     } catch (e) {
       logger.error('Restart failed: %s', String(e));
@@ -410,13 +412,13 @@ export default function App() {
           setChatMessages(prev => [...prev, { role: 'assistant', content: streamingMsgRef.current }]);
           setStreamingMsg('');
         }
-        setChatMessages(prev => [...prev, { role: 'assistant', content: 'Connection interrupted or request failed' }]);
+        setChatMessages(prev => [...prev, { role: 'assistant', content: t('agentMdEditor.connectionLost') }]);
         setChatSending(false);
         es.close();
         esRef.current = null;
       });
     } catch (e) {
-      setChatMessages(prev => [...prev, { role: 'assistant', content: `Request failed: ${String(e)}` }]);
+      setChatMessages(prev => [...prev, { role: 'assistant', content: `${t('agentMdEditor.error')}: ${String(e)}` }]);
       setChatSending(false);
     }
   }, [chatInput, chatSending, activePreset]);
@@ -563,18 +565,18 @@ export default function App() {
           <div className="modal-box" onClick={e => e.stopPropagation()}>
             <div className="modal-header">
               <span className="modal-icon">⚠</span>
-              <span>Browser restart required</span>
+              <span>{t('restartDialog.title')}</span>
             </div>
             <div className="modal-body">
               <p><strong>{restartDialog.browserName}</strong> is running but debug mode is not enabled.</p>
               <p>To connect to a user browser, close and restart {restartDialog.browserName} (with debug port).</p>
-              {restarting && <p className="modal-loading">Restarting {restartDialog.browserName}...</p>}
+              {restarting && <p className="modal-loading">{t('restartDialog.restarting', { browserName: restartDialog.browserName })}</p>}
             </div>
             <div className="modal-footer">
-              <button className="btn btn-secondary" onClick={handleRestartCancel} disabled={restarting}>Cancel</button>
-              <button className="btn btn-secondary" onClick={handleRestartIsolated} disabled={restarting}>Use Isolated Browser</button>
+              <button className="btn btn-secondary" onClick={handleRestartCancel} disabled={restarting}>{t('restartDialog.cancel')}</button>
+              <button className="btn btn-secondary" onClick={handleRestartIsolated} disabled={restarting}>{t('restartDialog.useIsolated')}</button>
               <button className="btn btn-primary" onClick={handleRestartConfirm} disabled={restarting}>
-                {restarting ? 'Restarting...' : 'Close & Restart'}
+                {restarting ? t('restartDialog.restarting', { browserName: restartDialog.browserName }) : t('restartDialog.closeAndRestart')}
               </button>
             </div>
           </div>
@@ -596,25 +598,25 @@ export default function App() {
 
       <div className="tab-bar">
         <div className={`tab ${activeTab === 'exec' ? 'active' : ''}`} onClick={() => setActiveTab('exec')}>
-          <span className="tab-icon">🎯</span> Run
-          {loading && <span className="tab-badge">Running</span>}
+          <span className="tab-icon">🎯</span> {t('tabs.run')}
+          {loading && <span className="tab-badge">{t('tabs.running')}</span>}
         </div>
         <div className={`tab ${activeTab === 'agentmd' ? 'active' : ''}`} onClick={() => setActiveTab('agentmd')}>
-          <span className="tab-icon">💬</span> Chat
+          <span className="tab-icon">💬</span> {t('tabs.chat')}
         </div>
         <div className={`tab ${activeTab === 'log' ? 'active' : ''}`} onClick={() => setActiveTab('log')}>
-          <span className="tab-icon">📋</span> Log
+          <span className="tab-icon">📋</span> {t('tabs.log')}
           {pendingReview && <span className="tab-dot" />}
         </div>
         <div className="tab-spacer" />
         <div className={`tab ${activeTab === 'pipelines' ? 'active' : ''}`} onClick={() => setActiveTab('pipelines')}>
-          <span className="tab-icon">📦</span> Pipelines
+          <span className="tab-icon">📦</span> {t('tabs.pipelines')}
         </div>
         <div className={`tab ${activeTab === 'params' ? 'active' : ''}`} onClick={() => setActiveTab('params')}>
-          <span className="tab-icon">⚙</span> Params
+          <span className="tab-icon">⚙</span> {t('tabs.params')}
         </div>
         <div className={`tab ${activeTab === 'settings' ? 'active' : ''}`} onClick={() => setActiveTab('settings')}>
-          <span className="tab-icon">⚙</span> Settings
+          <span className="tab-icon">⚙</span> {t('tabs.settings')}
         </div>
       </div>
 
