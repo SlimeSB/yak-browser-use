@@ -1,0 +1,47 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+*.egg
+.venv/
+venv/
+*.so
+
+# Environment
+.env
+.env.*
+!env.example
+
+# uv
+uv.lock
+
+# Electron / Node
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.electron-builder/
+release/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Project runtime data
+.lbu/
+
+# Hermes / tooling
+.hermes/
+.tasks/
+.codegraph/
+.history/
