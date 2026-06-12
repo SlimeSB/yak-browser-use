@@ -1,0 +1,165 @@
+3fa92ec docs: 重写 agent.md 语法参考文档
+0ee41eb docs: 归档旧计划和提示，新增重构文档和OpenSpec规范
+e7b6fdc refactor(settings): 移除连接模式与Profile设置项并优化diff样式
+25200cf refactor: 统一API请求处理并改进错误日志
+b9e29c7 feat(connection): 用内联输入框替代浏览器弹窗创建Profile
+0776204 fix(backend): 捕获后端启动异常并提示用户
+b4203df docs: 同步 workspace-bootstrap 和 tool-wip 架构到文档
+7115d36 feat(unify-agent-md-guard): 实现统一 agent.md 写入守卫管道
+c979393 docs(unify-agent-md-guard): 修正自学习路径snapshot_id生成并完善规格
+9a43436 docs(tools): 新增工具类实现并重构模块一数据流
+1de8336 fix(converter): 自动推断 md/txt 文件名作为 pipeline 名称
+3c2d1ba refactor(converter): pipeline-planner 重构，两阶段构建替换三阶段
+6651750 docs(pipeline-planner-refactor): 新建管道构建器重构设计方案文档
+e52cf3d fix(backend): 添加僵尸进程清理与 PID 文件管理
+e2548f2 Revert "Merge pull request #2 from SlimeSB/daoyu"
+dcd4cd5 Merge branch 'main' of ***
+8fcf454 fix: 修复 Windows 平台 GBK 编码导致的控制台乱码问题
+9998560 Merge pull request #2 from SlimeSB/daoyu
+a61d5c3 fix: 在 logger 中处理 EPIPE 错误
+c2a8943 fix(runner): 处理快照复制时的权限错误
+bad24f8 docs(openspec): 归档聊天代理变更并新增细化规范
+b83c343 docs(unify-agent-md-guard): 添加统一 agent.md 写入守卫的设计文档
+335d730 feat(chat-agent): 实现多轮对话Agent核心功能
+4801ff9 docs(chat-agent): 守卫管道与snapshot_id流程标准化
+66c24e9 docs(chat-agent): 添加多轮对话Agent设计文档和规格
+1872dc4 docs: 移动计划文件和存档变更
+459a946 feat(review): 实现pipeline审批流程与对话差异预览
+820dc6d refactor(renderer): 将 App.tsx 组件拆分为独立模块
+9d7e74e feat: 添加隔离Chrome配置文件管理功能
+b520f4e chore: 代码清理与稳定性增强
+a8160e2 feat(chat-edit): 实现agent.md对话编辑功能
+9e74c9b docs: 更新交接文档至2026-06-12版本
+d3a400c Reapply "feat: 实现技能系统（Skill System）"
+30363a4 docs: 添加项目交接文档 HANDOVER.md
+b6eeec0 feat: 添加聊天编辑功能并重构UI为暗色主题
+0c13be2 Revert "feat: 实现技能系统（Skill System）"
+3fcd3cb feat: 实现动态 Planner（运行时动态规划）
+8303720 chore: 低位项改进 — 鉴权 + Dispatch + 全局缓存
+7c16566 chore: 代码质量改进 — 硬编码路径统一 + 400/500 错误码区分
+3395f16 docs: 更新架构升级文档 — 补偿注册表对齐 Spec 设计
+d4c56b9 feat: 实现技能系统（Skill System）
+30d3384 feat: 实现 Chat Edit API 后端路由
+371878c docs: 添加 UI 重构与 Chat Edit API 实施计划及前端演示
+3ca7f73 feat: 补偿注册表——操作历史记录 + 撤销建议
+bf54a2a docs: 补偿注册表 spec 重构——从自动回滚改为建议生成
+0c3fadf docs: 补偿注册表 + 技能系统 OpenSpec change
+2f05d84 docs: 归档 daemon-lifecycle 变更并新增路由/状态规范
+e6b638b refactor: API 错误码 400 vs 500 区分
+4e256eb refactor: 硬编码路径统一为 WorkspaceManager
+df1df4d feat: Credential 深度脱敏
+97eed33 feat: 指数退避重试
+daaec03 chore: 代码质量修复四项
+b8bdcc3 fix(engine&daemon): 增强运行时稳定性和诊断能力
+6035436 refactor: 重构 Guardian 创建和工具执行逻辑
+a949c2d fix: 修复运行时健壮性和资源路径问题
+77fe496 feat: 实现pipeline动态发现与动态加载管线定义
+90ae603 feat: 添加凭据管理、WebSocket事件推送和Pipeline取消功能
+e5b20a8 feat: 新增必填参数校验和eval操作支持
+6018e69 feat(cli): 新增pipeline管理CLI及审批流程集成
+b5ed2d8 feat: 添加CLI参数注入和前端文档转换功能
+a271d9a feat(cli): 添加 tool/pipeline 调试子命令及 _PH- 生命周期
+c739ca2 feat(context): implement layered context system for Agent rules
+247ffce feat(prompts): add template resolver with {{template:xxx}} syntax
+c60c189 refactor(engine): extract lifecycle modules into _lifecycle/ subpackage
+070b157 docs: 更新 CLI 命令文档和 README
+c497d92 refactor: 将硬编码 LLM prompt 拆为独立文件
+3b879a0 chore: 技术债清理 - profiles合并 + 补日志 + cli拆函数 + 注释
+30551b4 chore: 加 asyncio.timeout 异常类型注释
+6ba16db chore: 清理 _PasswordSanitizer 中 _in_password 死代码
+0383959 fix: 重启端点改用 restart_daemon + cleanup 状态重置
+24e9647 feat: 新增 Chrome profile 管理、daemon 生命周期与超时保护
+da0459e docs: 添加 Daemon 生命周期管理设计文档
+85a4ac0 feat: 新增CLI浏览器操作命令与文件引用校验等多项功能
+6db1848 refactor(chrome): 将`daemon/chrome.py`拆分为`chrome/`包
+0db5c12 refactor(api): API层重构Phase1&2，拆分路由、解耦依赖
+e4d6e70 feat: 新增凭据管理系统和Chrome调试工具
+a86e368 feat(tool): 添加凭据安全系统与浏览器工具能力
+209f672 docs(openspec): 归档凭据安全层规范并合并至主规范
+f1d1369 docs(openspec): 添加通用 Tool 机制与凭据安全层设计文档
+90c7d2c archive: 归档已完成的所有 OpenSpec changes
+fae05ed fix(goal-step-type): 修复5个代码质量问题
+bacf00d feat(pipeline-lifecycle-api): 实现 /review /restart /cancel 三路由
+318603a feat(delivery-report): 交付报告测试 + Tool无产出支持
+86eaac0 feat(step-machine-core): 实现 StepMachine 状态机 + runner 循环改造 + delivery报告骨架
+6b54c65 feat(unify-step-construction): 实现统一StepDef序列化入口 + DAG排序 + get_status
+d453cd2 feat: 交付报告与Tool无产出支持
+56692d4 docs: 归档数据持久化文件契约变更并更新主规范
+7adecfe spec(openspec, pipeline-lifecycle-api, step-machine-core, unify-step-construction): 新增三个特性变更的 Openspec 规格文档
+cbbf62d docs: 新增架构演进规划与StepMachine设计文档，归档旧计划文档
+385f1ba feat: 实现 goal 步骤完整执行链路
+f8077ed docs: 更新 ARCHITECTURE.md 适配当前架构 + 修 spec 小问题
+13906c8 feat: 新增 goal-step-type OpenSpec change — 显式 goal: 标签 + runner 集成
+13a8a16 chore: 清理临时文件
+450383d docs: 更新 roadmap-pending-decisions — 全部任务已完成
+9e01d98 feat: ToolRunner 集成进 runner — _PH- 工具生命周期上线
+168d52c docs: 更新 roadmap — Guardian 已完成
+e23b5bb feat: Guardian approve + circuit_breaker 按 spec 完整实现
+4760323 feat: 版本/建议/拒绝 API 一步切换到新路径
+bc08932 docs: 修正 plan — agent.py/checkpoint.py/fallback.py 不是旧代码而是 goal-driven 功能
+3e762d6 chore: 删除完全损坏的测试文件（test_guardian.py / test_learn_cycle.py）
+67c1103 feat: 版本快照连线 runner + Guardian approve/circuit_breaker 实现
+6f06202 chore: 清理全项目未使用的 import（21 个文件）
+46e7f68 fix: API 适配新 runner + WorkspaceManager 增强 + 多处 bug 修复
+ee6584e chore: ToolRegistry 退化 — 移除 try_execute/for_generator_prompt/signature/returns/llm_hint
+143fa7d refactor(engine): 重构引擎为工作区驱动架构
+ef95bdc docs(spec): 完善数据持久化文件契约规范
+3f6234f docs: 归档探索性步骤注入设计文档并更新相关规范
+a82345c feat(guardian): 实现探索式步骤注入守卫系统
+9e504ee docs(specs): 归档goal-driven-engine设计并发布正式规范
+a7de2e3 docs(spec): 新增数据持久化文件契约设计规范
+089422a docs(exploratory-step-injection): 添加探索式步骤注入设计文档
+50b888d refactor(engine): 将agent和executor逻辑从runner中解耦
+6d40023 feat: 重构浏览器启动与Agent工具注册系统
+7ca6b35 docs: 更新架构文档，新增Agent双模式执行与版本管理
+6adf889 feat(engine): 实现agent工作流自愈与版本学习增强
+b2d5989 feat: 实现目标驱动引擎的学习-回放闭环
+47690c0 docs: 更新目标驱动引擎设计文档与规范
+bf017b6 docs: 添加Phase 1目标驱动执行引擎计划文档及旧架构参考代码
+49fde94 docs: 重构预设任务选择并新增工具注册系统
+85f64cf feat(chrome): 检测并自动重启用户浏览器以启用调试模式
+2794c9c fix(bu): 修复 Windows 平台编码、进程清理和 CDP 会话问题
+c77d987 fix(chrome): 调整域启用时机并优化进程终止
+3b00d83 docs: 归档 refactor-task-selection-ui 变更并提取规范到正式目录
+de98819 refactor(task-selection-ui): 重构任务选择界面，移除自由输入并新增CLI转换命令
+cff6e58 docs: 更新任务选择界面重构设计文档与规范
+f397f20 docs: 归档集成模块1工具的变更并发布规格文档
+f7790b8 docs: 添加任务选择界面重构的设计文档、提案及规范
+a1f554c feat(tools): 实现工具注册与描述系统并接入运行器与生成器
+2470b32 feat(runner): 支持执行JS操作
+e716707 docs: 全面更新项目文档和修复Chrome连接错误处理
+f5d358d feat(chrome): 重构浏览器连接状态管理并添加隔离清理
+b1a43d2 feat(main): 实现CSV/Excel导入导出功能
+5b49f3d feat(chrome): 实现浏览器连接/断开功能
+e79efd9 feat(***): 添加结构化日志系统
+4b9fc6b refactor: 接入已实现的架构桩模块
+d0cc8ff docs: 更新文档、.env.example、install.bat、start.bat
+cbe74f4 fix(chrome): 修复隔离浏览器fallback并完善Electron前端
+b92d44f refactor(***): 重构为三体架构并归档旧版变化
+e1c6a65 feat(***): 重构为三体架构浏览器自动化框架
+7ff3a68 docs: 添加三体架构设计文档及 LangGraph PoC 执行计划
+1a49c37 refactor(core): 重构代码质量，降低复杂度和嵌套
+8bc12d3 docs: 归档旧版变化并更新架构文档与README
+5f09998 feat(core): 实现 goal-driven 执行模式
+68fd9a8 feat(core): 实现 goal-driven 执行模式
+d901b13 feat(core): 按选品业务目标重构task划分
+addfde0 docs: 按选品业务目标重构 task 划分
+feba425 docs: 更新项目文档架构与开发指南
+0033ef5 fix(executor): 优化执行器查找逻辑并修复混合执行器重复初始化
+01e2f79 feat(core): 实现自学习自动化框架的完整架构
+5a8a646 docs(self-learning-automation): 细化Phase 0设计，统一slug生成与依赖传递
+1ecd09d fix: 任务失败中断 + 跨平台路径 + Prompt 精确化与登录健壮性
+fb5663d fix: 修复 PR review 指出的两个小问题
+61eb443 fix(browser): 跨平台 Chrome 路径支持
+c162ef9 docs(self-learning-automation): 重构为两阶段架构设计
+89c3ea3 fix: 任务失败后中断循环，新增/更新配置文件与任务
+6717ff7 feat: 支持持久化浏览器配置和多任务顺序执行
+897cd0a chore: 添加类型注解和Pyright配置
+8c6456f feat(keyword_research): 添加交互模式支持，允许人类覆盖LLM操作
+ef1f378 docs(self-learning-automation): 新增自学习自动化提案与设计文档
+01a980b feat: 自动检测 CAPTCHA 并按需使用 Mimo
+1459d61 feat(login): 集成Mimo多模态模型处理验证码
+6a6f32f feat: ***
+682da1f skill & ignore
+bf923a5 uv init
+ce1c050 Initial commit
