@@ -150,6 +150,41 @@ GOAL_RUN_TOOL: dict[str, Any] = {
     },
 }
 
+EDIT_PIPELINE_TOOL: dict[str, Any] = {
+    "type": "function",
+    "function": {
+        "name": "edit_pipeline",
+        "description": (
+            "Edit the current pipeline.yaml file. When you need to modify the pipeline "
+            "structure (add/remove steps, change descriptions, adjust browser_ops), "
+            "call this tool with the full updated YAML content. The user will see a "
+            "diff preview and can confirm or revert your changes."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "pipeline_name": {
+                    "type": "string",
+                    "description": "Name of the pipeline preset to edit.",
+                },
+                "content": {
+                    "type": "string",
+                    "description": "Full YAML content to write to the pipeline file.",
+                },
+                "explanation": {
+                    "type": "string",
+                    "description": "Human-readable explanation of what was changed and why.",
+                },
+                "edit_id": {
+                    "type": "string",
+                    "description": "Optional edit ID. If you are editing the same pipeline multiple times in one turn, pass the same edit_id to accumulate changes into a single review.",
+                },
+            },
+            "required": ["pipeline_name", "content", "explanation"],
+        },
+    },
+}
+
 
 def get_all_tools(include_goal_run: bool = True) -> list[dict[str, Any]]:
     """Get the full list of registered tools.
@@ -163,6 +198,7 @@ def get_all_tools(include_goal_run: bool = True) -> list[dict[str, Any]]:
     tools = list(BROWSER_TOOLS)
     if include_goal_run:
         tools.append(GOAL_RUN_TOOL)
+    tools.append(EDIT_PIPELINE_TOOL)
     return tools
 
 
