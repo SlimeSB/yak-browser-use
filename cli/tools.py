@@ -11,14 +11,13 @@ logger = get_logger(__name__)
 
 
 async def _cmd_tool_prompt(pipeline_path: str, step_key: str | None = None) -> None:
-    """Generate LLM prompts for all _PH- tool steps (no LLM call).
+    """Preview subagent goal templates for all _PH- tool steps (no LLM call).
 
     Args:
         pipeline_path: Path to the pipeline.yaml file.
         step_key: Optional step key to filter on.
     """
     from api.service import PipelineService
-    from engine._lifecycle.tool_runner import _build_generation_prompt as build_generation_prompt
 
     path = Path(pipeline_path)
     if not path.exists():
@@ -45,23 +44,28 @@ async def _cmd_tool_prompt(pipeline_path: str, step_key: str | None = None) -> N
 
         tool_name = step.get("tool_name", "")
         real_name = tool_name[4:] if tool_name.startswith("_PH-") else tool_name
+        desc = step.get("description", "")
+        params = step.get("params", {})
+        output_files = step.get("output", [])
 
         print(f"\u25a0 Step: {step.get('name', '?')} (key={step_key_val})")
         print(f"  tool: {tool_name} \u2192 {real_name}")
-        print(f"  desc: {step.get('description', '')[:100]}")
+        print(f"  desc: {desc[:100]}")
         print(f"  input: {step.get('input', {})}")
-        print(f"  output: {step.get('output', [])}")
-        print(f"  params: {step.get('params', {})}")
+        print(f"  output: {output_files}")
+        print(f"  params: {params}")
 
-        prompt = build_generation_prompt(
-            ph_name=tool_name,
-            real_name=real_name,
-            step_def=step,
-            upstream_sample="(not executed - preview mode)",
-        )
         box_draw = "\u2500"
         print(f"\n  {box_draw * 60}")
-        print(prompt)
+        print(f"  Subagent Goal Template for: {tool_name}")
+        print(f"  {box_draw}")
+        print(f"  Generate a Python tool function named '{real_name}'.")
+        print(f"  Description: {desc}")
+        print(f"  Parameters: {params}")
+        print(f"  Required output files: {output_files}")
+        print(f"  Function signature: def {real_name}(input_files: dict[str, str], output_dir: str, **params) -> None")
+        print(f"  Write code to: tools_dir/{tool_name}.py")
+        print(f"  Only import from whitelist (stdlib + bundled_deps from runtime-whitelist.json)")
         print(f"  {box_draw * 60}\n")
 
     if not matched and step_key:
@@ -142,12 +146,13 @@ async def _cmd_tool_dry_run(pipeline_path: str) -> None:
 
 
 async def _cmd_tool_run_ph(pipeline_path: str, step_key: str, llm_response_path: str | None = None) -> None:
-    """Single-step execute a _PH- tool lifecycle.
+    """Single-step execute a _PH- tool (requires pre-generated code).
 
     Args:
         pipeline_path: Path to the pipeline.yaml file.
         step_key: Step key or name to run.
-        llm_response_path: Optional path to a preset LLM response file (skips real call).
+        llm_response_path: Ignored (kept for backward compat). Code generation
+            is now handled by the ph-tool-generation skill.
     """
     from api.service import PipelineService
     from engine._lifecycle.tool_runner import ToolRunner
@@ -187,13 +192,13 @@ async def _cmd_tool_run_ph(pipeline_path: str, step_key: str, llm_response_path:
     events = EventSink(run_dir)
 
     guardian = Guardian()
-    runner = ToolRunner(wm.tools_dir, parsed.name, events, guardian)
+    runner = ToolRunner(wm.tools_dir, parsed.name, guardian)
 
     # Collect input files
     from engine.runner import _collect_input_files as collect_input_files
     input_files = collect_input_files(target_step.get("input", {}), run_dir)
 
-    print("\n\u2550\u2550\u2550 _PH- Tool Lifecycle Test \u2550\u2550\u2550\n")
+    print("\n\u2550\u2550\u2550 _PH- Tool Execution Test \u2550\u2550\u2550\n")
     print(f"  Pipeline: {parsed.name}")
     print(f"  Step:     {target_step.get('name', '?')}")
     print(f"  Key:      {step_key}")
@@ -202,41 +207,53 @@ async def _cmd_tool_run_ph(pipeline_path: str, step_key: str, llm_response_path:
     print(f"  Output:   {target_step.get('output', [])}")
     print(f"  Run Dir:  {run_dir}\n")
 
-    # Define mock or real LLM
-    def llm_call_fn(prompt: str) -> str:
-        """Return a preset LLM response or make a real call."""
-        if llm_response_path:
-            resp_path = Path(llm_response_path)
-            if resp_path.exists():
-                content = resp_path.read_text(encoding="utf-8")
-                print(f"  [Using preset LLM response: {resp_path}]")
-                return content
-            logger.warning("Preset file not found: %s, falling back to real LLM call", resp_path)
-        # Real LLM call
-        from utils.browser import create_llm
-        from browser_use.llm.messages import UserMessage
-        llm = create_llm()
-        response = llm.invoke([UserMessage(content=prompt)])  # type: ignore[reportAttributeAccessIssue]
-        if hasattr(response, "content"):
-            return str(response.content)
-        return str(response)
+    # Step 1: Check tool exists
+    if not runner.tool_exists(tool_name):
+        print("  \u2717 Tool file not found. Use ph-tool-generation skill to generate code first.")
+        events.close()
+        sys.exit(1)
 
-    # Execute lifecycle
-    print("  \u25b6 Starting _PH- lifecycle...\n")
-    result = await runner.run_ph_lifecycle(
-        ph_name=tool_name,
-        step_def=target_step,
-        input_files=input_files,
-        output_dir=str(step_dir),
-        llm_call_fn=llm_call_fn,
-        pipeline_path=path,
-        cdp_helpers=None,
-        max_retries=1,
+    # Step 2: Execute tool
+    print("  \u25b6 Executing tool...\n")
+    result = await runner.load_and_call(
+        tool_name,
+        input_files,
+        str(step_dir),
+        func_name=runner.strip_ph_prefix(tool_name),
+        **target_step.get("params", {}),
     )
 
-    print("\n  \u25a0 Lifecycle Result:")
+    print("\n  \u25a0 Execution Result:")
     for k, v in result.items():
         print(f"    {k}: {v}")
+
+    if not result.get("ok"):
+        events.close()
+        return
+
+    # Step 3: Validate output
+    guard_result = guardian.validate_output(str(step_dir), target_step.get("output", []))
+    print("\n  \u25a0 Guardian Result:")
+    for k, v in guard_result.items():
+        print(f"    {k}: {v}")
+
+    if not guard_result.get("ok"):
+        events.close()
+        return
+
+    # Step 4: Rename
+    rename_result = runner.rename_ph_file(tool_name)
+    print("\n  \u25a0 Rename Result:")
+    for k, v in rename_result.items():
+        print(f"    {k}: {v}")
+
+    if rename_result.get("ok"):
+        refs_result = runner.update_pipeline_refs(
+            tool_name, runner.strip_ph_prefix(tool_name), path,
+        )
+        print("\n  \u25a0 Pipeline Refs Update:")
+        for k, v in refs_result.items():
+            print(f"    {k}: {v}")
 
     # Check generated files
     ph_path = wm.tools_dir / f"{tool_name}.py"
@@ -246,13 +263,6 @@ async def _cmd_tool_run_ph(pipeline_path: str, step_key: str, llm_response_path:
     print("  \u25a0 Generated Files:")
     print(f"    _PH- file:   {ph_path} {ok_mark + ' exists' if ph_path.exists() else fail_mark + ' not found'}")
     print(f"    Real file:   {real_path} {ok_mark + ' exists' if real_path.exists() else fail_mark + ' not found'}")
-    if ph_path.exists():
-        code = ph_path.read_text(encoding="utf-8")
-        lines = code.split("\n")
-        print(f"    Lines:       {len(lines)}")
-        print("    Preview:\n")
-        for line in lines[:10]:
-            print(f"      | {line}")
 
     events.close()
 

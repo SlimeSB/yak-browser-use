@@ -35,22 +35,8 @@ from workspace.path_guard import PathGuard
 
 logger = get_logger(__name__)
 
-_PH_PREFIX = "_PH-"
-
 
 # ── helpers ──
-
-
-def _default_llm_call_fn(prompt: str) -> str:
-    """Default LLM call function for _PH- tool generation."""
-    from utils.browser import create_llm
-    from browser_use.llm.messages import UserMessage
-
-    llm = create_llm()
-    response = llm.invoke([UserMessage(content=prompt)])
-    if hasattr(response, "content"):
-        return str(response.content)
-    return str(response)
 
 
 def _write_execution_tree(run_dir: Path, machine: StepMachine, pipeline_name: str) -> None:
@@ -130,46 +116,86 @@ async def _execute_tool_step_with_guardian(
     ctx: RunContext,
     events: EventSink,
     pg: PathGuard,
-    llm_call_fn=None,
     pipeline_path: Path | None = None,
     cdp_helpers=None,
 ) -> dict:
     """Execute a tool step with path validation and guardian checks.
 
-    If the tool name starts with ``_PH-``, delegates to ToolRunner for the
-    full generate → validate → rename lifecycle.
+    If the tool name starts with ``_PH-``, checks whether the file exists.
+    Code generation is handled by the agent via the ph-tool-generation skill.
     """
     tool_name = step_def.get("tool_name", "")
 
-    # _PH- tool → ToolRunner lifecycle
-    if tool_name.startswith(_PH_PREFIX):
+    # _PH- tool → gate check + execute + validate + rename
+    if tool_name.startswith("_PH-"):
         from engine._lifecycle.tool_runner import ToolRunner
-        from engine._lifecycle.guardian import Guardian
 
-        wm = WorkspaceManager(ctx.pipeline_name)
-        guardian = Guardian(
-            approval_steps=[],
-            circuit_breaker_threshold=3,
-            versions_dir=str(wm.versions_dir) if wm.versions_dir else None,
-        )
-        runner = ToolRunner(tools_dir, ctx.pipeline_name, guardian)
+        runner = ToolRunner(tools_dir, ctx.pipeline_name)
+
+        if not runner.tool_exists(tool_name):
+            return {
+                "status": "failed",
+                "error": {
+                    "code": "TOOL_NOT_GENERATED",
+                    "message": (
+                        f"Tool '{tool_name}' has not been generated yet. "
+                        f"Use the ph-tool-generation skill to generate code first."
+                    ),
+                },
+            }
 
         input_files = _collect_input_files(step_def.get("input", {}), run_dir)
         for path in input_files.values():
             pg.validate_input(path)
 
-        result = await runner.run_ph_lifecycle(
-            ph_name=tool_name,
-            step_def=step_def,
-            input_files=input_files,
-            output_dir=str(step_dir),
-            llm_call_fn=llm_call_fn or _default_llm_call_fn,
-            pipeline_path=pipeline_path,
+        exec_result = await runner.load_and_call(
+            tool_name,
+            input_files,
+            str(step_dir),
             cdp_helpers=cdp_helpers,
+            func_name=runner.strip_ph_prefix(tool_name),
+            **step_def.get("params", {}),
         )
-        if result.get("upgraded"):
-            ctx.upgraded_tools.append(result["upgraded_name"])
-        return result
+        if not exec_result.get("ok"):
+            return {
+                "status": "failed",
+                "error": {
+                    "code": exec_result.get("error_code", "RUNTIME_ERROR"),
+                    "message": exec_result.get("error", ""),
+                },
+            }
+
+        guard_result = runner.guardian.validate_output(
+            str(step_dir), step_def.get("output", [])
+        )
+        if not guard_result.get("ok"):
+            return {
+                "status": "failed",
+                "error": {
+                    "code": "GUARDIAN_ERROR",
+                    "message": guard_result.get("detail", "Guardian validation failed"),
+                },
+            }
+
+        rename_result = runner.rename_ph_file(tool_name)
+        if rename_result.get("ok"):
+            runner.update_pipeline_refs(
+                tool_name, runner.strip_ph_prefix(tool_name), pipeline_path,
+            )
+            ctx.upgraded_tools.append(rename_result.get("new", ""))
+            return {
+                "status": "completed",
+                "upgraded": True,
+                "upgraded_name": rename_result.get("new"),
+            }
+
+        return {
+            "status": "completed",
+            "error": {
+                "code": "RENAME_ERROR",
+                "message": rename_result.get("error", ""),
+            },
+        }
 
     # Regular tool → direct execution
     input_files = _collect_input_files(step_def.get("input", {}), run_dir)
@@ -193,7 +219,6 @@ async def run_pipeline(
     version: str | None = None,
     pipeline_path: Path | None = None,
     frontmatter: dict | None = None,
-    llm_call_fn=None,
     resume_from_index: int = 0,
     guardian=None,
     ws_clients: list | None = None,
@@ -208,7 +233,6 @@ async def run_pipeline(
         version: Optional version string override.
         pipeline_path: Optional path to pipeline.yaml for snapshot and goal agent context.
         frontmatter: Optional pipeline frontmatter dict.
-        llm_call_fn: Callable for LLM-based tool generation (_PH- tools).
         resume_from_index: Step index to resume from (0 = start).
         guardian: Optional Guardian instance for approval gating.
         ws_clients: Optional list of WebSocket client queues for event broadcast.
@@ -358,7 +382,6 @@ async def run_pipeline(
                     ctx,
                     events,
                     pg,
-                    llm_call_fn=llm_call_fn,
                     pipeline_path=pipeline_path,
                     cdp_helpers=cdp_helpers,
                 )

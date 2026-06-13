@@ -36,7 +36,7 @@ Pipeline runner_preset
 ┌─ 纯门禁：文件存在？→ 执行 | 不存在 → TOOL_NOT_GENERATED
 └─ agent 通过 skill 文档编排生成
 
-Skill: ph-tool-generation (prompts/skill/ph-tool-generation-skill.md)
+Skill: ph-tool-generation (prompts/skill/ph-tool-generation.md)
 ┌── 1.  read_step_definition
 │   2.  collect_input_files
 │   3.  confirm_target_dir
@@ -57,7 +57,7 @@ Skill: ph-tool-generation (prompts/skill/ph-tool-generation-skill.md)
 - 将单体 LLM 调用拆解为原子化的 agent 编排流程（subagent 生成 + 主 agent 验收）
 - 引入 `runtime-whitelist.json` 作为硬性红线，确保生成的代码在客户机 EXE 中可用
 - 实现语义验收 + feedback 迭代模式，提升生成成功率
-- 将编排流程定义为 skill 文档（`prompts/skill/ph-tool-generation-skill.md`），由 `skill_view()` 加载，便于复用和维护
+- 将编排流程定义为 skill 文档（`prompts/skill/ph-tool-generation.md`），由 `skill_view()` 加载，便于复用和维护
 - 瘦身 `ToolRunner`，只保留纯执行原子操作
 
 **非目标：**
@@ -68,7 +68,7 @@ Skill: ph-tool-generation (prompts/skill/ph-tool-generation-skill.md)
 
 ## 原子操作编排流程（14 步）
 
-Hermes skill `prompts/skill/ph-tool-generation-skill.md` 定义的编排流程按以下编号顺序执行：
+Hermes skill `prompts/skill/ph-tool-generation.md` 定义的编排流程按以下编号顺序执行：
 
 | # | 操作名 | 说明 |
 |---|--------|------|
@@ -166,14 +166,14 @@ Python 层（`ToolRunner`）只保留纯执行原子操作（load、exec、renam
 
 1. 新建 `runtime-whitelist.json`（Task 1）
 2. 新建 `utils/skill_loader.py`——轻量版 `skill_view()`（Task 2.0）
-3. 新建 `prompts/skill/ph-tool-generation-skill.md`（Task 2.1）— 先用 `skill_view()` 验证可加载，再逐步完善
+3. 新建 `prompts/skill/ph-tool-generation.md`（Task 2.1）— 先用 `skill_view()` 验证可加载，再逐步完善
 4. 简化 `ToolRunner`，删除生成方法，拆分 `atomic_rename_ph`（Task 2.2, 2.3）
 5. 简化 `runner_preset.py`，_PH- 分支改为纯门禁（Task 2.4）
 6. 清理 `llm_call_fn` 参数：只改 `run_pipeline` 签名，外部调用点已无传参（Task 2.5）
 7. 适配 CLI 工具命令；顺手修 `cli/tools.py:190` 的构造函数参数 bug（Task 2.6）
 8. 测试验证（Task 3）
 
-回滚：恢复 `tool_runner.py`、`runner_preset.py`、`cli/tools.py` 的旧版本，删除 `runtime-whitelist.json`、`utils/skill_loader.py`、`prompts/skill/ph-tool-generation-skill.md`。
+回滚：恢复 `tool_runner.py`、`runner_preset.py`、`cli/tools.py` 的旧版本，删除 `runtime-whitelist.json`、`utils/skill_loader.py`、`prompts/skill/ph-tool-generation.md`。
 
 ## 待确认问题
 
