@@ -465,7 +465,10 @@ app.on('before-quit', () => {
 });
 
 app.on('will-quit', () => {
-  py?.stop();
+  if (!_stopping) {
+    _stopping = true;
+    py?.stop();
+  }
 });
 
 // ── Export helpers ──
