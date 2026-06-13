@@ -10,6 +10,10 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from enum import Enum
 
+from utils.logging import get_logger
+
+logger = get_logger(__name__)
+
 
 class FailoverReason(Enum):
     """Reason an LLM call failed and needs failover."""
@@ -130,6 +134,14 @@ def classify_api_error(
         elif "context" in msg_lower or "token" in msg_lower or "length" in msg_lower:
             reason = FailoverReason.CONTEXT_LENGTH
             retryable = False
+
+    logger.debug(
+        "Classified API error: reason=%s, retryable=%s, provider=%s, message=%s",
+        reason.value,
+        retryable,
+        provider,
+        message,
+    )
 
     return ClassifiedError(
         reason=reason,

@@ -12,6 +12,10 @@ import os
 import time
 from pathlib import Path
 
+from utils.logging import get_logger
+
+logger = get_logger(__name__)
+
 
 PRESETS_DIR = Path.home() / ".ybu" / "sessions" / "presets"
 
@@ -59,6 +63,7 @@ async def edit_pipeline(
     is_first = edit_id not in _processed_edits
 
     if is_first:
+        logger.info("First edit on %s", safe_name)
         checkpoint_path = PRESETS_DIR / f"{safe_name}.pipeline.yaml.{edit_id}.orig"
         checkpoint_path.write_text(preset_path.read_text(encoding="utf-8"), encoding="utf-8")
         _checkpoints[edit_id] = checkpoint_path
@@ -66,6 +71,7 @@ async def edit_pipeline(
         _edit_status[edit_id] = "pending"
 
     preset_path.write_text(content, encoding="utf-8")
+    logger.debug("Pipeline %s updated, edit_id=%s", safe_name, edit_id)
 
     checkpoint_path = _checkpoints.get(edit_id)
     if checkpoint_path and checkpoint_path.exists():

@@ -4,6 +4,10 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from pathlib import Path
 
+from utils.logging import get_logger
+
+logger = get_logger(__name__)
+
 STATUS_ICONS = {
     "completed": "\u2705",
     "partial": "\u26a0\ufe0f",
@@ -63,4 +67,12 @@ def write_delivery_report(
 
     report_path = step_dir / "delivery-report.md"
     report_path.write_text(content, encoding="utf-8")
+    logger.info(
+        "Wrote delivery report: path=%s, pipeline=%s, step=%s, status=%s, duration_ms=%d",
+        report_path,
+        pipeline_name,
+        step_name,
+        status,
+        duration_ms,
+    )
     return report_path

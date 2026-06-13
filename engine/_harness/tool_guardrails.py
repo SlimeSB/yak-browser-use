@@ -10,6 +10,9 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from prompts._loader import load_prompt
+from utils.logging import get_logger
+
+logger = get_logger(__name__)
 
 
 @dataclass
@@ -71,18 +74,36 @@ class ToolCallGuardrailState:
 
         if self.config.hard_stop_enabled:
             if exact_count >= self.config.exact_failure_block_after:
+                logger.error(
+                    "Guardrail blocked: exact_failure for %s, count=%d (block after %d)",
+                    tool_name,
+                    exact_count,
+                    self.config.exact_failure_block_after,
+                )
                 return load_prompt(
                     "guardrails/exact_failure",
                     tool_name=tool_name,
                     count=str(exact_count),
                 )
             if tool_count >= self.config.same_tool_failure_halt_after:
+                logger.error(
+                    "Guardrail blocked: same_tool_failure for %s, count=%d (halt after %d)",
+                    tool_name,
+                    tool_count,
+                    self.config.same_tool_failure_halt_after,
+                )
                 return load_prompt(
                     "guardrails/same_tool_failure",
                     tool_name=tool_name,
                     count=str(tool_count),
                 )
             if no_prog_count >= self.config.no_progress_block_after:
+                logger.error(
+                    "Guardrail blocked: no_progress for %s, count=%d (block after %d)",
+                    tool_name,
+                    no_prog_count,
+                    self.config.no_progress_block_after,
+                )
                 return load_prompt(
                     "guardrails/no_progress",
                     tool_name=tool_name,
@@ -120,18 +141,36 @@ class ToolCallGuardrailState:
         warning: str | None = None
 
         if exact_count >= self.config.exact_failure_warn_after:
+            logger.warning(
+                "Guardrail warning: exact_failure for %s, count=%d (warn after %d)",
+                tool_name,
+                exact_count,
+                self.config.exact_failure_warn_after,
+            )
             warning = load_prompt(
                 "guardrails/exact_failure",
                 tool_name=tool_name,
                 count=str(exact_count),
             )
         elif tool_count >= self.config.same_tool_failure_warn_after:
+            logger.warning(
+                "Guardrail warning: same_tool_failure for %s, count=%d (warn after %d)",
+                tool_name,
+                tool_count,
+                self.config.same_tool_failure_warn_after,
+            )
             warning = load_prompt(
                 "guardrails/same_tool_failure",
                 tool_name=tool_name,
                 count=str(tool_count),
             )
         elif no_prog_count >= self.config.no_progress_warn_after:
+            logger.warning(
+                "Guardrail warning: no_progress for %s, count=%d (warn after %d)",
+                tool_name,
+                no_prog_count,
+                self.config.no_progress_warn_after,
+            )
             warning = load_prompt(
                 "guardrails/no_progress",
                 tool_name=tool_name,

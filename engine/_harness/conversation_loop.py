@@ -122,6 +122,9 @@ async def run_conversation_loop(
         turn_count += 1
         turn_ctx = build_turn_context(guardrail_state=guardrail_state)
 
+        logger.debug("conversation_loop: turn %d (budget remaining=%d)",
+                     turn_count, budget.remaining)
+
         if stream_callback:
             stream_callback({
                 "type": "turn_start",
@@ -156,6 +159,8 @@ async def run_conversation_loop(
         tool_calls = getattr(response, "tool_calls", None) or []
 
         if tool_calls:
+            logger.debug("conversation_loop: turn %d has %d tool call(s)",
+                         turn_count, len(tool_calls))
             messages.append(_build_assistant_message(response))
 
             try:
@@ -182,6 +187,8 @@ async def run_conversation_loop(
                 content = getattr(response, "completion", "")
             final_response = content or ""
             messages.append(_build_assistant_message(response))
+            logger.debug("conversation_loop: turn %d text response (%d chars)",
+                         turn_count, len(final_response or ""))
             if stream_callback:
                 stream_callback({
                     "type": "chat.message",

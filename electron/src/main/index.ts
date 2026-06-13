@@ -104,7 +104,7 @@ app.whenReady().then(async () => {
     logger.debug('IPC: api:run called with %d chars, params=%s', agentMd.length, JSON.stringify(params || {}));
     return _apiFetch('/api/run', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ agent_md: agentMd, params: params || {} }),
+      body: JSON.stringify({ pipeline: agentMd, params: params || {} }),
     }, 'api:run');
   });
 

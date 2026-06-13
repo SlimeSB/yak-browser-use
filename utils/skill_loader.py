@@ -6,6 +6,10 @@ from pathlib import Path
 
 import yaml
 
+from utils.logging import get_logger
+
+logger = get_logger(__name__)
+
 SKILL_DIRS = [Path("prompts/skill")]
 
 
@@ -24,7 +28,9 @@ def skill_view(name: str) -> dict:
     for base in SKILL_DIRS:
         path = base / f"{name}.md"
         if path.exists():
+            logger.info("Loaded skill '%s' from %s", name, path)
             return _parse_skill(path)
+    logger.warning("Skill '%s' not found in %s", name, [str(d) for d in SKILL_DIRS])
     return {"error": f"Skill '{name}' not found in {[str(d) for d in SKILL_DIRS]}"}
 
 

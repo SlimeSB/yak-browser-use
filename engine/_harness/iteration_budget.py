@@ -7,6 +7,10 @@ don't consume the outer budget.
 
 from __future__ import annotations
 
+from utils.logging import get_logger
+
+logger = get_logger(__name__)
+
 
 class IterationBudget:
     """Tracks remaining LLM round-trips and supports goal_run pause/resume."""
@@ -21,6 +25,7 @@ class IterationBudget:
         self.max_total = max_total
         self._used: int = 0
         self._paused: bool = False
+        logger.debug("IterationBudget created: max_total=%d", max_total)
 
     @property
     def remaining(self) -> int:
@@ -42,15 +47,24 @@ class IterationBudget:
         """Consume *count* round-trips. Returns remaining."""
         if not self._paused:
             self._used += count
-        return self.remaining
+        remaining = self.remaining
+        if remaining <= 0:
+            logger.warning(
+                "Iteration budget exhausted: used=%d, max_total=%d",
+                self._used,
+                self.max_total,
+            )
+        return remaining
 
     def pause(self) -> None:
         """Pause budget consumption (for goal_run)."""
         self._paused = True
+        logger.debug("IterationBudget paused: used=%d", self._used)
 
     def resume(self) -> None:
         """Resume budget consumption."""
         self._paused = False
+        logger.debug("IterationBudget resumed: used=%d", self._used)
 
     def reset(self) -> None:
         self._used = 0

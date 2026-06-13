@@ -78,7 +78,7 @@ declare global {
       windowMaximize: () => Promise<void>;
       windowClose: () => Promise<void>;
       cancelPipeline: (pipelineName: string, runId: string) => Promise<{ cancelled?: boolean; error?: string }>;
-      listCredentials: () => Promise<{ credentials: string[]; error?: string }>;
+      listCredentials: () => Promise<{ params: string[]; error?: string }>;
       setCredential: (key: string, value: string) => Promise<{ key: string; set: boolean; error?: string }>;
       deleteCredential: (key: string) => Promise<{ key: string; deleted: boolean; error?: string }>;
       chatConfirm: (editId: string) => Promise<{ status?: string; error?: string }>;
@@ -86,8 +86,8 @@ declare global {
       reviewPipeline: (threadId: string, action: string, reason?: string) => Promise<{ status?: string; error?: string }>;
       getPort: () => Promise<number>;
       showAlert: (message: string) => Promise<void>;
-      getProviderConfig: () => Promise<{ ok: boolean; config: Record<string, string> }>;
-      setProviderConfig: (config: Record<string, string>) => Promise<{ ok: boolean }>;
+      getProviderConfig: () => Promise<{ ok: boolean; config: Record<string, unknown> }>;
+      setProviderConfig: (config: Record<string, unknown>) => Promise<{ ok: boolean }>;
       testProvider: (config: Record<string, string>) => Promise<{ ok: boolean; response?: string; error?: string }>;
     };
   }

@@ -15,6 +15,10 @@ import re
 from pathlib import Path
 from typing import Any
 
+from utils.logging import get_logger
+
+logger = get_logger(__name__)
+
 CAPABILITIES: list[str] = []
 
 
@@ -84,6 +88,8 @@ async def filter_data(
     files = _resolve_input_files(input_files)
     if not files:
         raise FileNotFoundError("No input files found from input_files mapping")
+
+    logger.debug("filter_data: starting, %d input file(s), params=%s", len(files), str(params))
 
     all_records: list[dict] = []
     for f in files:
@@ -160,6 +166,8 @@ async def sort_data(
     if not files:
         raise FileNotFoundError("No input files found from input_files mapping")
 
+    logger.debug("sort_data: starting, %d input file(s), params=%s", len(files), str(params))
+
     all_records: list[dict] = []
     for f in files:
         all_records.extend(_load_records(f))
@@ -203,6 +211,8 @@ async def deduplicate(
     files = _resolve_input_files(input_files)
     if not files:
         raise FileNotFoundError("No input files found from input_files mapping")
+
+    logger.debug("deduplicate: starting, %d input file(s), params=%s", len(files), str(params))
 
     all_records: list[dict] = []
     for f in files:
@@ -258,6 +268,8 @@ async def map_fields(
     files = _resolve_input_files(input_files)
     if not files:
         raise FileNotFoundError("No input files found from input_files mapping")
+
+    logger.debug("map_fields: starting, %d input file(s), params=%s", len(files), str(params))
 
     all_records: list[dict] = []
     for f in files:

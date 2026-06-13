@@ -8,6 +8,10 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
+from utils.logging import get_logger
+
+logger = get_logger(__name__)
+
 
 @dataclass
 class StepInfo:
@@ -42,6 +46,7 @@ class TaskDescriptor:
 
     def format(self) -> str:
         """Return markdown-formatted task description for system prompt injection."""
+        logger.debug("Formatting TaskDescriptor: pipeline=%s, progress=%s", self.pipeline_name, self.progress)
         lines: list[str] = []
         lines.append(f"## Pipeline: {self.pipeline_name}")
         if self.goal:
@@ -113,6 +118,12 @@ class PipelineTaskAdapter:
                 step_type=step_type,
                 status="pending",
             ))
+
+        logger.debug(
+            "Built TaskDescriptor: pipeline=%s, steps=%d",
+            pipeline_name,
+            len(steps),
+        )
 
         return TaskDescriptor(
             pipeline_name=pipeline_name,

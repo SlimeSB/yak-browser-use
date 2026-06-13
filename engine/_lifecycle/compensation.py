@@ -3,6 +3,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from utils.logging import get_logger
+
+logger = get_logger(__name__)
+
 UNDO_MAP: dict[str, str | None] = {
     "fill": "clear",
     "goto": "go_back",
@@ -67,6 +71,7 @@ class CompensationRegistry:
             reversible=reversible,
         )
         self._ops.append(record)
+        logger.debug("Registered op: index=%d, type=%s, undo=%s", op_index, op_type, suggested_undo)
         return record
 
     @staticmethod
@@ -86,6 +91,11 @@ class CompensationRegistry:
         rollback: list[dict] = []
         for record in reversed(self._ops[:failed_index]):
             rollback.append(record.to_dict())
+        logger.info(
+            "Suggested rollback: failed_index=%d, ops_to_undo=%d",
+            failed_index,
+            len(rollback),
+        )
         return rollback
 
     def to_list(self) -> list[dict]:

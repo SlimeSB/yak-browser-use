@@ -5,18 +5,28 @@ import json
 import os
 from pathlib import Path
 
+from utils.logging import get_logger
+
+logger = get_logger(__name__)
+
 
 def _get_config_path() -> Path:
-    return Path.home() / ".ybu" / "provider.json"
+    p = Path.home() / ".ybu" / "provider.json"
+    logger.debug("Config path: %s", p)
+    return p
 
 
 def _load_config() -> dict:
     p = _get_config_path()
     if p.exists():
         try:
-            return json.loads(p.read_text(encoding="utf-8"))
-        except Exception:
+            cfg = json.loads(p.read_text(encoding="utf-8"))
+            logger.debug("Loaded config from %s", p)
+            return cfg
+        except Exception as e:
+            logger.debug("Failed to load config from %s: %s", p, e)
             pass
+    logger.debug("No config file found at %s", p)
     return {}
 
 

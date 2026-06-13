@@ -30,7 +30,7 @@ export default function SettingsTab({
       if (r.ok && r.config) {
         const { presets: p, ...rest } = r.config;
         setProviderConfig(prev => ({ ...prev, ...rest }));
-        if (p) setPresets(p);
+        if (p) setPresets(p as Record<string, { model: string; api_key: string; api_base: string }>);
       }
     });
   }, []);

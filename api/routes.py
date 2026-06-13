@@ -128,7 +128,7 @@ def register_all_routes(app: FastAPI) -> None:
         Returns immediately with a ``run_id``.  Poll ``GET /api/status``
         or subscribe to ``/ws/events`` for completion.
         """
-        pipeline_text = request.get("pipeline") or request.get("agent_md", "")
+        pipeline_text = request.get("pipeline", "")
         params = request.get("params", {}) or {}
         logger.debug("POST /api/run: pipeline=%s... params=%s", pipeline_text[:80], params)
 
@@ -649,6 +649,7 @@ def register_all_routes(app: FastAPI) -> None:
         if not message:
             raise APIError("message is required")
 
+        logger.info("Chat message: %s", message[:120])
         service = Service(engine_state)
         try:
             from cdp.helpers import CDPHelpers
@@ -662,6 +663,12 @@ def register_all_routes(app: FastAPI) -> None:
                 pipeline_name="chat",
                 llm_call=_create_chat_llm_call(),
             )
+            resp_preview = (result.get("response") or "")[:80]
+            logger.info("Chat response (%s, %d turns, %dms): %s",
+                        result.get("status", "?"),
+                        result.get("turn_count", 0),
+                        result.get("duration_ms", 0),
+                        resp_preview)
             return JSONResponse(result)
         except Exception as exc:
             logger.exception("Chat processing failed")
@@ -674,6 +681,7 @@ def register_all_routes(app: FastAPI) -> None:
 
         service = Service(engine_state)
         session = service.reset_session()
+        logger.info("Chat session reset: new session_id=%s", session.session_id)
         return JSONResponse({
             "ok": True,
             "session_id": session.session_id,
@@ -687,6 +695,7 @@ def register_all_routes(app: FastAPI) -> None:
 
         service = Service(engine_state)
         service.cancel_session()
+        logger.info("Chat session cancelled")
         return JSONResponse({"ok": True})
 
     @app.post("/api/chat/confirm")

@@ -10,6 +10,10 @@ import os
 from pathlib import Path
 from typing import Any
 
+from utils.logging import get_logger
+
+logger = get_logger(__name__)
+
 CAPABILITIES: list[str] = []
 
 
@@ -32,6 +36,8 @@ async def csv_to_json(
     files = _resolve_input_files(input_files)
     if not files:
         raise FileNotFoundError("No input files found from input_files mapping")
+
+    logger.debug("csv_to_json: starting with %d input file(s), output_dir=%s", len(files), output_dir)
 
     delimiter = params.get("delimiter", ",")
     encoding = params.get("encoding", "utf-8-sig")
@@ -63,6 +69,7 @@ async def csv_to_json(
     with open(out_dir / out_name, "w", encoding="utf-8") as f:
         json.dump(output_data, f, ensure_ascii=False, indent=indent)
 
+    logger.debug("csv_to_json: %d records -> %s", len(all_records), out_dir / out_name)
     print(f"csv_to_json: {len(all_records)} records -> {out_dir / out_name}")
 
 
@@ -82,6 +89,8 @@ async def json_to_csv(
     files = _resolve_input_files(input_files)
     if not files:
         raise FileNotFoundError("No input files found from input_files mapping")
+
+    logger.debug("json_to_csv: starting with %d input file(s), output_dir=%s", len(files), output_dir)
 
     delimiter = params.get("delimiter", ",")
     encoding = params.get("encoding", "utf-8")
@@ -122,6 +131,7 @@ async def json_to_csv(
         for record in all_records:
             writer.writerow({k: record.get(k, "") for k in fieldnames})
 
+    logger.debug("json_to_csv: %d records -> %s", len(all_records), out_dir / out_name)
     print(f"json_to_csv: {len(all_records)} records -> {out_dir / out_name}")
 
 
@@ -143,6 +153,8 @@ async def apply_field_mapping(
     files = _resolve_input_files(input_files)
     if not files:
         raise FileNotFoundError("No input files found from input_files mapping")
+
+    logger.debug("apply_field_mapping: starting with %d input file(s), output_dir=%s", len(files), output_dir)
 
     mapping = params.get("mapping", {})
     drop_others = params.get("drop_others", False)
@@ -180,6 +192,7 @@ async def apply_field_mapping(
     with open(out_dir / out_name, "w", encoding="utf-8") as f:
         json.dump(mapped_records, f, ensure_ascii=False, indent=2)
 
+    logger.debug("apply_field_mapping: %d records -> %s", len(mapped_records), out_dir / out_name)
     print(f"apply_field_mapping: {len(mapped_records)} records -> {out_dir / out_name}")
 
 

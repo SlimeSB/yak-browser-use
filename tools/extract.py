@@ -15,6 +15,10 @@ import json
 from pathlib import Path
 from typing import Any
 
+from utils.logging import get_logger
+
+logger = get_logger(__name__)
+
 CAPABILITIES: list[str] = ["browser"]
 
 # ── Client-side JS for table extraction ──
@@ -219,6 +223,8 @@ async def extract_table(
     if poll_seconds > 0:
         await cdp_helpers.wait(poll_seconds)
 
+    logger.debug("extract_table: target=%s, poll_seconds=%s", params.get("selector", "auto"), poll_seconds)
+
     result = await cdp_helpers._helpers.js(EXTRACT_TABLE_JS)
     if result and result.get("rows"):
         out_path = _save_output(result, output_dir, "table.json")
@@ -249,6 +255,8 @@ async def extract_list(
     poll_seconds = params.get("poll_seconds", 1.0)
     if poll_seconds > 0:
         await cdp_helpers.wait(poll_seconds)
+
+    logger.debug("extract_list: target=%s, poll_seconds=%s", params.get("selector", "auto"), poll_seconds)
 
     # Use custom JS or the generic extract
     if params.get("selector"):
@@ -294,6 +302,8 @@ async def extract_details(
     poll_seconds = params.get("poll_seconds", 1.0)
     if poll_seconds > 0:
         await cdp_helpers.wait(poll_seconds)
+
+    logger.debug("extract_details: target=%s, poll_seconds=%s", params.get("selector", "auto"), poll_seconds)
 
     if params.get("selector"):
         custom_js = f"""() => {{

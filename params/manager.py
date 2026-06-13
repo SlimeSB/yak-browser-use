@@ -9,6 +9,10 @@ import json
 import os
 from pathlib import Path
 
+from utils.logging import get_logger
+
+logger = get_logger(__name__)
+
 _DEFAULT_STORE_PATH = Path.home() / ".ybu" / "params.json"
 
 
@@ -74,9 +78,16 @@ class ParamManager:
         )
 
     def get(self, key: str) -> str | None:
-        return self._load().get(key)
+        data = self._load()
+        value = data.get(key)
+        if value is not None:
+            logger.debug("Param hit: %s", key)
+        else:
+            logger.debug("Param miss: %s", key)
+        return value
 
     def set(self, key: str, value: str) -> None:
+        logger.info("Param set: %s", key)
         data = self._load()
         data[key] = value
         self._save(data)
@@ -85,6 +96,7 @@ class ParamManager:
         return list(self._load().keys())
 
     def delete(self, key: str) -> None:
+        logger.info("Param delete: %s", key)
         data = self._load()
         data.pop(key, None)
         self._save(data)

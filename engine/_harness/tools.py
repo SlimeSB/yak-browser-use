@@ -8,6 +8,10 @@ from __future__ import annotations
 
 from typing import Any
 
+from utils.logging import get_logger
+
+logger = get_logger(__name__)
+
 BROWSER_TOOLS: list[dict[str, Any]] = [
     {
         "type": "function",
@@ -443,9 +447,12 @@ def get_all_tools(include_goal_run: bool = True) -> list[dict[str, Any]]:
         tools.append(GOAL_RUN_TOOL)
     tools.extend(PIPELINE_TOOLS)
     tools.append(RECORD_STEP_TOOL)
+    logger.debug("get_all_tools: registered %d tools (include_goal_run=%s)", len(tools), include_goal_run)
     return tools
 
 
 def get_browser_tools() -> list[dict[str, Any]]:
     """Get only browser atomics (no goal_run)."""
-    return list(BROWSER_TOOLS)
+    tools = list(BROWSER_TOOLS)
+    logger.debug("get_browser_tools: registered %d tools", len(tools))
+    return tools

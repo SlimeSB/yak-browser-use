@@ -2,6 +2,10 @@
 
 from pathlib import Path
 
+from utils.logging import get_logger
+
+logger = get_logger(__name__)
+
 _PROMPTS_DIR = Path(__file__).parent
 
 
@@ -16,6 +20,10 @@ def load_prompt(name: str, **variables: str) -> str:
     KeyError from natural {literal} characters in prompt files.
     """
     path = (_PROMPTS_DIR / name).with_suffix(".md")
+    if not path.exists():
+        logger.warning("Prompt file not found: %s", path)
+        return ""
+    logger.debug("Loaded prompt: %s", path)
     text = path.read_text(encoding="utf-8")
     for key, value in variables.items():
         text = text.replace(f"{{{key}}}", value)

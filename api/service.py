@@ -52,6 +52,7 @@ class Service:
         session_id = f"session_{int(time.time() * 1000)}"
         session = SessionState(session_id=session_id, pipeline_name=pipeline_name)
         self._active_session = session
+        logger.info("Session created: %s (pipeline=%s)", session_id, pipeline_name or "chat")
         self._push_event({"type": "session.state", "status": "idle", "session_id": session_id})
         return session
 
@@ -105,10 +106,15 @@ class Service:
 
         if self._active_session is None:
             self.create_session(pipeline_name)
+            created = self._active_session
+            if created:
+                logger.info("Session created: %s", created.session_id)
 
         session = self._active_session
         if session is None:
             return {"ok": False, "error": "No active session"}
+
+        logger.info("Chat [%s] user: %s", session.session_id, message[:120])
 
         session.status = "running"
         self._push_event({
@@ -143,6 +149,11 @@ class Service:
 
             session.status = "completed" if not result.interrupted else "cancelled"
             session.budget_snapshot = result.budget.to_dict()
+
+            resp_preview = (result.final_response or "")[:120]
+            logger.info("Chat [%s] done: status=%s turns=%d duration=%dms response: %s",
+                        session.session_id, session.status,
+                        result.turn_count, result.duration_ms, resp_preview)
 
             return {
                 "ok": True,

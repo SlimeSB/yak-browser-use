@@ -6,6 +6,9 @@ from dataclasses import dataclass, field
 
 from engine._harness.tool_guardrails import ToolCallGuardrailState
 from engine._harness.iteration_budget import IterationBudget
+from utils.logging import get_logger
+
+logger = get_logger(__name__)
 
 
 @dataclass
@@ -30,6 +33,7 @@ class TurnContext:
         self.empty_content_retries = 0
         self.api_retries = 0
         self.turn_messages_snapshot.clear()
+        logger.debug("TurnContext reset: retry counters cleared")
 
     def snapshot(self, messages: list[dict]) -> None:
         """Save messages for later restore (interrupt scenario)."""
@@ -72,7 +76,9 @@ def build_turn_context(
     """
     if guardrail_state is not None:
         guardrail_state.reset()
-    return TurnContext()
+    ctx = TurnContext()
+    logger.debug("Built fresh TurnContext")
+    return ctx
 
 
 def save_interrupt_state(

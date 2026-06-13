@@ -10,6 +10,10 @@ import os
 import time
 from pathlib import Path
 
+from utils.logging import get_logger
+
+logger = get_logger(__name__)
+
 PRESETS_DIR = Path.home() / ".ybu" / "sessions" / "presets"
 
 
@@ -52,6 +56,7 @@ async def record_step(
             data = {}
     else:
         data = {}
+        logger.info("Creating new pipeline: %s", safe_name)
 
     if not isinstance(data, dict):
         data = {}
@@ -81,6 +86,7 @@ async def record_step(
         steps[existing_idx] = step_entry
     else:
         steps.append(step_entry)
+        logger.debug("Recording step %s: %s", step_name, op_type)
 
     # Save checkpoint before writing
     original = preset_path.read_text(encoding="utf-8") if preset_path.exists() else ""
@@ -106,6 +112,7 @@ def _push_edit_event(pipeline_name: str, original: str, modified: str, step_name
     # Save checkpoint
     checkpoint_path = PRESETS_DIR / f"{pipeline_name}.pipeline.yaml.{edit_id}.orig"
     checkpoint_path.write_text(original, encoding="utf-8")
+    logger.debug("Saved checkpoint: %s", checkpoint_path)
 
     diff_lines = list(difflib.unified_diff(
         original.splitlines(keepends=True),
