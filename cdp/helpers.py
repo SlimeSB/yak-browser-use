@@ -33,6 +33,7 @@ class CDPHelpers:
 
     def __init__(self, daemon: object):
         self._daemon = daemon
+        self._element_map: dict[str, dict] = {}
 
     async def _cdp(self, method: str, params: dict | None = None, _sensitive: bool = False) -> Any:
         if _sensitive and params:
@@ -157,3 +158,107 @@ class CDPHelpers:
         logger.info("simplified snapshot degraded to full")
         full = await self.capture_snapshot()
         return {"summary": "", "lists": [], "tables": [], "mode": "simplified", "degraded": True, **full}
+
+    async def add_dom_highlights(self, elements: list[dict] | None = None) -> dict:
+        """Inject interactive element highlight badges into the page.
+
+        Args:
+            elements: Optional pre-scanned element list. If None, scans via
+                      ``_inject_simplify_js("interactive")``.
+
+        Returns:
+            ``{ok, count, element_map}``.
+        """
+        if elements is None:
+            js_result = await self._inject_simplify_js("interactive")
+            if not js_result or not isinstance(js_result, dict):
+                return {"ok": True, "count": 0, "element_map": {}}
+            elements = js_result.get("elements", [])
+
+        if not elements:
+            self._element_map = {}
+            return {"ok": True, "count": 0, "element_map": {}}
+
+        self._element_map = {}
+        for el in elements:
+            ref = el.get("ref", "")
+            if ref:
+                self._element_map[ref] = {
+                    "ref": ref,
+                    "tag": el.get("tag", ""),
+                    "type": el.get("type", ""),
+                    "text": el.get("text", ""),
+                    "selector": el.get("selector", ""),
+                    "value": el.get("value", ""),
+                    "x": el.get("x", 0),
+                    "y": el.get("y", 0),
+                    "width": el.get("width", 0),
+                    "height": el.get("height", 0),
+                }
+
+        elements_json = _json.dumps(elements)
+        js_code = (
+            "(function(){"
+            "var old=document.getElementById('lbu-highlights');"
+            "if(old)old.remove();"
+            "var container=document.createElement('div');"
+            "container.id='lbu-highlights';"
+            "container.style.cssText='position:absolute;top:0;left:0;width:100%;pointer-events:none;z-index:2147483646;';"
+            "document.body.appendChild(container);"
+            "var elements=" + elements_json + ";"
+            "var sx=window.scrollX||window.pageXOffset||0;"
+            "var sy=window.scrollY||window.pageYOffset||0;"
+            "for(var i=0;i<elements.length;i++){"
+            "var el=elements[i];"
+            "var div=document.createElement('div');"
+            "div.setAttribute('data-lbu-highlight',el.ref);"
+            "div.style.cssText='position:absolute;"
+            "left:'+(el.x+sx)+'px;top:'+(el.y+sy)+'px;"
+            "width:'+el.width+'px;height:'+el.height+'px;"
+            "border:2px dashed #3b82f6;border-radius:2px;pointer-events:none;';"
+            "var badge=document.createElement('span');"
+            "badge.textContent=el.ref;"
+            "badge.style.cssText='position:absolute;top:-12px;left:-2px;"
+            "background:#3b82f6;color:#fff;font-size:10px;font-family:Arial,sans-serif;"
+            "padding:1px 4px;border-radius:2px;line-height:1.2;white-space:nowrap;pointer-events:none;';"
+            "div.appendChild(badge);"
+            "container.appendChild(div);"
+            "}"
+            "})()"
+        )
+        await self.js(js_code)
+        return {"ok": True, "count": len(elements), "element_map": dict(self._element_map)}
+
+    async def remove_dom_highlights(self) -> None:
+        """Remove all highlight overlays from the page and clear the element map."""
+        await self.js("var el=document.getElementById('lbu-highlights');if(el)el.remove();")
+        self._element_map = {}
+
+    def get_element_by_index(self, ref: str) -> dict:
+        """Look up an element by its @eN reference.
+
+        Args:
+            ref: Reference string like ``"@e3"``, ``"e3"``, or ``"3"``.
+
+        Returns:
+            Dict with element info or ``{ref, error}`` on failure.
+        """
+        if not self._element_map:
+            return {"ref": ref, "error": "no highlights injected"}
+
+        normalized = ref.strip()
+        if not normalized.startswith("@"):
+            normalized = "@e" + normalized if not normalized.startswith("e") else "@" + normalized
+
+        el = self._element_map.get(normalized)
+        if el is None:
+            return {"ref": normalized, "error": "not found"}
+
+        return {
+            "ref": el["ref"],
+            "tag": el["tag"],
+            "type": el.get("type", ""),
+            "text": el["text"],
+            "selector": el["selector"],
+            "bounds": {"x": el["x"], "y": el["y"], "w": el["width"], "h": el["height"]},
+        }

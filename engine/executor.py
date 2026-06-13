@@ -132,14 +132,14 @@ async def execute_browser_op(
                 selector = params.get("selector", "")
                 if not selector:
                     raise ValueError("click op missing selector")
-                selector = _resolve_element_ref(selector, element_map)
+                selector = await _resolve_element_ref(selector, element_map, cdp_helpers)
                 await cdp_helpers.click_selector(selector)  # type: ignore[union-attr]
                 result["result"] = {"selector": selector}
 
             elif op_type == "fill":
                 selector = params.get("selector", "")
                 text = params.get("text", params.get("value", ""))
-                selector = _resolve_element_ref(selector, element_map)
+                selector = await _resolve_element_ref(selector, element_map, cdp_helpers)
                 await cdp_helpers.fill_input(selector, text)  # type: ignore[union-attr]
                 result["result"] = {"selector": selector}
 
@@ -180,6 +180,16 @@ async def execute_browser_op(
                 eval_result = await cdp_helpers.js(code_str)  # type: ignore[union-attr]
                 result["result"] = eval_result
 
+            elif op_type == "get_element_by_number":
+                ref = params.get("ref", "")
+                if not ref:
+                    raise ValueError("get_element_by_number missing ref")
+                if hasattr(cdp_helpers, "get_element_by_index"):
+                    el_info = cdp_helpers.get_element_by_index(ref)  # type: ignore[union-attr]
+                    result["result"] = el_info
+                else:
+                    result["result"] = {"ref": ref, "error": "cdp_helpers does not support element lookup"}
+
             else:
                 raise ValueError(f"Unknown browser op type: {op_type}")
 
@@ -217,13 +227,22 @@ def _write_full_artifacts(core_result: dict, step_dir: Path, _base64, _time) -> 
         html_path.write_text(html_data, encoding="utf-8")
 
 
-def _resolve_element_ref(selector: str, element_map: dict | None) -> str:
-    """Resolve @eN element references to CSS selectors using the element map."""
-    if selector.startswith("@e") and element_map:
-        resolved = element_map.get(selector)
-        if resolved is None:
-            raise ValueError(f"Unknown element reference: {selector}")
-        return resolved
+async def _resolve_element_ref(selector: str, element_map: dict | None, cdp_helpers: object | None = None) -> str:
+    """Resolve @eN element references to CSS selectors using the element map.
+
+    In chat mode (element_map is None), falls back to cdp_helpers.get_element_by_index().
+    """
+    if selector.startswith("@e"):
+        if element_map:
+            resolved = element_map.get(selector)
+            if resolved is None:
+                raise ValueError(f"Unknown element reference: {selector}")
+            return resolved
+        if cdp_helpers is not None and hasattr(cdp_helpers, "get_element_by_index"):
+            el_info = cdp_helpers.get_element_by_index(selector)  # type: ignore[union-attr]
+            if "error" in el_info:
+                raise ValueError(f"Element reference {selector}: {el_info['error']}")
+            return el_info.get("selector", selector)
     return selector
 
 
@@ -495,6 +514,11 @@ async def execute_browser_step(
                         html_path.write_text(html_data, encoding="utf-8")
                 if op_type == "goto":
                     result["final_url"] = value
+                if op_type in ("goto", "click", "fill") and hasattr(cdp_helpers, "add_dom_highlights"):
+                    try:
+                        await cdp_helpers.add_dom_highlights()  # type: ignore[union-attr]
+                    except Exception:
+                        pass
             else:
                 op_record["error"] = core_result["error"]
                 result["status"] = "failed"

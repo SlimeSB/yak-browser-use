@@ -196,6 +196,11 @@ async def run_goal_step(
             try:
                 interactive = await cdp_helpers.capture_snapshot_interactive()
                 elements = interactive.get("elements", [])
+                if hasattr(cdp_helpers, "add_dom_highlights"):
+                    try:
+                        await cdp_helpers.add_dom_highlights(elements=elements)
+                    except Exception:
+                        pass
                 if elements:
                     lines = ["\n当前页面可交互元素："]
                     for el in elements:
@@ -449,7 +454,9 @@ async def _cleanup_agent_highlights(agent_browser: object | None) -> None:
                 params={
                     "expression": (
                         "document.querySelectorAll('.browser-use-highlight')"
-                        ".forEach(el => el.remove())"
+                        ".forEach(el => el.remove());"
+                        "var lbu=document.getElementById('lbu-highlights');"
+                        "if(lbu)lbu.remove();"
                     ),
                     "returnByValue": True,
                 }

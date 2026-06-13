@@ -134,6 +134,13 @@ async def execute_tool_calls_sequential(
 
         _append_tool_result(messages, tool_call_id, fn_name, result_text)
 
+        if ok and fn_name in ("browser_goto", "browser_click", "browser_fill") and cdp_helpers is not None:
+            if hasattr(cdp_helpers, "add_dom_highlights"):
+                try:
+                    await cdp_helpers.add_dom_highlights()  # type: ignore[union-attr]
+                except Exception:
+                    pass
+
         if stream_callback:
             stream_callback({
                 "type": "tool_end",

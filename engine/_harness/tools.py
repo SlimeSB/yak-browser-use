@@ -125,6 +125,23 @@ BROWSER_TOOLS: list[dict[str, Any]] = [
             },
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "browser_get_element_by_number",
+            "description": "Get detailed information about an interactive element by its @eN reference number. Use this to look up element details (tag, text, selector, bounds) before clicking or filling.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "ref": {
+                        "type": "string",
+                        "description": "Element reference number, e.g. '@e3', 'e3', or '3'.",
+                    },
+                },
+                "required": ["ref"],
+            },
+        },
+    },
 ]
 
 GOAL_RUN_TOOL: dict[str, Any] = {
