@@ -45,6 +45,56 @@ def register_all_routes(app: FastAPI) -> None:
     """Register all REST and WebSocket routes on *app*."""
 
     # =================================================================
+    # PROVIDER CONFIG
+    # =================================================================
+
+    @app.get("/api/provider-config")
+    async def api_get_provider_config() -> JSONResponse:
+        """Get the current LLM provider configuration."""
+        from utils.browser import _get_config_path
+        p = _get_config_path()
+        if p.exists():
+            try:
+                data = json.loads(p.read_text(encoding="utf-8"))
+                return JSONResponse({"ok": True, "config": data})
+            except Exception:
+                pass
+        return JSONResponse({"ok": True, "config": {}})
+
+    @app.post("/api/provider-config")
+    async def api_set_provider_config(request: dict) -> JSONResponse:
+        """Save LLM provider configuration."""
+        from utils.browser import _get_config_path
+        p = _get_config_path()
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(json.dumps(request, ensure_ascii=False, indent=2), encoding="utf-8")
+        return JSONResponse({"ok": True})
+
+    @app.post("/api/provider-test")
+    async def api_test_provider(request: dict) -> JSONResponse:
+        """Test an LLM provider config by making a simple call."""
+        try:
+            from browser_use.llm.openai.chat import ChatOpenAI
+            from browser_use.llm.messages import UserMessage
+
+            model = request.get("model", "gpt-4o")
+            api_key = request.get("api_key", "")
+            api_base = request.get("api_base", "")
+
+            kwargs: dict = {"model": model}
+            if api_key:
+                kwargs["api_key"] = api_key
+            if api_base:
+                kwargs["base_url"] = api_base
+
+            llm = ChatOpenAI(**kwargs)
+            result = await llm.ainvoke([UserMessage(content="Say hello in one word.")])
+            text = result.content if hasattr(result, "content") else str(result)
+            return JSONResponse({"ok": True, "response": text[:200]})
+        except Exception as e:
+            return JSONResponse({"ok": False, "error": str(e)})
+
+    # =================================================================
     # CONVERT
     # =================================================================
 

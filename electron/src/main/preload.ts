@@ -50,6 +50,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
   savePreset: (name: string, content: string) => ipcRenderer.invoke('api:preset-save', { name, content }),
   compilePreset: (name: string) => ipcRenderer.invoke('api:preset-compile', { name }),
 
+  // Provider config
+  getProviderConfig: () => ipcRenderer.invoke('api:provider-config-get'),
+  setProviderConfig: (config: Record<string, string>) => ipcRenderer.invoke('api:provider-config-set', config),
+  testProvider: (config: Record<string, string>) => ipcRenderer.invoke('api:provider-test', config),
+
   // Dialogs
   showAlert: (message: string) => ipcRenderer.invoke('dialog:alert', message),
 });

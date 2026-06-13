@@ -270,29 +270,19 @@ def _create_llm():
     """
     import os
 
-    provider = os.environ.get("LBU_LLM_PROVIDER", "openai").lower()
+    from browser_use.llm.openai.chat import ChatOpenAI
+
     model = os.environ.get("LBU_LLM_MODEL", "gpt-4o")
     api_key = os.environ.get("LBU_LLM_API_KEY", "")
     base_url = os.environ.get("LBU_LLM_BASE_URL", "")
 
-    if provider == "openai":
-        from browser_use.llm import LLM
+    kwargs: dict = {"model": model}
+    if api_key:
+        kwargs["api_key"] = api_key
+    if base_url:
+        kwargs["base_url"] = base_url
 
-        kwargs: dict = {"model": model, "api_key": api_key}
-        if base_url:
-            kwargs["base_url"] = base_url
-        return LLM(**kwargs)
-    elif provider == "anthropic":
-        from browser_use.llm import LLM
-
-        kwargs = {"model": model, "api_key": api_key, "provider": "anthropic"}
-        if base_url:
-            kwargs["base_url"] = base_url
-        return LLM(**kwargs)
-    else:
-        from browser_use.llm import LLM
-
-        return LLM(model=model, api_key=api_key)
+    return ChatOpenAI(**kwargs)
 
 
 def _write_agent_history(agent, step_dir: Path, partial: bool = False) -> None:
@@ -636,7 +626,7 @@ def _create_chat_llm_call():
         kwargs = {"messages": converted}
         if tools:
             kwargs["tools"] = tools
-        response = llm.invoke(**kwargs)
+        response = await llm.ainvoke(**kwargs)
         return response
 
     return _call

@@ -310,7 +310,7 @@ export default function ChatTab({
               value={input}
               onChange={e => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder={t('chat.placeholder')}
+              placeholder={connected ? t('chat.placeholder') : t('chat.placeholderDisconnected')}
               disabled={!connected || sending}
               rows={2}
             />

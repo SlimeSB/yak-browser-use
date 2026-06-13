@@ -37,6 +37,15 @@ async function createWindow() {
   if (process.env.VITE_DEV_SERVER_URL) {
     mainWindow.loadURL(process.env.VITE_DEV_SERVER_URL);
     mainWindow.webContents.openDevTools();
+    mainWindow.webContents.on('context-menu', (_e, params) => {
+      const { x, y } = params;
+      Menu.buildFromTemplate([
+        {
+          label: 'Inspect Element',
+          click: () => mainWindow?.webContents.inspectElement(x, y),
+        },
+      ]).popup({ window: mainWindow! });
+    });
   } else {
     mainWindow.loadFile(path.join(__dirname, '../renderer/index.html'));
   }
@@ -412,6 +421,24 @@ app.whenReady().then(async () => {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name }),
     }, 'api:preset-compile');
+  });
+
+  ipcMain.handle('api:provider-config-get', async () => {
+    return _apiFetch('/api/provider-config', { method: 'GET' }, 'api:provider-config-get');
+  });
+
+  ipcMain.handle('api:provider-config-set', async (_event, config: Record<string, string>) => {
+    return _apiFetch('/api/provider-config', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(config),
+    }, 'api:provider-config-set');
+  });
+
+  ipcMain.handle('api:provider-test', async (_event, config: Record<string, string>) => {
+    return _apiFetch('/api/provider-test', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(config),
+    }, 'api:provider-test');
   });
 
   await createWindow();

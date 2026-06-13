@@ -291,7 +291,8 @@ async def run_pipeline(
             ctx.current_step = step_def.get("name", f"step_{node.index}")
 
             # ── Guardian approval gate ──
-            if guardian is not None:
+            review_mode = (frontmatter or {}).get("review_mode", "human")
+            if guardian is not None and review_mode != "none":
                 approved = guardian.approve(
                     step_name=ctx.current_step,
                     step_def=step_def,

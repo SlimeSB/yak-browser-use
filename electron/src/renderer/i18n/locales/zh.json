@@ -76,7 +76,7 @@
     "title": "审查模式",
     "manual": "人工",
     "auto": "自动",
-    "hybrid": "混合",
+    "none": "关闭",
     "description": "审查模式控制管线的步骤在执行前如何被批准。"
   },
   "versions": {
@@ -115,12 +115,28 @@
     "deleteConfirm": "确定删除此参数？"
   },
   "settingsTab": {
+    "theme": "主题",
+    "colorMode": "颜色模式",
+    "dark": "深色",
+    "light": "浅色",
+    "darkDesc": "深色 — 黑橙配色",
+    "lightDesc": "浅色 — 白蓝配色",
     "review": "审查",
     "reviewMode": "审查模式",
     "manual": "人工",
     "auto": "自动",
-    "hybrid": "混合",
-    "language": "语言"
+    "manualDesc": "所有操作需人工批准",
+    "autoDesc": "LLM 自动审查",
+    "noneDesc": "不审查，自动通过所有操作",
+    "language": "语言",
+    "langDesc": "中文 / English",
+    "none": "关闭",
+    "chatLayout": "对话布局",
+    "panelOrder": "面板顺序",
+    "chatFirst": "对话左，编辑器右",
+    "editorFirst": "编辑器左，对话右",
+    "chatEditor": "对话 | 编辑器",
+    "editorChat": "编辑器 | 对话"
   },
   "log": {
     "title": "日志",
@@ -175,6 +191,7 @@
   "chat": {
     "startPrompt": "告诉我你想让浏览器做什么...",
     "placeholder": "输入消息... (Enter 发送，Shift+Enter 换行)",
+    "placeholderDisconnected": "请先连接浏览器...",
     "send": "发送",
     "save": "保存",
     "compilePreset": "编译为预设"

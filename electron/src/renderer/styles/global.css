@@ -93,27 +93,36 @@ body {
 }
 .titlebar-controls {
   display: flex;
+  height: 100%;
   -webkit-app-region: no-drag;
 }
 .titlebar-btn {
   width: 46px;
-  height: 34px;
+  height: 100%;
   border: none;
   background: transparent;
-  color: var(--text-muted);
-  font-size: 14px;
+  color: var(--text-secondary);
+  font-size: 12px;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: background 0.15s;
+  transition: background 0.1s ease;
+  position: relative;
 }
 .titlebar-btn:hover {
-  background: var(--bg-hover);
+  background: rgba(255, 255, 255, 0.08);
   color: var(--text);
 }
+.titlebar-btn:active {
+  background: rgba(255, 255, 255, 0.04);
+}
 .titlebar-btn.titlebar-close:hover {
-  background: var(--danger);
+  background: #e81123;
+  color: #fff;
+}
+.titlebar-btn.titlebar-close:active {
+  background: #bf0f1d;
   color: #fff;
 }
 
@@ -1373,6 +1382,18 @@ body {
 .set-row + .set-row { border-top: 1px solid var(--border); }
 .set-label { color: var(--text); }
 .set-desc { font-size: 10px; color: var(--text-muted); }
+.set-input {
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  font-size: 12px;
+  font-family: inherit;
+  padding: 6px 8px;
+  outline: none;
+  transition: border-color 0.1s;
+}
+.set-input:focus { border-color: var(--primary); }
 
 /* Quick Actions */
 .quick-actions { display: flex; flex-wrap: wrap; gap: 4px; }
@@ -1779,30 +1800,30 @@ body {
 }
 
 .chat-bubble.user {
-  background: #1f6feb;
-  color: #e6edf3;
+  background: var(--primary);
+  color: #fff;
   border-bottom-right-radius: 2px;
 }
 
 .chat-bubble.assistant {
-  background: #161b22;
-  border: 1px solid #30363d;
-  color: #e6edf3;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  color: var(--text);
   border-bottom-left-radius: 2px;
 }
 
 .chat-bubble.tool {
-  background: #161b22;
-  border: 1px solid #30363d;
-  color: #8b949e;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
   font-size: 12px;
   border-bottom-left-radius: 2px;
 }
 
 .chat-bubble.system {
-  background: rgba(245, 158, 11, 0.08);
-  border: 1px solid rgba(245, 158, 11, 0.2);
-  color: #e6edf3;
+  background: var(--primary-bg);
+  border: 1px solid var(--primary);
+  color: var(--text-secondary);
   text-align: center;
   max-width: 100%;
   font-size: 11px;

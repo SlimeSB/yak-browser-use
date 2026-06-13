@@ -76,7 +76,7 @@
     "title": "Review Mode",
     "manual": "Manual",
     "auto": "Auto",
-    "hybrid": "Hybrid",
+    "none": "Off",
     "description": "Review mode controls how pipeline steps are approved before execution."
   },
   "versions": {
@@ -115,12 +115,28 @@
     "deleteConfirm": "Delete this param?"
   },
   "settingsTab": {
+    "theme": "Theme",
+    "colorMode": "Color Mode",
+    "dark": "Dark",
+    "light": "Light",
+    "darkDesc": "Dark — black & orange",
+    "lightDesc": "Light — white & blue",
     "review": "Review",
     "reviewMode": "Review Mode",
     "manual": "Manual",
     "auto": "Auto",
-    "hybrid": "Hybrid",
-    "language": "Language"
+    "manualDesc": "Manual approval for all operations",
+    "autoDesc": "LLM auto-review",
+    "noneDesc": "No review, auto-approve all",
+    "language": "Language",
+    "langDesc": "English / 中文",
+    "none": "Off",
+    "chatLayout": "Chat Layout",
+    "panelOrder": "Panel order",
+    "chatFirst": "Chat left, Editor right",
+    "editorFirst": "Editor left, Chat right",
+    "chatEditor": "Chat | Editor",
+    "editorChat": "Editor | Chat"
   },
   "log": {
     "title": "Log",
@@ -175,6 +191,7 @@
   "chat": {
     "startPrompt": "Describe what you want the browser to do...",
     "placeholder": "Type a message... (Enter to send, Shift+Enter for newline)",
+    "placeholderDisconnected": "Connect to browser first...",
     "send": "Send",
     "save": "Save",
     "compilePreset": "Compile Preset"

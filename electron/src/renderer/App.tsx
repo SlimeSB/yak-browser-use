@@ -38,7 +38,7 @@ export default function App() {
   const [params, setParams] = useState<Record<string, string>>({});
   const [restartDialog, setRestartDialog] = useState<{ browserName: string } | null>(null);
   const [restarting, setRestarting] = useState(false);
-  const [reviewMode, setReviewMode] = useState('human');
+  const [reviewMode, setReviewMode] = useState('none');
   const [currentRunId, setCurrentRunId] = useState('');
   const [currentPipeline, setCurrentPipeline] = useState('');
   const [cancelling, setCancelling] = useState(false);

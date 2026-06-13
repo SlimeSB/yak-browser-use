@@ -14,7 +14,7 @@ export default function ReviewModeToggle({
     <div className="card">
       <div className="card-title">{t('review.title')}</div>
       <div className="mode-switch">
-        {(['human', 'llm', 'hybrid'] as const).map(m => (
+        {(['human', 'llm', 'none'] as const).map(m => (
           <label key={m} className={mode === m ? 'active' : ''}>
             <input
               type="radio"
@@ -22,14 +22,14 @@ export default function ReviewModeToggle({
               onChange={() => onChange(m)}
             />
             <span className="radio-dot" />{' '}
-            {m === 'human' ? t('review.manual') : m === 'llm' ? t('review.auto') : t('review.hybrid')}
+            {m === 'human' ? t('review.manual') : m === 'llm' ? t('review.auto') : t('review.none')}
           </label>
         ))}
       </div>
       <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 4 }}>
         {mode === 'human' && 'All pending operations sent to frontend for manual review'}
         {mode === 'llm' && 'LLM auto-review: pass = inject, reject = blacklist'}
-        {mode === 'hybrid' && 'Navigation operations use manual review, rest use LLM review'}
+        {mode === 'none' && 'All operations auto-approved, no review'}
       </div>
     </div>
   );

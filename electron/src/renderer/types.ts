@@ -86,6 +86,9 @@ declare global {
       reviewPipeline: (threadId: string, action: string, reason?: string) => Promise<{ status?: string; error?: string }>;
       getPort: () => Promise<number>;
       showAlert: (message: string) => Promise<void>;
+      getProviderConfig: () => Promise<{ ok: boolean; config: Record<string, string> }>;
+      setProviderConfig: (config: Record<string, string>) => Promise<{ ok: boolean }>;
+      testProvider: (config: Record<string, string>) => Promise<{ ok: boolean; response?: string; error?: string }>;
     };
   }
 }
