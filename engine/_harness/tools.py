@@ -150,40 +150,224 @@ GOAL_RUN_TOOL: dict[str, Any] = {
     },
 }
 
-EDIT_PIPELINE_TOOL: dict[str, Any] = {
+PIPELINE_LOAD_TOOL: dict[str, Any] = {
     "type": "function",
     "function": {
-        "name": "edit_pipeline",
+        "name": "pipeline_load",
         "description": (
-            "Edit the current pipeline.yaml file. When you need to modify the pipeline "
-            "structure (add/remove steps, change descriptions, adjust browser_ops), "
-            "call this tool with the full updated YAML content. The user will see a "
-            "diff preview and can confirm or revert your changes."
+            "Load a pipeline preset and return a structured summary (step list, types, "
+            "dependencies, required_params). Does NOT return the full YAML content — "
+            "use this to understand the pipeline structure before making changes."
         ),
         "parameters": {
             "type": "object",
             "properties": {
                 "pipeline_name": {
                     "type": "string",
-                    "description": "Name of the pipeline preset to edit.",
+                    "description": "Name of the pipeline preset to load.",
                 },
-                "content": {
+            },
+            "required": ["pipeline_name"],
+        },
+    },
+}
+
+PIPELINE_LIST_TOOL: dict[str, Any] = {
+    "type": "function",
+    "function": {
+        "name": "pipeline_list",
+        "description": (
+            "List all available pipeline presets. Returns name, description, and "
+            "step count for each preset."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {},
+        },
+    },
+}
+
+PIPELINE_UPDATE_STEP_TOOL: dict[str, Any] = {
+    "type": "function",
+    "function": {
+        "name": "pipeline_update_step",
+        "description": (
+            "Incrementally update a single step in a pipeline. Only the fields "
+            "provided in `updates` are modified; all other fields stay unchanged. "
+            "When changing browser_ops, tool_name, or goal_description, mutually "
+            "exclusive fields are automatically cleared."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "pipeline_name": {
                     "type": "string",
-                    "description": "Full YAML content to write to the pipeline file.",
+                    "description": "Name of the pipeline preset to modify.",
+                },
+                "step_name": {
+                    "type": "string",
+                    "description": "Name of the step to update.",
+                },
+                "updates": {
+                    "type": "object",
+                    "description": (
+                        "Fields to update on the step. Supported keys: browser_ops "
+                        "(list of single-key dicts), tool_name (string), "
+                        "goal_description (string), description (string), "
+                        "depends_on (list of strings)."
+                    ),
                 },
                 "explanation": {
                     "type": "string",
                     "description": "Human-readable explanation of what was changed and why.",
                 },
-                "edit_id": {
-                    "type": "string",
-                    "description": "Optional edit ID. If you are editing the same pipeline multiple times in one turn, pass the same edit_id to accumulate changes into a single review.",
-                },
             },
-            "required": ["pipeline_name", "content", "explanation"],
+            "required": ["pipeline_name", "step_name", "updates"],
         },
     },
 }
+
+PIPELINE_ADD_STEP_TOOL: dict[str, Any] = {
+    "type": "function",
+    "function": {
+        "name": "pipeline_add_step",
+        "description": (
+            "Add a new step to a pipeline. If `after` is provided, the step is "
+            "inserted after the named step; otherwise it is appended to the end."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "pipeline_name": {
+                    "type": "string",
+                    "description": "Name of the pipeline preset to modify.",
+                },
+                "step_name": {
+                    "type": "string",
+                    "description": "Unique name for the new step.",
+                },
+                "description": {
+                    "type": "string",
+                    "description": "Human-readable description of what this step does.",
+                },
+                "browser_ops": {
+                    "type": "array",
+                    "description": (
+                        "List of browser operations, each as a single-key dict "
+                        "(e.g. [{\"goto\": \"https://example.com\"}]). "
+                        "Mutually exclusive with tool_name and goal_description."
+                    ),
+                    "items": {"type": "object"},
+                },
+                "tool_name": {
+                    "type": "string",
+                    "description": (
+                        "Name of a custom tool to invoke. "
+                        "Mutually exclusive with browser_ops and goal_description."
+                    ),
+                },
+                "goal_description": {
+                    "type": "string",
+                    "description": (
+                        "Description for a goal_run step. "
+                        "Mutually exclusive with browser_ops and tool_name."
+                    ),
+                },
+                "depends_on": {
+                    "type": "array",
+                    "description": "List of step names this step depends on.",
+                    "items": {"type": "string"},
+                },
+                "after": {
+                    "type": "string",
+                    "description": "Name of the step to insert after. Omit to append.",
+                },
+                "explanation": {
+                    "type": "string",
+                    "description": "Human-readable explanation of what was changed and why.",
+                },
+            },
+            "required": ["pipeline_name", "step_name", "description"],
+        },
+    },
+}
+
+PIPELINE_REMOVE_STEP_TOOL: dict[str, Any] = {
+    "type": "function",
+    "function": {
+        "name": "pipeline_remove_step",
+        "description": (
+            "Remove a step from a pipeline. Dependencies on the removed step "
+            "are automatically cleaned up from other steps."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "pipeline_name": {
+                    "type": "string",
+                    "description": "Name of the pipeline preset to modify.",
+                },
+                "step_name": {
+                    "type": "string",
+                    "description": "Name of the step to remove.",
+                },
+                "explanation": {
+                    "type": "string",
+                    "description": "Human-readable explanation of what was changed and why.",
+                },
+            },
+            "required": ["pipeline_name", "step_name"],
+        },
+    },
+}
+
+PIPELINE_CREATE_TOOL: dict[str, Any] = {
+    "type": "function",
+    "function": {
+        "name": "pipeline_create",
+        "description": (
+            "Create a new pipeline preset from a list of steps. "
+            "Fails if a pipeline with the same name already exists."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "pipeline_name": {
+                    "type": "string",
+                    "description": "Name for the new pipeline preset.",
+                },
+                "description": {
+                    "type": "string",
+                    "description": "Human-readable description of the pipeline.",
+                },
+                "steps": {
+                    "type": "array",
+                    "description": (
+                        "List of step objects. Each step must have: name (string), "
+                        "description (string). Optional: browser_ops (list of dicts), "
+                        "tool_name (string), goal_description (string), "
+                        "depends_on (list of strings)."
+                    ),
+                    "items": {"type": "object"},
+                },
+                "explanation": {
+                    "type": "string",
+                    "description": "Human-readable explanation of what was created and why.",
+                },
+            },
+            "required": ["pipeline_name", "description", "steps"],
+        },
+    },
+}
+
+PIPELINE_TOOLS: list[dict[str, Any]] = [
+    PIPELINE_LOAD_TOOL,
+    PIPELINE_LIST_TOOL,
+    PIPELINE_UPDATE_STEP_TOOL,
+    PIPELINE_ADD_STEP_TOOL,
+    PIPELINE_REMOVE_STEP_TOOL,
+    PIPELINE_CREATE_TOOL,
+]
 
 RECORD_STEP_TOOL: dict[str, Any] = {
     "type": "function",
@@ -240,7 +424,7 @@ def get_all_tools(include_goal_run: bool = True) -> list[dict[str, Any]]:
     tools = list(BROWSER_TOOLS)
     if include_goal_run:
         tools.append(GOAL_RUN_TOOL)
-    tools.append(EDIT_PIPELINE_TOOL)
+    tools.extend(PIPELINE_TOOLS)
     tools.append(RECORD_STEP_TOOL)
     return tools
 

@@ -182,6 +182,36 @@ async def _execute_single_tool_call(
                 op_type = fn_name.replace("browser_", "")
                 return await execute_browser_op(op_type, fn_args, cdp_helpers)
 
+            elif fn_name.startswith("pipeline_"):
+                from engine._harness.pipeline_tools import (
+                    pipeline_load,
+                    pipeline_list,
+                    pipeline_update_step,
+                    pipeline_add_step,
+                    pipeline_remove_step,
+                    pipeline_create,
+                )
+
+                dispatch = {
+                    "pipeline_load": pipeline_load,
+                    "pipeline_list": pipeline_list,
+                    "pipeline_update_step": pipeline_update_step,
+                    "pipeline_add_step": pipeline_add_step,
+                    "pipeline_remove_step": pipeline_remove_step,
+                    "pipeline_create": pipeline_create,
+                }
+
+                handler = dispatch.get(fn_name)
+                if handler is None:
+                    return {"ok": False, "error": f"Unknown pipeline tool: {fn_name}"}
+
+                result_str = await handler(**fn_args)
+                import json
+                try:
+                    return json.loads(result_str)
+                except (json.JSONDecodeError, TypeError):
+                    return {"ok": True, "result": result_str}
+
             elif is_goal:
                 description = fn_args.get("description", fn_args.get("goal", ""))
                 return await execute_goal(
