@@ -112,7 +112,8 @@
     "delete": "Delete",
     "save": "Save",
     "setParam": "Set param",
-    "deleteConfirm": "Delete this param?"
+    "deleteConfirm": "Delete this param?",
+    "hint": "Persistent parameters — stored locally. Use for passwords, API keys, etc."
   },
   "settingsTab": {
     "theme": "Theme",

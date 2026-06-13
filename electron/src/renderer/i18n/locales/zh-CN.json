@@ -112,7 +112,8 @@
     "delete": "删除",
     "save": "保存",
     "setParam": "设置参数",
-    "deleteConfirm": "确定删除此参数？"
+    "deleteConfirm": "确定删除此参数？",
+    "hint": "持久化参数 — 本地存储。可用于密码、API 密钥等。"
   },
   "settingsTab": {
     "theme": "主题",

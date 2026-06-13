@@ -346,21 +346,21 @@ app.whenReady().then(async () => {
   // Credentials
   ipcMain.handle('credentials:list', async () => {
     logger.debug('IPC: credentials:list');
-    return _apiFetch('/api/credentials', {}, 'credentials:list');
+    return _apiFetch('/api/params', {}, 'credentials:list');
   });
 
   ipcMain.handle('credentials:set', async (_event, { key, value }: { key: string; value: string }) => {
     logger.debug('IPC: credentials:set %s', key);
-    return _apiFetch(`/api/credentials/${key}`, {
+    return _apiFetch('/api/params', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ value }),
+      body: JSON.stringify({ key, value }),
     }, 'credentials:set');
   });
 
   ipcMain.handle('credentials:delete', async (_event, key: string) => {
     logger.debug('IPC: credentials:delete %s', key);
-    return _apiFetch(`/api/credentials/${key}`, { method: 'DELETE' }, 'credentials:delete');
+    return _apiFetch(`/api/params/${key}`, { method: 'DELETE' }, 'credentials:delete');
   });
 
   // Backend port for WebSocket

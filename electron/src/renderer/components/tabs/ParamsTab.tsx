@@ -26,6 +26,9 @@ export default function ParamsTab({
         <button className="btn btn-primary btn-sm" onClick={onCredSet}>{t('paramsTab.add')}</button>
       </div>
       <div className="cred-content">
+        <div style={{ fontSize: 11, color: 'var(--text-muted)', textAlign: 'center', padding: '4px 20px 8px' }}>
+          {t('paramsTab.hint')}
+        </div>
         {credKeys.length === 0 ? (
           <div style={{ fontSize: 11, color: 'var(--text-muted)', textAlign: 'center', padding: 20 }}>
             {t('paramsTab.noParams')}

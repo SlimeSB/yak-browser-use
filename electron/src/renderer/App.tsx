@@ -249,7 +249,7 @@ export default function App() {
   useEffect(() => {
     if (activeTab !== 'params') return;
     window.electronAPI.listCredentials().then(r => {
-      if (r.credentials) setCredKeys(r.credentials);
+      if (r.params) setCredKeys(r.params);
     }).catch((e) => { logger.error('listCredentials failed: %s', String(e)); });
   }, [activeTab]);
 
@@ -531,7 +531,7 @@ export default function App() {
     setCredKey('');
     setCredValue('');
     const r = await window.electronAPI.listCredentials();
-    if (r.credentials) setCredKeys(r.credentials);
+    if (r.params) setCredKeys(r.params);
   }, [credKey, credValue]);
 
   const handleCredDelete = useCallback(async (key: string) => {
