@@ -291,7 +291,7 @@ class CDPDaemon:
 # ---------------------------------------------------------------------------
 
 
-async def ensure_daemon(name: str = "learning-browser-use") -> CDPDaemon:
+async def ensure_daemon(name: str = "yak-browser-use") -> CDPDaemon:
     """Return a running CDPDaemon, creating one if necessary.
 
     Checks the module-level session dict for an existing daemon with

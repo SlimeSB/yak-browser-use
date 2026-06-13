@@ -185,6 +185,48 @@ EDIT_PIPELINE_TOOL: dict[str, Any] = {
     },
 }
 
+RECORD_STEP_TOOL: dict[str, Any] = {
+    "type": "function",
+    "function": {
+        "name": "record_step",
+        "description": (
+            "Record a browser operation as a step in the pipeline.yaml. "
+            "Call this AFTER each browser_* or goal_run operation completes successfully. "
+            "This appends the step to the pipeline so it can be replayed later."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "pipeline_name": {
+                    "type": "string",
+                    "description": "Name of the pipeline preset to record into.",
+                },
+                "step_name": {
+                    "type": "string",
+                    "description": "Unique name for this step, e.g. 'step_1', 'step_2'.",
+                },
+                "description": {
+                    "type": "string",
+                    "description": "Human-readable description of what this step does.",
+                },
+                "op_type": {
+                    "type": "string",
+                    "description": "The browser operation type: goto, click, fill, scroll, snapshot, source, eval, or goal_run.",
+                },
+                "op_args": {
+                    "type": "object",
+                    "description": "The exact arguments passed to the browser operation, e.g. {\"url\": \"https://baidu.com\"}.",
+                },
+                "explanation": {
+                    "type": "string",
+                    "description": "Brief explanation of why this step is needed in the pipeline.",
+                },
+            },
+            "required": ["pipeline_name", "step_name", "description", "op_type", "op_args"],
+        },
+    },
+}
+
 
 def get_all_tools(include_goal_run: bool = True) -> list[dict[str, Any]]:
     """Get the full list of registered tools.
@@ -199,6 +241,7 @@ def get_all_tools(include_goal_run: bool = True) -> list[dict[str, Any]]:
     if include_goal_run:
         tools.append(GOAL_RUN_TOOL)
     tools.append(EDIT_PIPELINE_TOOL)
+    tools.append(RECORD_STEP_TOOL)
     return tools
 
 

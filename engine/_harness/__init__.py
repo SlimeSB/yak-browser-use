@@ -1,6 +1,6 @@
 """Agent harness — conversation_loop engine and supporting sub-modules.
 
-Extracted from Hermes Agent for use in learning-browser-use.
+Extracted from Hermes Agent for use in yak-browser-use.
 """
 from __future__ import annotations
 

@@ -136,7 +136,8 @@
     "chatFirst": "对话左，编辑器右",
     "editorFirst": "编辑器左，对话右",
     "chatEditor": "对话 | 编辑器",
-    "editorChat": "编辑器 | 对话"
+    "editorChat": "编辑器 | 对话",
+    "testPassed": "测试通过"
   },
   "log": {
     "title": "日志",

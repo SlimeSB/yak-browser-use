@@ -88,9 +88,8 @@ def register_all_routes(app: FastAPI) -> None:
                 kwargs["base_url"] = api_base
 
             llm = ChatOpenAI(**kwargs)
-            result = await llm.ainvoke([UserMessage(content="Say hello in one word.")])
-            text = result.content if hasattr(result, "content") else str(result)
-            return JSONResponse({"ok": True, "response": text[:200]})
+            await llm.ainvoke([UserMessage(content="Say hello in one word.")])
+            return JSONResponse({"ok": True})
         except Exception as e:
             return JSONResponse({"ok": False, "error": str(e)})
 

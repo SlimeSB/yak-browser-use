@@ -1,5 +1,5 @@
-appId: com.learningbrowseruse.electron
-productName: learning-browser-use
+appId: com.yakbrowseruse.electron
+productName: yak-browser-use
 directories:
   output: release
   buildResources: build

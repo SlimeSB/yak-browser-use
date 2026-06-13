@@ -8,6 +8,7 @@ Chromium instance as a last resort.
 from __future__ import annotations
 
 import asyncio
+import locale
 import os
 import platform
 import socket
@@ -26,7 +27,18 @@ _playwright_instance: Any = None
 _playwright_browser: Any = None
 
 # Base directory for isolated profiles
-_ISO_PROFILES_DIR = Path.home() / ".learning-browser-use" / "profiles"
+_ISO_PROFILES_DIR = Path.home() / ".yak-browser-use" / "profiles"
+
+
+def _detect_lang() -> str:
+    try:
+        code, _ = locale.getdefaultlocale()
+        if code:
+            lang = code.replace("_", "-")
+            return lang
+    except Exception:
+        pass
+    return "zh-CN"
 
 
 # ---------------------------------------------------------------------------
@@ -106,6 +118,7 @@ async def launch_user_chrome(profile_name: str | None = None) -> str | None:
             "--no-first-run",
             "--no-default-browser-check",
             "--remote-allow-origins=*",
+            f"--lang={_detect_lang()}",
         ]
         if profile_name:
             args.append(f"--profile-directory={profile_name}")
@@ -178,6 +191,7 @@ async def launch_isolated_chrome(
                 "--no-first-run",
                 "--no-default-browser-check",
                 "--remote-allow-origins=*",
+                f"--lang={_detect_lang()}",
                 stdout=asyncio.subprocess.DEVNULL,
                 stderr=asyncio.subprocess.DEVNULL,
             )
@@ -202,6 +216,7 @@ async def launch_isolated_chrome(
             args=[
                 f"--remote-debugging-port={port}",
                 f"--user-data-dir={user_data_dir}",
+                f"--lang={_detect_lang()}",
             ],
         )
 
@@ -300,6 +315,7 @@ async def restart_user_chrome() -> str:
             "--no-first-run",
             "--no-default-browser-check",
             "--remote-allow-origins=*",
+            f"--lang={_detect_lang()}",
             stdout=asyncio.subprocess.DEVNULL,
             stderr=asyncio.subprocess.PIPE,
         )

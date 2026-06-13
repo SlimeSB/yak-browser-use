@@ -51,7 +51,7 @@ export default function SettingsTab({
     setTesting(true);
     setTestResult(null);
     const r = await window.electronAPI.testProvider(providerConfig);
-    setTestResult(r.ok ? { ok: true, msg: r.response || 'OK' } : { ok: false, msg: r.error || 'Failed' });
+    setTestResult(r.ok ? { ok: true, msg: t('settingsTab.testPassed') } : { ok: false, msg: r.error || 'Failed' });
     setTesting(false);
   };
 
@@ -90,8 +90,8 @@ export default function SettingsTab({
                 onClick={() => i18n.changeLanguage('en')}
               >English</button>
               <button
-                className={`btn btn-xs ${i18n.language === 'zh' ? 'btn-primary' : 'btn-secondary'}`}
-                onClick={() => i18n.changeLanguage('zh')}
+                className={`btn btn-xs ${i18n.language === 'zh-CN' ? 'btn-primary' : 'btn-secondary'}`}
+                onClick={() => i18n.changeLanguage('zh-CN')}
               >中文</button>
             </div>
           </div>

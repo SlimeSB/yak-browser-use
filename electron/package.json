@@ -1,5 +1,5 @@
 {
-  "name": "learning-browser-use",
+  "name": "yak-browser-use",
   "version": "0.1.0",
   "description": "A clean browser automation learning tool",
   "main": "dist/main/index.js",

@@ -10,7 +10,6 @@ if (process.platform === 'win32') {
   try { execSync('chcp 65001 > nul', { stdio: 'ignore' }); } catch { /* ok */ }
 }
 
-app.commandLine.appendSwitch('lang', 'en-US');
 app.commandLine.appendSwitch('disable-direct-composition');
 
 const logger = getLogger('main');

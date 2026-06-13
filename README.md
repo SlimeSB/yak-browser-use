@@ -1,4 +1,4 @@
-# Learning Browser-Use
+# Yak Browser-Use
 
 A clean, learnable browser automation framework based on browser-use, CDP, and browser-use Agent.
 
@@ -32,7 +32,7 @@ cd electron && npm run electron:dev
 ## Architecture
 
 ```
-learning-browser-use/
+yak-browser-use/
 ├── cdp/          Chrome DevTools Protocol connection
 ├── engine/       Step execution engine (runner, executor, agent)
 ├── compiler/     agent.md compiler (parser, graph, generator)

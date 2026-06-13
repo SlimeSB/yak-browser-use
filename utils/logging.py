@@ -1,4 +1,4 @@
-"""Shared logger setup for learning-browser-use."""
+"""Shared logger setup for yak-browser-use."""
 from __future__ import annotations
 
 import logging

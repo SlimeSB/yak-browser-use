@@ -206,8 +206,8 @@ class Service:
     def compile_session_to_preset(self, session: SessionState) -> str:
         """Compile a session's conversation history into pipeline.yaml format.
 
-        Builds a PipelineYaml object from session tool-call messages
-        and dumps to YAML text.
+        Extracts tool calls from assistant messages (with actual arguments)
+        and pairs them with tool results for status info.
         """
         import yaml
         from compiler.schema import PipelineYaml, StepYaml
@@ -215,24 +215,48 @@ class Service:
         pipeline_name = session.pipeline_name or "chat-preset"
         steps: list[StepYaml] = []
 
+        # Index tool results by tool_call_id for pairing
+        tool_results: dict[str, dict] = {}
+        for msg in session.messages:
+            if msg.get("role") == "tool":
+                tool_results[msg.get("tool_call_id", "")] = msg
+
         step_index = 1
         for msg in session.messages:
-            role = msg.get("role", "")
-            if role == "tool":
-                tool_name = msg.get("name", "")
-                content = str(msg.get("content", ""))[:200]
+            if msg.get("role") != "assistant":
+                continue
+            tool_calls = msg.get("tool_calls", [])
+            if not tool_calls:
+                continue
+
+            for tc in tool_calls:
+                fn = tc.get("function", {})
+                tool_name = fn.get("name", "")
+                args = fn.get("arguments", {}) or {}
+                tc_id = tc.get("id", "")
+                tr = tool_results.get(tc_id, {})
+                result_text = str(tr.get("content", ""))[:200]
+
+                if tool_name == "edit_pipeline":
+                    continue
 
                 if tool_name.startswith("browser_"):
                     op_type = tool_name.replace("browser_", "")
                     step_yaml = StepYaml(
                         name=f"step_{step_index}",
-                        description=f"{op_type}: {content[:80]}",
-                        browser_ops=[{op_type: content[:80]}],
+                        description=f"{op_type}: {_fmt_args(args)}",
+                        browser_ops=[{op_type: _first_arg(args)}],
+                    )
+                elif tool_name == "goal_run":
+                    step_yaml = StepYaml(
+                        name=f"step_{step_index}",
+                        description=args.get("description", "") or result_text[:80],
+                        goal_description=args.get("description", "") or result_text[:200],
                     )
                 else:
                     step_yaml = StepYaml(
                         name=f"step_{step_index}",
-                        description=f"tool {tool_name}: {content[:80]}",
+                        description=f"{tool_name}: {_fmt_args(args)}",
                         tool_name=tool_name,
                     )
                 steps.append(step_yaml)
@@ -293,3 +317,75 @@ class Service:
             path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
         except Exception as e:
             logger.warning("Failed to save session history: %s", e)
+
+    def _push_auto_record_review(self, pipeline_name: str, pipeline_text: str, session_id: str) -> None:
+        """Push auto-recorded pipeline for review, same flow as edit_pipeline."""
+        import difflib
+        import os
+        import time
+
+        presets_dir = _SESSIONS_DIR / "presets"
+        preset_path = presets_dir / f"{pipeline_name}.pipeline.yaml"
+
+        edit_id = f"auto_{session_id}"
+        original = preset_path.read_text(encoding="utf-8") if preset_path.exists() else ""
+
+        if original.strip() == pipeline_text.strip():
+            return
+
+        # Save checkpoint
+        checkpoint_path = presets_dir / f"{pipeline_name}.pipeline.yaml.{edit_id}.orig"
+        presets_dir.mkdir(parents=True, exist_ok=True)
+        if preset_path.exists():
+            checkpoint_path.write_text(original, encoding="utf-8")
+        else:
+            checkpoint_path.write_text("", encoding="utf-8")
+
+        # Write new content
+        preset_path.write_text(pipeline_text, encoding="utf-8")
+
+        # Compute diff
+        diff_lines = list(difflib.unified_diff(
+            original.splitlines(keepends=True),
+            pipeline_text.splitlines(keepends=True),
+            fromfile="original", tofile="modified", lineterm="",
+        ))
+
+        event = {
+            "type": "pipeline.edit",
+            "edit_id": edit_id,
+            "original": original,
+            "modified": pipeline_text,
+            "diff_lines": [l for l in diff_lines if not l.startswith("---") and not l.startswith("+++")],
+            "explanation": f"Auto-recorded from session {session_id}",
+            "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S"),
+        }
+
+        if self._engine_state and hasattr(self._engine_state, "ws_clients"):
+            for q in self._engine_state.ws_clients:
+                try:
+                    q.put_nowait(event)
+                except Exception:
+                    pass
+
+        # Register edit for confirm/revert
+        from tools.edit_pipeline import _checkpoints, _processed_edits, _edit_status
+        _checkpoints[edit_id] = checkpoint_path
+        _processed_edits.add(edit_id)
+        _edit_status[edit_id] = "pending"
+
+
+def _fmt_args(args: dict) -> str:
+    """Format tool args as a compact string."""
+    parts = []
+    for k, v in args.items():
+        s = str(v)
+        parts.append(f"{k}={s[:60]}")
+    return ", ".join(parts)
+
+
+def _first_arg(args: dict) -> str:
+    """Return the first argument value as string."""
+    if not args:
+        return ""
+    return str(next(iter(args.values()), ""))

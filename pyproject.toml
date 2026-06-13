@@ -1,5 +1,5 @@
 [project]
-name = "learning-browser-use"
+name = "yak-browser-use"
 version = "0.1.0"
 description = "A clean, learnable browser automation framework"
 readme = "README.md"

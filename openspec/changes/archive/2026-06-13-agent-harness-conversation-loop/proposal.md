@@ -1,6 +1,6 @@
 ## Why
 
-learning-browser-use（LBU）的目标是让非技术人员即开即用地完成浏览器自动化任务。用户不需要写 agent.md、不需要理解 pipeline 概念——只需要打开桌面应用，通过 chat 指挥 AI 操作浏览器。
+yak-browser-use（YBU）的目标是让非技术人员即开即用地完成浏览器自动化任务。用户不需要写 agent.md、不需要理解 pipeline 概念——只需要打开桌面应用，通过 chat 指挥 AI 操作浏览器。
 
 产品形态：**chat + 浏览器操作实时同步**。用户看着浏览器画面发出指令，Agent 在 conversation_loop 中自主调用浏览器工具完成任务，每一步实时反馈。
 

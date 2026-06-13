@@ -23,7 +23,7 @@ if local_env.exists():
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="lbu — learning-browser-use: a clean, learnable browser automation framework"
+        description="ybu — yak-browser-use: a clean, learnable browser automation framework"
     )
     parser.add_argument(
         "--log-level", default=None, choices=["DEBUG", "INFO", "WARNING", "ERROR"],

@@ -136,7 +136,8 @@
     "chatFirst": "Chat left, Editor right",
     "editorFirst": "Editor left, Chat right",
     "chatEditor": "Chat | Editor",
-    "editorChat": "Editor | Chat"
+    "editorChat": "Editor | Chat",
+    "testPassed": "Test passed"
   },
   "log": {
     "title": "Log",
