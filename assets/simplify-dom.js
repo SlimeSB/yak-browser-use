@@ -4,15 +4,15 @@
   var MAX_ELEMENTS = 50;
 
   function isVisible(el) {
-    if (!el || el.offsetParent === null) return false;
+    if (!el || el.offsetParent === null) return null;
     var rect = el.getBoundingClientRect();
-    if (rect.width === 0 || rect.height === 0) return false;
-    if (rect.bottom < 0 || rect.top > window.innerHeight) return false;
-    if (rect.right < 0 || rect.left > window.innerWidth) return false;
+    if (rect.width === 0 || rect.height === 0) return null;
+    if (rect.bottom < 0 || rect.top > window.innerHeight) return null;
+    if (rect.right < 0 || rect.left > window.innerWidth) return null;
     var style = window.getComputedStyle(el);
-    if (style.display === 'none' || style.visibility === 'hidden') return false;
-    if (parseFloat(style.opacity) === 0) return false;
-    return true;
+    if (style.display === 'none' || style.visibility === 'hidden') return null;
+    if (parseFloat(style.opacity) === 0) return null;
+    return rect;
   }
 
   function buildSelector(el) {
@@ -72,7 +72,8 @@
     var visibleCount = 0;
     for (var i = 0; i < candidates.length; i++) {
       var el = candidates[i];
-      if (!isVisible(el)) continue;
+      var rect = isVisible(el);
+      if (!rect) continue;
       if (!isInteractive(el)) continue;
       if (seen.has(el)) continue;
       seen.add(el);
@@ -84,7 +85,11 @@
         type: (el.getAttribute('type') || '').toLowerCase(),
         text: getText(el),
         selector: buildSelector(el),
-        value: sanitizeValue(el)
+        value: sanitizeValue(el),
+        x: rect.left,
+        y: rect.top,
+        width: rect.width,
+        height: rect.height
       });
     }
     var result = { mode: 'interactive', elements: elements };
