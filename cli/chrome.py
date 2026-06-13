@@ -372,19 +372,38 @@ async def _cmd_chrome_back() -> None:
     await _with_cdp(_)
 
 
-async def _cmd_chrome_snapshot() -> None:
+async def _cmd_chrome_snapshot(mode: str = "full") -> None:
     import base64
+    import json as _json
     import time
     from pathlib import Path
 
     async def _(helpers):
-        result = await helpers.capture_snapshot()
-        ts = int(time.time())
-        png_path = Path(f"snapshot_{ts}.png")
-        html_path = Path(f"snapshot_{ts}.html")
-        png_path.write_bytes(base64.b64decode(result["screenshot_base64"]))
-        html_path.write_text(result["html"], encoding="utf-8")
-        print(f"  \u2713 snapshot saved: {png_path.name}, {html_path.name}")
+        if mode == "interactive":
+            result = await helpers.capture_snapshot_interactive()
+            elements = result.get("elements", [])
+            elements_path = Path("interactive_elements.json")
+            elements_path.write_text(_json.dumps(elements, ensure_ascii=False, indent=2), encoding="utf-8")
+            degraded = " (degraded)" if result.get("degraded") else ""
+            print(f"  \u2713 interactive snapshot saved: {elements_path.name} ({len(elements)} elements){degraded}")
+        elif mode == "simplified":
+            result = await helpers.capture_snapshot_simplified()
+            summary = result.get("summary", "")
+            lists_data = result.get("lists", [])
+            tables_data = result.get("tables", [])
+            Path("page_summary.txt").write_text(summary, encoding="utf-8")
+            Path("detected_lists.json").write_text(_json.dumps(lists_data, ensure_ascii=False, indent=2), encoding="utf-8")
+            Path("detected_tables.json").write_text(_json.dumps(tables_data, ensure_ascii=False, indent=2), encoding="utf-8")
+            degraded = " (degraded)" if result.get("degraded") else ""
+            print(f"  \u2713 simplified snapshot saved: page_summary.txt, detected_lists.json, detected_tables.json{degraded}")
+        else:
+            result = await helpers.capture_snapshot()
+            ts = int(time.time())
+            png_path = Path(f"snapshot_{ts}.png")
+            html_path = Path(f"snapshot_{ts}.html")
+            png_path.write_bytes(base64.b64decode(result["screenshot_base64"]))
+            html_path.write_text(result["html"], encoding="utf-8")
+            print(f"  \u2713 snapshot saved: {png_path.name}, {html_path.name}")
     await _with_cdp(_)
 
 

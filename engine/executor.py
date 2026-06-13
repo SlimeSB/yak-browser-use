@@ -104,6 +104,7 @@ async def execute_browser_op(
     op_type: str,
     params: dict,
     cdp_helpers: object,
+    element_map: dict | None = None,
 ) -> dict:
     """Execute a single browser operation (goto/click/fill/snapshot/scroll/source/eval).
 
@@ -131,26 +132,36 @@ async def execute_browser_op(
                 selector = params.get("selector", "")
                 if not selector:
                     raise ValueError("click op missing selector")
+                selector = _resolve_element_ref(selector, element_map)
                 await cdp_helpers.click_selector(selector)  # type: ignore[union-attr]
                 result["result"] = {"selector": selector}
 
             elif op_type == "fill":
                 selector = params.get("selector", "")
                 text = params.get("text", params.get("value", ""))
+                selector = _resolve_element_ref(selector, element_map)
                 await cdp_helpers.fill_input(selector, text)  # type: ignore[union-attr]
                 result["result"] = {"selector": selector}
 
             elif op_type == "snapshot":
-                snapshot = await cdp_helpers.capture_snapshot()  # type: ignore[union-attr]
-                result["result"] = {}
-                png_data = snapshot.get("screenshot_base64", "")
-                if png_data:
-                    result["screenshot_base64"] = png_data
-                    result["result"]["has_screenshot"] = True
-                html_data = snapshot.get("html", "")
-                if html_data:
-                    result["html"] = html_data
-                    result["result"]["has_html"] = True
+                mode = params.get("mode", "full")
+                if mode == "interactive":
+                    snapshot = await cdp_helpers.capture_snapshot_interactive()  # type: ignore[union-attr]
+                    result["result"] = snapshot
+                elif mode == "simplified":
+                    snapshot = await cdp_helpers.capture_snapshot_simplified()  # type: ignore[union-attr]
+                    result["result"] = snapshot
+                else:
+                    snapshot = await cdp_helpers.capture_snapshot()  # type: ignore[union-attr]
+                    result["result"] = {}
+                    png_data = snapshot.get("screenshot_base64", "")
+                    if png_data:
+                        result["screenshot_base64"] = png_data
+                        result["result"]["has_screenshot"] = True
+                    html_data = snapshot.get("html", "")
+                    if html_data:
+                        result["html"] = html_data
+                        result["result"]["has_html"] = True
 
             elif op_type == "scroll":
                 direction = params.get("direction", "down")
@@ -191,6 +202,29 @@ def _build_scroll_js(direction: str, amount: int) -> str:
         return f"window.scrollBy(0, -{amount});"
     else:
         return f"window.scrollBy(0, {amount});"
+
+
+def _write_full_artifacts(core_result: dict, step_dir: Path, _base64, _time) -> None:
+    """Write screenshot and HTML artifacts from a full snapshot result."""
+    png_data = core_result.get("screenshot_base64", "")
+    if png_data:
+        ts = int(_time.time())
+        png_path = step_dir / f"screenshot_{ts}.png"
+        png_path.write_bytes(_base64.b64decode(png_data))
+    html_data = core_result.get("html", "")
+    if html_data:
+        html_path = step_dir / "page.html"
+        html_path.write_text(html_data, encoding="utf-8")
+
+
+def _resolve_element_ref(selector: str, element_map: dict | None) -> str:
+    """Resolve @eN element references to CSS selectors using the element map."""
+    if selector.startswith("@e") and element_map:
+        resolved = element_map.get(selector)
+        if resolved is None:
+            raise ValueError(f"Unknown element reference: {selector}")
+        return resolved
+    return selector
 
 
 async def execute_tool(
@@ -376,9 +410,11 @@ async def execute_browser_step(
     then writes screenshots and HTML to step_dir.
     """
     import base64
+    import json as _json
 
     ops = step.get("browser_ops", [])
     registry = CompensationRegistry()
+    element_map: dict[str, str] = {}
     result: dict = {
         "step": step.get("name", ""),
         "type": "browser",
@@ -414,7 +450,7 @@ async def execute_browser_step(
                 op_record["selector"] = op.get("selector", "")
                 op_record["text"] = text
             elif op_type == "snapshot":
-                core_params = {}
+                core_params = {"mode": op.get("mode", "full")}
             elif op_type == "scroll":
                 core_params = {"direction": op.get("direction", "down"),
                                "amount": op.get("amount", 300)}
@@ -426,22 +462,32 @@ async def execute_browser_step(
             else:
                 core_params = {}
 
-            core_result = await execute_browser_op(op_type, core_params, cdp_helpers)
+            core_result = await execute_browser_op(op_type, core_params, cdp_helpers, element_map)
             op_record["ok"] = core_result["ok"]
             op_record["duration_ms"] = core_result["duration_ms"]
 
             if core_result["ok"]:
-                # Handle file I/O for snapshot
                 if op_type == "snapshot":
-                    png_data = core_result.get("screenshot_base64", "")
-                    if png_data:
-                        ts = int(time.time())
-                        png_path = step_dir / f"screenshot_{ts}.png"
-                        png_path.write_bytes(base64.b64decode(png_data))
-                    html_data = core_result.get("html", "")
-                    if html_data:
-                        html_path = step_dir / "page.html"
-                        html_path.write_text(html_data, encoding="utf-8")
+                    snap_result = core_result.get("result", {})
+                    snap_mode = snap_result.get("mode", "full")
+                    if snap_mode == "interactive":
+                        elements = snap_result.get("elements", [])
+                        elements_path = step_dir / "interactive_elements.json"
+                        elements_path.write_text(_json.dumps(elements, ensure_ascii=False, indent=2), encoding="utf-8")
+                        element_map = {el["ref"]: el["selector"] for el in elements if el.get("ref") and el.get("selector")}
+                        if snap_result.get("degraded"):
+                            _write_full_artifacts(snap_result, step_dir, base64, time)
+                    elif snap_mode == "simplified":
+                        summary = snap_result.get("summary", "")
+                        lists_data = snap_result.get("lists", [])
+                        tables_data = snap_result.get("tables", [])
+                        (step_dir / "page_summary.txt").write_text(summary, encoding="utf-8")
+                        (step_dir / "detected_lists.json").write_text(_json.dumps(lists_data, ensure_ascii=False, indent=2), encoding="utf-8")
+                        (step_dir / "detected_tables.json").write_text(_json.dumps(tables_data, ensure_ascii=False, indent=2), encoding="utf-8")
+                        if snap_result.get("degraded"):
+                            _write_full_artifacts(snap_result, step_dir, base64, time)
+                    else:
+                        _write_full_artifacts(core_result, step_dir, base64, time)
                 elif op_type == "source":
                     html_data = core_result.get("html", "")
                     if html_data:

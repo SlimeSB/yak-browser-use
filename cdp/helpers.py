@@ -5,11 +5,27 @@ All CDP operations go through this class (or its restricted ToolCDPHelpers varia
 from __future__ import annotations
 
 import base64
+import json as _json
 import logging
 from pathlib import Path
 from typing import Any
 
 logger = logging.getLogger(__name__)
+
+_SIMPLIFY_DOM_JS: str | None = None
+
+
+def _load_simplify_dom_js() -> str | None:
+    global _SIMPLIFY_DOM_JS
+    if _SIMPLIFY_DOM_JS is not None:
+        return _SIMPLIFY_DOM_JS
+    script_path = Path(__file__).resolve().parent.parent / "assets" / "simplify-dom.js"
+    try:
+        _SIMPLIFY_DOM_JS = script_path.read_text(encoding="utf-8")
+        return _SIMPLIFY_DOM_JS
+    except Exception:
+        logger.warning("simplify-dom.js not found at %s", script_path)
+        return None
 
 
 class CDPHelpers:
@@ -103,3 +119,41 @@ class CDPHelpers:
     async def js(self, code: str) -> Any:
         result = await self._cdp("Runtime.evaluate", {"expression": code})
         return result.get("result", {}).get("value")
+
+    async def _inject_simplify_js(self, mode: str) -> Any:
+        script = _load_simplify_dom_js()
+        if script is None:
+            return None
+        safe_mode = _json.dumps(mode)
+        expression = f"{script}\nsimplifyDom({{mode: {safe_mode}}})"
+        try:
+            result = await self.js(expression)
+            return result
+        except Exception:
+            logger.warning("simplify-dom.js execution failed for mode=%s", mode)
+            return None
+
+    async def capture_snapshot_interactive(self) -> dict:
+        js_result = await self._inject_simplify_js("interactive")
+        if js_result and isinstance(js_result, dict) and js_result.get("elements") is not None:
+            result = {"elements": js_result.get("elements", []), "mode": "interactive"}
+            if js_result.get("truncated"):
+                result["truncated"] = True
+                result["total_found"] = js_result.get("total_found", 0)
+            return result
+        logger.info("interactive snapshot degraded to full")
+        full = await self.capture_snapshot()
+        return {"elements": [], "mode": "interactive", "degraded": True, **full}
+
+    async def capture_snapshot_simplified(self) -> dict:
+        js_result = await self._inject_simplify_js("simplified")
+        if js_result and isinstance(js_result, dict) and js_result.get("summary") is not None:
+            return {
+                "summary": js_result.get("summary", ""),
+                "lists": js_result.get("lists", []),
+                "tables": js_result.get("tables", []),
+                "mode": "simplified",
+            }
+        logger.info("simplified snapshot degraded to full")
+        full = await self.capture_snapshot()
+        return {"summary": "", "lists": [], "tables": [], "mode": "simplified", "degraded": True, **full}

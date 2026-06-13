@@ -92,7 +92,7 @@ def main() -> None:
     fill_p.add_argument("text")
     chrome_sub.add_parser("scroll", help="Scroll the page").add_argument("direction", choices=["down", "up"])
     chrome_sub.add_parser("back", help="Go back")
-    chrome_sub.add_parser("snapshot", help="Take a screenshot + HTML snapshot")
+    chrome_sub.add_parser("snapshot", help="Take a screenshot + HTML snapshot").add_argument("--mode", default="full", choices=["full", "interactive", "simplified"], help="Snapshot mode (default: full)")
     chrome_sub.add_parser("source", help="Get page HTML")
     chrome_sub.add_parser("wait", help="Wait (seconds)").add_argument("seconds", type=float)
     chrome_sub.add_parser("eval", help="Execute JavaScript").add_argument("js")
@@ -189,7 +189,7 @@ def main() -> None:
             "fill": ["selector", "text"],
             "scroll": ["direction"],
             "back": [],
-            "snapshot": [],
+            "snapshot": ["mode"],
             "source": [],
             "wait": ["seconds"],
             "eval": ["js"],

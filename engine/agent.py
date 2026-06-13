@@ -190,12 +190,31 @@ async def run_goal_step(
         # Load workspace helpers
         _load_workspace_helpers(tools, pipeline_name)
 
+        # Inject interactive snapshot elements into system message
+        extend_msg = system_prompt if system_prompt else ""
+        if cdp_helpers is not None:
+            try:
+                interactive = await cdp_helpers.capture_snapshot_interactive()
+                elements = interactive.get("elements", [])
+                if elements:
+                    lines = ["\n当前页面可交互元素："]
+                    for el in elements:
+                        ref = el.get("ref", "")
+                        tag = el.get("tag", "")
+                        etype = el.get("type", "")
+                        text = el.get("text", "")
+                        type_str = f"[{etype}]" if etype else ""
+                        lines.append(f"{ref}: {tag}{type_str} \"{text}\"")
+                    extend_msg = (extend_msg + "\n" if extend_msg else "") + "\n".join(lines)
+            except Exception:
+                logger.debug("interactive snapshot failed, skipping @eN injection")
+
         agent = Agent(
             task=description,
             llm=llm,
             browser=bu_browser,
             tools=tools,
-            extend_system_message=system_prompt if system_prompt else None,
+            extend_system_message=extend_msg if extend_msg else None,
         )
 
         logger.info("goal agent start: %s", description[:80])

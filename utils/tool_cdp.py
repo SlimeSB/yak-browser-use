@@ -49,9 +49,16 @@ class ToolCDPHelpers:
     async def wait(self, seconds: float = 1.0) -> None:
         await asyncio.sleep(seconds)
 
-    async def snapshot(self) -> dict:
+    async def snapshot(self, mode: str = "full") -> dict:
         self._check_failures()
-        return await self._helpers.capture_snapshot()
+        if mode == "interactive":
+            result = await self._helpers.capture_snapshot_interactive()
+        elif mode == "simplified":
+            result = await self._helpers.capture_snapshot_simplified()
+        else:
+            result = await self._helpers.capture_snapshot()
+        self._fail_count = 0
+        return result
 
     def _check_failures(self) -> None:
         if self._fail_count >= self._max_fails:
