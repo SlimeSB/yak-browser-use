@@ -7,7 +7,7 @@ from pathlib import Path
 
 
 def _get_config_path() -> Path:
-    return Path.home() / ".lbu" / "provider.json"
+    return Path.home() / ".ybu" / "provider.json"
 
 
 def _load_config() -> dict:
@@ -23,16 +23,16 @@ def _load_config() -> dict:
 def create_llm(model: str | None = None) -> object:
     """Create a browser-use LLM instance.
 
-    Reads from ~/.lbu/provider.json first, then falls back to
-    LBU_MODEL / LBU_API_KEY / LBU_API_BASE env vars.
+    Reads from ~/.ybu/provider.json first, then falls back to
+    YBU_MODEL / YBU_API_KEY / YBU_API_BASE env vars.
     """
     from browser_use.llm.openai.chat import ChatOpenAI
 
     cfg = _load_config()
 
-    model_name = model or cfg.get("model") or os.environ.get("LBU_MODEL", "gpt-4o")
-    api_key = cfg.get("api_key") or os.environ.get("LBU_API_KEY", "")
-    api_base = cfg.get("api_base") or os.environ.get("LBU_API_BASE", "")
+    model_name = model or cfg.get("model") or os.environ.get("YBU_MODEL", "gpt-4o")
+    api_key = cfg.get("api_key") or os.environ.get("YBU_API_KEY", "")
+    api_base = cfg.get("api_base") or os.environ.get("YBU_API_BASE", "")
 
     kwargs: dict = {"model": model_name}
     if api_key:

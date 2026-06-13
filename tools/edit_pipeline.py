@@ -13,7 +13,7 @@ import time
 from pathlib import Path
 
 
-PRESETS_DIR = Path.home() / ".lbu" / "sessions" / "presets"
+PRESETS_DIR = Path.home() / ".ybu" / "sessions" / "presets"
 
 _checkpoints: dict[str, Path] = {}
 _processed_edits: set[str] = set()

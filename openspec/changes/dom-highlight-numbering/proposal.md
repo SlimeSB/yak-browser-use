@@ -11,7 +11,7 @@
 - **修改** `engine/executor.py` 中 `execute_browser_op()` 新增 `get_element_by_number` 操作分支；`_resolve_element_ref()` 改为异步并增加 `cdp_helpers` fallback 以支持 chat 模式下的 `@eN` 解析
 - **修改** `engine/_harness/tool_executor.py` 中 `execute_tool_calls_sequential()`，在 goto/click/fill 成功后自动刷新高亮
 - **修改** `engine/_harness/conversation_loop.py` 中 `run_conversation_loop()`，对话启动时异步注入首次高亮
-- **修改** `engine/agent.py` 中 `run_goal_step()` 在 Agent 启动前注入高亮；`_cleanup_agent_highlights()` 同时清理 BU 和 LBU 的高亮元素
+- **修改** `engine/agent.py` 中 `run_goal_step()` 在 Agent 启动前注入高亮；`_cleanup_agent_highlights()` 同时清理 BU 和 YBU 的高亮元素
 - **修改** `engine/executor.py` 中 `execute_browser_step()`，在 goto/click/fill 成功后自动刷新高亮
 
 ## Capabilities

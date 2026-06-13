@@ -4,8 +4,8 @@
 
 ## 2. cdp/helpers.py — 高亮核心方法
 
-- [ ] 2.1 实现 `add_dom_highlights(self, elements=None)`：接收可选元素列表，未传时通过 `_inject_simplify_js("interactive")` 获取并提取 `result["elements"]`；构建 `self._element_map` 缓存；内联 JS 渲染高亮（先 remove 旧高亮，创建 `#lbu-highlights` 容器，每个元素画 absolute 定位虚线框 + 蓝色 badge，JS 中用 `scrollX/scrollY` 转换坐标）
-- [ ] 2.2 实现 `remove_dom_highlights(self)`：通过 `self.js()` 执行 `document.getElementById('lbu-highlights')?.remove()`，同时清空 `self._element_map = {}`
+- [ ] 2.1 实现 `add_dom_highlights(self, elements=None)`：接收可选元素列表，未传时通过 `_inject_simplify_js("interactive")` 获取并提取 `result["elements"]`；构建 `self._element_map` 缓存；内联 JS 渲染高亮（先 remove 旧高亮，创建 `#ybu-highlights` 容器，每个元素画 absolute 定位虚线框 + 蓝色 badge，JS 中用 `scrollX/scrollY` 转换坐标）
+- [ ] 2.2 实现 `remove_dom_highlights(self)`：通过 `self.js()` 执行 `document.getElementById('ybu-highlights')?.remove()`，同时清空 `self._element_map = {}`
 - [ ] 2.3 实现 `get_element_by_index(self, ref)`：从 `self._element_map` 缓存查询，支持 `"@e3"`/`"e3"`/`"3"` 格式归一化；返回 `{ref, tag, text, selector, bounds}`
 
 ## 3. engine/_harness/tools.py — 新增 Agent 工具
@@ -30,7 +30,7 @@
 ## 7. engine/agent.py — Agent 生命周期集成
 
 - [ ] 7.1 在 `run_goal_step()` 中，`elements = interactive.get("elements", [])` 之后、`if elements:` 之前，调用 `await cdp_helpers.add_dom_highlights(elements=elements)`
-- [ ] 7.2 修改 `_cleanup_agent_highlights()` 的 JS 表达式，追加 `#lbu-highlights` 的移除逻辑
+- [ ] 7.2 修改 `_cleanup_agent_highlights()` 的 JS 表达式，追加 `#ybu-highlights` 的移除逻辑
 
 ## 8. 验证与收尾
 

@@ -8,7 +8,7 @@ import { getLogger } from '../utils/logger';
 const logger = getLogger('backend');
 
 function _pidFile(ownerPid: number): string {
-  return join(tmpdir(), `lbu-backend.${ownerPid}.pid`);
+  return join(tmpdir(), `ybu-backend.${ownerPid}.pid`);
 }
 
 function _isProcessAlive(pid: number): boolean {
@@ -37,9 +37,9 @@ function _killProcess(pid: number): void {
 
 function _cleanupZombieBackends(): void {
   try {
-    const files = readdirSync(tmpdir()).filter(f => /^lbu-backend\.\d+\.pid$/.test(f));
+    const files = readdirSync(tmpdir()).filter(f => /^ybu-backend\.\d+\.pid$/.test(f));
     for (const file of files) {
-      const match = file.match(/^lbu-backend\.(\d+)\.pid$/);
+      const match = file.match(/^ybu-backend\.(\d+)\.pid$/);
       if (!match) continue;
       const ownerPid = parseInt(match[1], 10);
       if (!_isProcessAlive(ownerPid)) {
@@ -115,7 +115,7 @@ export class PythonBackend {
       stderrChunks.push(text);
       logger.debug('[stderr] ' + text.trimEnd());
       const uvicornMatch = text.match(/Uvicorn running on http:\/\/127\.0\.0\.1:(\d+)/);
-      const cliMatch = text.match(/lbu FastAPI running on http:\/\/127\.0\.0\.1:(\d+)/);
+      const cliMatch = text.match(/ybu FastAPI running on http:\/\/127\.0\.0\.1:(\d+)/);
       const match = uvicornMatch || cliMatch;
       if (match) {
         this.port = parseInt(match[1], 10);

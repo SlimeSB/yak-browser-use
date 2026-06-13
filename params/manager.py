@@ -9,7 +9,7 @@ import json
 import os
 from pathlib import Path
 
-_DEFAULT_STORE_PATH = Path.home() / ".lbu" / "params.json"
+_DEFAULT_STORE_PATH = Path.home() / ".ybu" / "params.json"
 
 
 class ParamRef:

@@ -41,8 +41,8 @@ async def _debug_chrome() -> None:
             logger.warning("\u2717 No connectable Chrome instance found")
             logger.info("  Please ensure Chrome is running with one of:")
             logger.info("  1. chrome.exe --remote-debugging-port=9222")
-            logger.info("  2. Set LBU_CDP_URL environment variable")
-            logger.info("  3. Set LBU_WSS_URL environment variable")
+            logger.info("  2. Set YBU_CDP_URL environment variable")
+            logger.info("  3. Set YBU_WSS_URL environment variable")
     except Exception as e:
         logger.warning("\u2717 Chrome discovery failed: %s", e)
 
@@ -58,7 +58,7 @@ async def _debug_checkpoints(last: bool = False) -> None:
     from engine.checkpoint import MemorySaver
 
     if not last:
-        logger.info("Usage: lbu debug checkpoints --last")
+        logger.info("Usage: ybu debug checkpoints --last")
         logger.info("View the latest checkpoint")
         return
 

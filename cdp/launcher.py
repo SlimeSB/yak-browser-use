@@ -178,7 +178,7 @@ async def launch_isolated_chrome(
         user_data_dir = str(get_isolated_profile_dir(profile_name))
         os.makedirs(user_data_dir, exist_ok=True)
     else:
-        user_data_dir = tempfile.mkdtemp(prefix="lbu_chrome_")
+        user_data_dir = tempfile.mkdtemp(prefix="ybu_chrome_")
 
     if exe and "msedge" in exe.lower():
         logger.info("Launching Edge via subprocess with profile: %s", user_data_dir)

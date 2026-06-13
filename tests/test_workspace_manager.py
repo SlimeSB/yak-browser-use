@@ -89,7 +89,7 @@ class TestWorkspaceManagerInit:
         assert wm.pipeline_name == "test_pipe"
         assert wm.root.name == "test_pipe"
         assert wm.root.parent.name == "workspaces"
-        assert ".lbu" in str(wm.root)
+        assert ".ybu" in str(wm.root)
 
 
 class TestWorkspaceManagerEnsureWorkspace:

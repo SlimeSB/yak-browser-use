@@ -19,7 +19,7 @@ from api.errors import APIError
 logger = get_logger(__name__)
 
 # Default session directory
-_SESSIONS_DIR = Path.home() / ".lbu" / "sessions"
+_SESSIONS_DIR = Path.home() / ".ybu" / "sessions"
 
 
 @dataclass
@@ -36,7 +36,7 @@ class SessionState:
 
 
 class Service:
-    """Business logic service for the LBU API."""
+    """Business logic service for the YBU API."""
 
     def __init__(self, engine_state: object | None = None):
         self._engine_state = engine_state

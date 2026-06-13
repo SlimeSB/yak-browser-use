@@ -24,7 +24,7 @@ _active_profile: contextvars.ContextVar[str | None] = contextvars.ContextVar(
 
 def get_active_profile() -> str | None:
     """Return the currently active profile name (from env or context var)."""
-    return os.getenv("LBU_CHROME_PROFILE") or _active_profile.get()
+    return os.getenv("YBU_CHROME_PROFILE") or _active_profile.get()
 
 
 def set_active_profile(name: str | None) -> None:

@@ -1,6 +1,6 @@
 """Parameter management CLI — replaces the old credential/auth system.
 
-Stores persistent key-value parameters in a plain JSON file (~/.lbu/params.json).
+Stores persistent key-value parameters in a plain JSON file (~/.ybu/params.json).
 """
 
 from __future__ import annotations
@@ -20,7 +20,7 @@ def _cmd_param_set(key: str, value: str) -> None:
     mgr = ParamManager()
     mgr.set(key, value)
     print(f"\u2713 Parameter '{key}' saved to {mgr._path}")
-    print(f"  (can also set via environment variable: LBU_PARAM_{key.upper()}={value})")
+    print(f"  (can also set via environment variable: YBU_PARAM_{key.upper()}={value})")
 
 
 def _cmd_param_list() -> None:
@@ -28,7 +28,7 @@ def _cmd_param_list() -> None:
     keys = list_param_keys()
     if not keys:
         print("(no stored parameters)")
-        print("Use 'lbu param set <key> <value>' to add a parameter")
+        print("Use 'ybu param set <key> <value>' to add a parameter")
     else:
         print(f"Stored parameters ({len(keys)}):")
         for k in keys:

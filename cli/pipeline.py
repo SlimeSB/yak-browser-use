@@ -31,7 +31,7 @@ def _cmd_list() -> None:
     from workspace.manager import WorkspaceManager
 
     # Use root workspace dir (same as WorkspaceManager uses internally)
-    base_dir = Path.home() / ".lbu" / "workspaces"
+    base_dir = Path.home() / ".ybu" / "workspaces"
 
     if not base_dir.exists():
         print("(no workspace)")
@@ -178,7 +178,7 @@ async def _cmd_restart(pipeline_name: str, run_id: str | None = None) -> None:
         sys.exit(1)
 
     if engine_state.browser is None:
-        logger.error("Chrome not connected. Please run: lbu daemon start")
+        logger.error("Chrome not connected. Please run: ybu daemon start")
         sys.exit(1)
 
     resume_from_index = 0

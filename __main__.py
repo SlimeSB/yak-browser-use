@@ -27,7 +27,7 @@ def main() -> None:
     )
     parser.add_argument(
         "--log-level", default=None, choices=["DEBUG", "INFO", "WARNING", "ERROR"],
-        help="Log level (default DEBUG, overridable via LBU_LOG_LEVEL env var)",
+        help="Log level (default DEBUG, overridable via YBU_LOG_LEVEL env var)",
     )
     sub = parser.add_subparsers(dest="command", required=True)
 

@@ -93,7 +93,7 @@ async def _ensure_browser_connected() -> object:
     from cdp.helpers import CDPHelpers
 
     try:
-        daemon = await ensure_daemon("lbu-chat")
+        daemon = await ensure_daemon("ybu-chat")
         helpers = CDPHelpers(daemon)
         logger.info("Browser connected for chat mode")
         return helpers

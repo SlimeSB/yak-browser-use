@@ -1,6 +1,6 @@
 """VersionManager — manages version snapshots.
 
-Versions stored in: ~/.lbu/workspaces/<pipeline_name>/versions/<N>/
+Versions stored in: ~/.ybu/workspaces/<pipeline_name>/versions/<N>/
 LATEST file tracks the current version.
 """
 from __future__ import annotations

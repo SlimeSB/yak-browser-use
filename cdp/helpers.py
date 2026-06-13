@@ -199,10 +199,10 @@ class CDPHelpers:
         elements_json = _json.dumps(elements)
         js_code = (
             "(function(){"
-            "var old=document.getElementById('lbu-highlights');"
+            "var old=document.getElementById('ybu-highlights');"
             "if(old)old.remove();"
             "var container=document.createElement('div');"
-            "container.id='lbu-highlights';"
+            "container.id='ybu-highlights';"
             "container.style.cssText='position:absolute;top:0;left:0;width:100%;pointer-events:none;z-index:2147483646;';"
             "document.body.appendChild(container);"
             "var elements=" + elements_json + ";"
@@ -211,7 +211,7 @@ class CDPHelpers:
             "for(var i=0;i<elements.length;i++){"
             "var el=elements[i];"
             "var div=document.createElement('div');"
-            "div.setAttribute('data-lbu-highlight',el.ref);"
+            "div.setAttribute('data-ybu-highlight',el.ref);"
             "div.style.cssText='position:absolute;"
             "left:'+(el.x+sx)+'px;top:'+(el.y+sy)+'px;"
             "width:'+el.width+'px;height:'+el.height+'px;"
@@ -231,7 +231,7 @@ class CDPHelpers:
 
     async def remove_dom_highlights(self) -> None:
         """Remove all highlight overlays from the page and clear the element map."""
-        await self.js("var el=document.getElementById('lbu-highlights');if(el)el.remove();")
+        await self.js("var el=document.getElementById('ybu-highlights');if(el)el.remove();")
         self._element_map = {}
 
     def get_element_by_index(self, ref: str) -> dict:

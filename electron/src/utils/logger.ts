@@ -13,8 +13,8 @@ class Logger {
 
   constructor(name: string) {
     this.name = name;
-    if (typeof process !== 'undefined' && process.env?.LBU_LOG_LEVEL) {
-      const envLevel = process.env.LBU_LOG_LEVEL.toLowerCase() as LogLevel;
+    if (typeof process !== 'undefined' && process.env?.YBU_LOG_LEVEL) {
+      const envLevel = process.env.YBU_LOG_LEVEL.toLowerCase() as LogLevel;
       if (envLevel in LEVELS) this.level = envLevel;
     }
   }

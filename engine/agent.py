@@ -275,20 +275,20 @@ def _discover_ws_url() -> str:
     In a production setup this would query the Chrome DevTools Protocol
     endpoint. Stub returns a placeholder.
     """
-    # Try LBU_WS_URL env var first, then fall through to discovery
+    # Try YBU_WS_URL env var first, then fall through to discovery
     import os
-    ws_url = os.environ.get("LBU_WS_URL", "")
+    ws_url = os.environ.get("YBU_WS_URL", "")
     if ws_url:
         return ws_url
-    logger.warning("No LBU_WS_URL set and no daemon.chrome module — using placeholder")
+    logger.warning("No YBU_WS_URL set and no daemon.chrome module — using placeholder")
     return "ws://localhost:9222/devtools/browser"
 
 
 def _create_llm():
     """Create a browser-use LLM instance from environment configuration.
 
-    Respects ``LBU_LLM_PROVIDER``, ``LBU_LLM_MODEL``, ``LBU_LLM_API_KEY``,
-    and ``LBU_LLM_BASE_URL`` environment variables.
+    Respects ``YBU_LLM_PROVIDER``, ``YBU_LLM_MODEL``, ``YBU_LLM_API_KEY``,
+    and ``YBU_LLM_BASE_URL`` environment variables.
 
     Falls back to a default OpenAI GPT-4o configuration.
     """
@@ -296,9 +296,9 @@ def _create_llm():
 
     from browser_use.llm.openai.chat import ChatOpenAI
 
-    model = os.environ.get("LBU_LLM_MODEL", "gpt-4o")
-    api_key = os.environ.get("LBU_LLM_API_KEY", "")
-    base_url = os.environ.get("LBU_LLM_BASE_URL", "")
+    model = os.environ.get("YBU_LLM_MODEL", "gpt-4o")
+    api_key = os.environ.get("YBU_LLM_API_KEY", "")
+    base_url = os.environ.get("YBU_LLM_BASE_URL", "")
 
     kwargs: dict = {"model": model}
     if api_key:
@@ -455,8 +455,8 @@ async def _cleanup_agent_highlights(agent_browser: object | None) -> None:
                     "expression": (
                         "document.querySelectorAll('.browser-use-highlight')"
                         ".forEach(el => el.remove());"
-                        "var lbu=document.getElementById('lbu-highlights');"
-                        "if(lbu)lbu.remove();"
+                        "var ybu=document.getElementById('ybu-highlights');"
+                        "if(ybu)ybu.remove();"
                     ),
                     "returnByValue": True,
                 }

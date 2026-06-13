@@ -1,8 +1,8 @@
 """Chrome DevTools Protocol WebSocket URL discovery.
 
 Provides 6 fallback levels:
-1. LBU_CDP_URL env var → query /json/version
-2. LBU_WSS_URL env var → direct WS URL
+1. YBU_CDP_URL env var → query /json/version
+2. YBU_WSS_URL env var → direct WS URL
 3. DevToolsActivePort file scan (Chrome/Edge/Brave profiles under %LOCALAPPDATA%)
 4. Port scan (9222, 9223)
 5. Launch user Chrome as fallback (delegated to launcher)
@@ -149,18 +149,18 @@ async def discover_ws_url(
     RuntimeError
         If all 6 discovery levels fail.
     """
-    # Level 1: LBU_CDP_URL → query /json/version
-    cdp_url = os.environ.get("LBU_CDP_URL", "").strip()
+    # Level 1: YBU_CDP_URL → query /json/version
+    cdp_url = os.environ.get("YBU_CDP_URL", "").strip()
     if cdp_url:
         ws_url = await _ws_from_cdp_url(cdp_url)
         if ws_url:
-            logger.info("Level 1: LBU_CDP_URL -> %s", ws_url)
+            logger.info("Level 1: YBU_CDP_URL -> %s", ws_url)
             return ws_url
 
-    # Level 2: LBU_WSS_URL → direct WS URL
-    wss_url = os.environ.get("LBU_WSS_URL", "").strip()
+    # Level 2: YBU_WSS_URL → direct WS URL
+    wss_url = os.environ.get("YBU_WSS_URL", "").strip()
     if wss_url:
-        logger.info("Level 2: LBU_WSS_URL -> %s", wss_url)
+        logger.info("Level 2: YBU_WSS_URL -> %s", wss_url)
         return wss_url
 
     # Level 3: DevToolsActivePort file scan

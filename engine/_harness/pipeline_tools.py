@@ -21,7 +21,7 @@ from utils.logging import get_logger
 
 logger = get_logger(__name__)
 
-PRESETS_DIR = Path.home() / ".lbu" / "sessions" / "presets"
+PRESETS_DIR = Path.home() / ".ybu" / "sessions" / "presets"
 
 _VALID_UPDATE_KEYS = frozenset({
     "browser_ops", "tool_name", "goal_description", "description", "depends_on",

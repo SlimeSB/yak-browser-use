@@ -10,7 +10,7 @@ import os
 import time
 from pathlib import Path
 
-PRESETS_DIR = Path.home() / ".lbu" / "sessions" / "presets"
+PRESETS_DIR = Path.home() / ".ybu" / "sessions" / "presets"
 
 
 async def record_step(

@@ -60,7 +60,7 @@ async def _cmd_chrome_status() -> None:
     # Environment variables
     import os
     print(_bold("\n\u25a0 Environment Variables"))
-    for var in ("LBU_CDP_URL", "LBU_WSS_URL"):
+    for var in ("YBU_CDP_URL", "YBU_WSS_URL"):
         val = os.getenv(var)
         print(_pf(var, val if val else _dim("(not set)")))
 
@@ -115,23 +115,23 @@ async def _cmd_chrome_inspect() -> None:
     # Step 1: Quick win via env vars
     import os
     print(_bold("\n[1/5] Environment Variables (fast path)"))
-    cdp = os.getenv("LBU_CDP_URL")
-    wss = os.getenv("LBU_WSS_URL")
+    cdp = os.getenv("YBU_CDP_URL")
+    wss = os.getenv("YBU_WSS_URL")
 
     if cdp:
         from cdp.discover import _ws_from_cdp_url
         ws = await _ws_from_cdp_url(cdp)
         if ws:
-            print(f"  {_emoji_ok()} LBU_CDP_URL → available: {ws[:60]}...")
+            print(f"  {_emoji_ok()} YBU_CDP_URL → available: {ws[:60]}...")
             bi = await _fetch_browser_info(ws)
             if bi.get("browser"):
                 print(f"    {_dim('Browser:')} {bi['browser']}")
             return
         else:
-            print(f"  {_emoji_fail()} LBU_CDP_URL set but unreachable: {cdp}")
+            print(f"  {_emoji_fail()} YBU_CDP_URL set but unreachable: {cdp}")
 
     if wss:
-        print(f"  {_emoji_ok()} LBU_WSS_URL → {wss[:60]}...")
+        print(f"  {_emoji_ok()} YBU_WSS_URL → {wss[:60]}...")
         bi = await _fetch_browser_info(wss)
         if bi.get("browser"):
             print(f"    {_dim('Browser:')} {bi['browser']}")
@@ -198,9 +198,9 @@ async def _cmd_chrome_inspect() -> None:
     print(f"\n  {_warn('Suggestions:')}")
     bullet = chr(0x2022)  # bullet character
     em_dash = chr(0x2014)  # em dash
-    print(f"    {_dim(f'{bullet} lbu chrome launch     {em_dash} launch user Chrome (non-destructive)')}")
-    print(f"    {_dim(f'{bullet} lbu chrome restart    {em_dash} kill & restart Chrome')}")
-    print(f"    {_dim(f'{bullet} lbu chrome isolated   {em_dash} launch isolated Playwright browser')}")
+    print(f"    {_dim(f'{bullet} ybu chrome launch     {em_dash} launch user Chrome (non-destructive)')}")
+    print(f"    {_dim(f'{bullet} ybu chrome restart    {em_dash} kill & restart Chrome')}")
+    print(f"    {_dim(f'{bullet} ybu chrome isolated   {em_dash} launch isolated Playwright browser')}")
 
 
 async def _cmd_chrome_connect() -> None:
@@ -255,7 +255,7 @@ async def _cmd_chrome_launch(profile: str | None = None) -> None:
         return
 
     print(f"  {_emoji_fail()} {_no('Chrome did not start (may already be running without debug port)')}")
-    print(f"    {_warn('Tip: try lbu chrome restart to force a restart')}")
+    print(f"    {_warn('Tip: try ybu chrome restart to force a restart')}")
 
 
 async def _cmd_chrome_restart() -> None:

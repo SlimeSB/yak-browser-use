@@ -33,7 +33,7 @@ async def _cmd_serve(host: str = "127.0.0.1", port: int = 0) -> None:
         config = uvicorn.Config(app, host=host, port=port, log_level="info")
         server = uvicorn.Server(config)
 
-        logger.info("lbu FastAPI running on http://%s:%d", host, port)
+        logger.info("ybu FastAPI running on http://%s:%d", host, port)
         logger.info("API docs: http://%s:%d/docs", host, port)
         await server.serve()
     except ImportError as e:

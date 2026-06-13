@@ -32,19 +32,19 @@
 CLI `chrome snapshot` 命令 MUST 支持 `--mode` 参数选择快照模式。
 
 #### Scenario: 默认 full 模式
-- **WHEN** 执行 `lbu chrome snapshot` 不带 `--mode` 参数
+- **WHEN** 执行 `ybu chrome snapshot` 不带 `--mode` 参数
 - **THEN** 使用 full 模式，产出 screenshot_<ts>.png 和 snapshot_<ts>.html
 
 #### Scenario: 指定 interactive 模式
-- **WHEN** 执行 `lbu chrome snapshot --mode interactive`
+- **WHEN** 执行 `ybu chrome snapshot --mode interactive`
 - **THEN** 使用 interactive 模式，产出 interactive_elements.json
 
 #### Scenario: 指定 simplified 模式
-- **WHEN** 执行 `lbu chrome snapshot --mode simplified`
+- **WHEN** 执行 `ybu chrome snapshot --mode simplified`
 - **THEN** 使用 simplified 模式，产出 page_summary.txt、detected_lists.json、detected_tables.json
 
 #### Scenario: 无效 mode 参数
-- **WHEN** 执行 `lbu chrome snapshot --mode invalid`
+- **WHEN** 执行 `ybu chrome snapshot --mode invalid`
 - **THEN** argparse 拒绝并显示错误信息，提示有效选项为 full/interactive/simplified
 
 ### Requirement: StepYaml snapshot op 的 dict value 支持

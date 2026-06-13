@@ -35,5 +35,5 @@
 ## 6. 验证与收尾
 
 - [x] 6.1 运行 `uv run pytest tests/ -v` 确保全部测试通过（含新增 test_simplify_dom.py 和现有测试回归）
-- [x] 6.2 手动验证 `lbu chrome snapshot --mode interactive` 和 `lbu chrome snapshot --mode simplified` 产出正确
+- [x] 6.2 手动验证 `ybu chrome snapshot --mode interactive` 和 `ybu chrome snapshot --mode simplified` 产出正确
 - [x] 6.3 确认 `snapshot: true` 向后兼容，现有 pipeline 行为不变

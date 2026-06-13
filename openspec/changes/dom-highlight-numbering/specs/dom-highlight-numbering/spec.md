@@ -6,14 +6,14 @@
 
 #### Scenario: 首次注入高亮
 - **WHEN** 调用 `add_dom_highlights()` 且页面存在可交互元素
-- **THEN** 页面 DOM 中出现 `#lbu-highlights` 容器，包含 `data-lbu-highlight` 属性标记的高亮元素，数量与可交互元素一致
+- **THEN** 页面 DOM 中出现 `#ybu-highlights` 容器，包含 `data-ybu-highlight` 属性标记的高亮元素，数量与可交互元素一致
 - **AND** 每个高亮元素显示对应的 `@eN` 编号标签（蓝色背景、白色文字）
 - **AND** 高亮元素设置 `pointer-events: none`，不拦截用户交互
 
 #### Scenario: 无交互元素时注入
 - **WHEN** 调用 `add_dom_highlights()` 且页面无可交互元素
 - **THEN** 返回 `{ok: true, count: 0, element_map: {}}`
-- **AND** 页面 DOM 中不出现 `#lbu-highlights` 容器
+- **AND** 页面 DOM 中不出现 `#ybu-highlights` 容器
 
 #### Scenario: 连续两次注入不重复
 - **WHEN** 连续两次调用 `add_dom_highlights()`
@@ -30,7 +30,7 @@
 
 #### Scenario: 移除高亮
 - **WHEN** 调用 `remove_dom_highlights()`
-- **THEN** 页面 DOM 中 `#lbu-highlights` 容器被移除
+- **THEN** 页面 DOM 中 `#ybu-highlights` 容器被移除
 - **AND** `CDPHelpers._element_map` 缓存被清空
 
 #### Scenario: 重复移除不报错
@@ -115,11 +115,11 @@
 
 ### Requirement: Agent 结束后清理高亮
 
-系统 MUST 在 Agent goal run 结束后清理所有高亮元素，包括 browser-use 的 `.browser-use-highlight` 和 LBU 的 `#lbu-highlights`。
+系统 MUST 在 Agent goal run 结束后清理所有高亮元素，包括 browser-use 的 `.browser-use-highlight` 和 YBU 的 `#ybu-highlights`。
 
-#### Scenario: 清理 BU 和 LBU 高亮
+#### Scenario: 清理 BU 和 YBU 高亮
 - **WHEN** Agent goal run 结束（正常或异常）
-- **THEN** `_cleanup_agent_highlights()` 同时移除 `.browser-use-highlight` 和 `#lbu-highlights`
+- **THEN** `_cleanup_agent_highlights()` 同时移除 `.browser-use-highlight` 和 `#ybu-highlights`
 - **AND** 清理通过 `agent_browser._cdp_client` 执行，无需额外参数
 
 ### Requirement: @eN 在 chat 模式下的 fallback 解析
