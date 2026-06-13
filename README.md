@@ -19,15 +19,15 @@ cd electron && npm run electron:dev
 
 | Command | Description |
 |---------|-------------|
-| `lbu run <path>` | Execute an agent.md pipeline |
-| `lbu serve` | Start the REST API server |
-| `lbu convert <path>` | Convert a document to agent.md format |
-| `lbu chrome <subcommand>` | Chrome/Chromium management |
-| `lbu param set/list/delete` | Persistent parameter management |
-| `lbu pipeline <subcommand>` | Pipeline lifecycle management |
-| `lbu daemon <subcommand>` | CDP daemon management |
-| `lbu tool <subcommand>` | Tool debugging utilities |
-| `lbu debug <subcommand>` | Debugging tools |
+| `ybu run <path>` | Execute an agent.md pipeline |
+| `ybu serve` | Start the REST API server |
+| `ybu convert <path>` | Convert a document to agent.md format |
+| `ybu chrome <subcommand>` | Chrome/Chromium management |
+| `ybu param set/list/delete` | Persistent parameter management |
+| `ybu pipeline <subcommand>` | Pipeline lifecycle management |
+| `ybu daemon <subcommand>` | CDP daemon management |
+| `ybu tool <subcommand>` | Tool debugging utilities |
+| `ybu debug <subcommand>` | Debugging tools |
 
 ## Architecture
 

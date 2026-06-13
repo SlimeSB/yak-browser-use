@@ -177,7 +177,10 @@ async def run_conversation_loop(
                 interrupted = True
                 break
         else:
-            final_response = getattr(response, "content", "") or str(response)
+            content = getattr(response, "content", None)
+            if content is None:
+                content = getattr(response, "completion", "")
+            final_response = content or ""
             messages.append(_build_assistant_message(response))
             if stream_callback:
                 stream_callback({

@@ -1,4 +1,4 @@
-"""REST + WebSocket routes for the Learning Browser-Use API."""
+"""REST + WebSocket routes for the Yak Browser-Use API."""
 
 from __future__ import annotations
 
@@ -128,7 +128,7 @@ def register_all_routes(app: FastAPI) -> None:
         Returns immediately with a ``run_id``.  Poll ``GET /api/status``
         or subscribe to ``/ws/events`` for completion.
         """
-        pipeline_text = request.get("pipeline", "")
+        pipeline_text = request.get("pipeline") or request.get("agent_md", "")
         params = request.get("params", {}) or {}
         logger.debug("POST /api/run: pipeline=%s... params=%s", pipeline_text[:80], params)
 
@@ -249,16 +249,26 @@ def register_all_routes(app: FastAPI) -> None:
     async def api_chrome_connect(request: dict) -> JSONResponse:
         """Connect to Chrome via CDP WebSocket.
 
-        Request body (optional): ``{"ws_url": "..."}``
-        If omitted, auto-discovers the WS URL.
+        Request body: ``{"mode": "user"|"isolated", "profile_name": "...", "ws_url": "..."}``
         """
+        mode = request.get("mode", "user")
+        profile_name = request.get("profile_name")
         ws_url = request.get("ws_url")
-        logger.info("Chrome connect requested")
+        logger.info("Chrome connect requested: mode=%s profile=%s", mode, profile_name or "none")
 
         if engine_state.running_pipeline is not None:
             raise APIError("A pipeline is currently running — cannot connect Chrome", status_code=409)
 
         try:
+            if mode == "isolated" and profile_name:
+                from cdp.launcher import launch_isolated_chrome
+                ws_url = await launch_isolated_chrome(profile_name=profile_name)
+            elif ws_url:
+                pass
+            else:
+                from cdp.discover import discover_ws_url
+                ws_url = await discover_ws_url(profile_name=profile_name)
+
             actual_ws = await engine_state.connect_chrome(ws_url)
             return JSONResponse({"connected": True, "ws_url": actual_ws[:80]})
         except Exception as exc:
@@ -297,6 +307,50 @@ def register_all_routes(app: FastAPI) -> None:
         except Exception as exc:
             logger.exception("POST /api/chrome/disconnect failed")
             raise ServerError(str(exc))
+
+    @app.post("/api/chrome/restart")
+    async def api_chrome_restart() -> JSONResponse:
+        """Restart the user Chrome browser and reconnect."""
+        logger.info("Chrome restart requested")
+
+        if engine_state.running_pipeline is not None:
+            raise APIError("A pipeline is currently running", status_code=409)
+
+        try:
+            from cdp.launcher import restart_user_chrome
+
+            ws_url = await restart_user_chrome()
+            if not ws_url:
+                raise RuntimeError("Cannot restart Chrome")
+
+            await engine_state.disconnect_chrome()
+
+            actual_ws = await engine_state.connect_chrome(ws_url)
+            return JSONResponse({"connected": True, "ws_url": str(actual_ws)[:80]})
+        except Exception as exc:
+            logger.exception("Chrome restart failed")
+            raise ServerError(str(exc))
+
+    @app.get("/api/chrome/isolated-profiles")
+    async def api_list_isolated_profiles() -> JSONResponse:
+        """List all isolated Chrome profile directories."""
+        from cdp.launcher import _ISO_PROFILES_DIR
+
+        profiles = []
+        if _ISO_PROFILES_DIR.exists():
+            for entry in sorted(_ISO_PROFILES_DIR.iterdir()):
+                if entry.is_dir():
+                    profiles.append(entry.name)
+        return JSONResponse({"profiles": profiles})
+
+    @app.post("/api/chrome/isolated-profiles/{profile_name}")
+    async def api_create_isolated_profile(profile_name: str) -> JSONResponse:
+        """Create a new isolated Chrome profile directory."""
+        from cdp.launcher import get_isolated_profile_dir
+
+        profile_dir = get_isolated_profile_dir(profile_name)
+        profile_dir.mkdir(parents=True, exist_ok=True)
+        return JSONResponse({"created": True, "profile_name": profile_name})
 
     # =================================================================
     # PARAMS  (replaces the old /api/auth/* and /api/credentials/*)
@@ -380,6 +434,29 @@ def register_all_routes(app: FastAPI) -> None:
             raise
         except Exception as exc:
             logger.exception("GET /api/versions/%s/%s failed", pipeline_name, version)
+            raise ServerError(str(exc))
+
+    @app.post("/api/versions/{pipeline_name:path}/relearn")
+    async def api_relearn(pipeline_name: str) -> JSONResponse:
+        """Delete the LATEST version snapshot so it can be re-learned."""
+        try:
+            from workspace.version_manager import VersionManager
+            wm = _get_workspace_manager(pipeline_name)
+            vm = VersionManager(wm.versions_dir, pipeline_name)
+            latest = vm.get_latest()
+            if not latest:
+                return JSONResponse({"deleted": False, "error": "no LATEST version found"})
+            ver_dir = vm.versions_dir / latest
+            if ver_dir.exists():
+                import shutil
+                shutil.rmtree(str(ver_dir), ignore_errors=True)
+            if vm.latest_file.exists():
+                vm.latest_file.unlink()
+            if vm.stale_file.exists():
+                vm.stale_file.unlink()
+            return JSONResponse({"deleted": True, "version": latest})
+        except Exception as exc:
+            logger.exception("POST /api/versions/%s/relearn failed", pipeline_name)
             raise ServerError(str(exc))
 
     # =================================================================
@@ -510,6 +587,19 @@ def register_all_routes(app: FastAPI) -> None:
         except Exception as exc:
             logger.exception("GET /api/pipeline/%s/runs failed", pipeline_name)
             raise ServerError(str(exc))
+
+    @app.post("/api/pipeline/{thread_id}/review")
+    async def api_review_step(thread_id: str, request: dict) -> JSONResponse:
+        """Review/approve/reject a pending pipeline operation.
+
+        NOTE: Full implementation requires engine.checkpoint.MemorySaver
+        which is not yet available in this project. Currently returns 501.
+        """
+        logger.warning("POST /api/pipeline/%s/review called but not implemented", thread_id)
+        return JSONResponse(
+            {"status": "error", "error": "review endpoint not implemented", "code": "NOT_IMPLEMENTED"},
+            status_code=501,
+        )
 
     # =================================================================
     # WORKSPACE — events
@@ -729,7 +819,7 @@ def register_all_routes(app: FastAPI) -> None:
     async def delete_preset(name: str) -> JSONResponse:
         """Delete a saved preset."""
         import os
-        presets_dir = Path.home() / ".lbu" / "sessions" / "presets"
+        presets_dir = Path.home() / ".ybu" / "sessions" / "presets"
         path = presets_dir / f"{name}.pipeline.yaml"
         if path.exists():
             os.remove(str(path))
@@ -756,6 +846,33 @@ def register_all_routes(app: FastAPI) -> None:
         pipeline_text = service.compile_session_to_preset(session)
         path = service.save_preset(name, pipeline_text)
         return JSONResponse({"ok": True, "path": str(path), "content": pipeline_text})
+
+    # =================================================================
+    # PIPELINES — list all workspace pipelines
+    # =================================================================
+
+    @app.get("/api/pipelines")
+    async def api_list_pipelines() -> JSONResponse:
+        """List all workspace pipelines."""
+        workspaces_dir = Path.home() / ".ybu" / "workspaces"
+        pipelines = []
+        if workspaces_dir.exists():
+            for d in sorted(workspaces_dir.iterdir()):
+                if not d.is_dir() or d.name.startswith("."):
+                    continue
+                pipe_yaml = d / "pipeline.yaml"
+                if pipe_yaml.exists():
+                    pipelines.append({"name": d.name, "title": d.name})
+        return JSONResponse({"pipelines": pipelines})
+
+    @app.get("/api/pipelines/{name}")
+    async def api_get_pipeline(name: str) -> JSONResponse:
+        """Get a specific pipeline's content."""
+        pipe_path = Path.home() / ".ybu" / "workspaces" / name / "pipeline.yaml"
+        if not pipe_path.exists():
+            raise APIError("pipeline not found", status_code=404)
+        content = pipe_path.read_text(encoding="utf-8")
+        return JSONResponse({"name": name, "content": content})
 
     # =================================================================
     # WEB SOCKET — real-time event stream

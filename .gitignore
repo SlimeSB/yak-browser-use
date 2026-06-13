@@ -38,7 +38,7 @@ release/
 Thumbs.db
 
 # Project runtime data
-.lbu/
+.ybu/
 
 # Hermes / tooling
 .hermes/

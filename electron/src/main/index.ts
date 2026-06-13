@@ -25,7 +25,7 @@ async function createWindow() {
     frame: false,
     width: 1200,
     height: 800,
-    title: 'Learning Browser-Use',
+    title: 'Yak Browser-Use',
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,

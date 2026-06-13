@@ -1,4 +1,4 @@
-"""FastAPI application factory for Learning Browser-Use."""
+"""FastAPI application factory for Yak Browser-Use."""
 
 from __future__ import annotations
 
@@ -17,7 +17,7 @@ def create_app() -> FastAPI:
     from api.state import engine_state
 
     app = FastAPI(
-        title="Learning Browser-Use API",
+        title="Yak Browser-Use API",
         version="0.1.0",
     )
 
@@ -34,12 +34,12 @@ def create_app() -> FastAPI:
 
     @app.on_event("startup")
     async def startup() -> None:
-        logger.info("Learning Browser-Use API starting …")
+        logger.info("Yak Browser-Use API starting …")
 
     @app.on_event("shutdown")
     async def shutdown() -> None:
         await engine_state.cleanup()
-        logger.info("Learning Browser-Use API stopped")
+        logger.info("Yak Browser-Use API stopped")
 
     # ── Routes & error handlers ────────────────────────────────────
     register_all_routes(app)

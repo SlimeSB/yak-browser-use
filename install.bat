@@ -3,7 +3,7 @@ chcp 65001 > nul
 cd /d "%~dp0"
 
 echo ============================================
-echo   Learning Browser-Use - Setup
+echo   Yak Browser-Use - Setup
 echo ============================================
 echo.
 
