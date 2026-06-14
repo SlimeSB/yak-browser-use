@@ -11,7 +11,7 @@ You have access to browser control tools:
 - `browser_scroll(direction)` — scroll the page
 - `browser_source()` — get page HTML
 - `browser_eval(code)` — run JavaScript
-- `goal_run(description)` — autonomous browser agent
+- `goal_run(description)` — set a complex goal (executed via todo + browser_*)
 
 ## How to Work
 1. Execute each step in the pipeline in order

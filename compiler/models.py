@@ -24,6 +24,7 @@ class StepDef:
     input_ref: dict | str = ""
     output_ref: list[str] = field(default_factory=list)
     params: dict = field(default_factory=dict)
+    check: dict | None = None
 
     def to_runtime_dict(self, handler: Callable | None = None) -> dict:
         """Convert to a runtime step dictionary for pipeline execution."""
@@ -44,6 +45,7 @@ class StepDef:
             "output_schema": self.output_schema,
             "params": self.params,
             "system_prompt": self.system_prompt,
+            "check": self.check,
         }
 
 

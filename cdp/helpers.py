@@ -4,7 +4,6 @@ All CDP operations go through this class (or its restricted ToolCDPHelpers varia
 """
 from __future__ import annotations
 
-import base64
 import json as _json
 import logging
 from pathlib import Path
@@ -91,7 +90,7 @@ class CDPHelpers:
         return {"nodeId": node_id}
 
     async def capture_snapshot(self) -> dict:
-        """Capture screenshot + page HTML."""
+        """Capture screenshot + page HTML + url + title."""
         result = {}
         try:
             screenshot = await self._cdp("Page.captureScreenshot", {"format": "png", "fromSurface": True})
@@ -105,6 +104,16 @@ class CDPHelpers:
             result["html"] = html.get("result", {}).get("value", "")
         except Exception:
             pass
+        try:
+            meta = await self._cdp("Runtime.evaluate", {
+                "expression": "JSON.stringify({url: window.location.href, title: document.title})",
+            })
+            meta_val = (meta.get("result", {}).get("value") or "{}")
+            meta_dict = _json.loads(meta_val)
+            result["url"] = meta_dict.get("url", "")
+            result["title"] = meta_dict.get("title", "")
+        except Exception:
+            pass
         return result
 
     async def get_page_html(self) -> str:
@@ -113,9 +122,9 @@ class CDPHelpers:
         })
         return result.get("result", {}).get("value", "")
 
-    async def wait_for_network_idle(self, timeout: int = 5000) -> None:
+    async def wait_for_network_idle(self) -> None:
         import asyncio
-        await asyncio.sleep(0.5)  # Simple approach; CDP Network.enable tracking would be more precise
+        await asyncio.sleep(0.5)
 
     async def js(self, code: str) -> Any:
         result = await self._cdp("Runtime.evaluate", {"expression": code})
@@ -141,6 +150,16 @@ class CDPHelpers:
             if js_result.get("truncated"):
                 result["truncated"] = True
                 result["total_found"] = js_result.get("total_found", 0)
+            try:
+                meta = await self._cdp("Runtime.evaluate", {
+                    "expression": "JSON.stringify({url: window.location.href, title: document.title})",
+                })
+                meta_val = (meta.get("result", {}).get("value") or "{}")
+                meta_dict = _json.loads(meta_val)
+                result["url"] = meta_dict.get("url", "")
+                result["title"] = meta_dict.get("title", "")
+            except Exception:
+                pass
             return result
         logger.info("interactive snapshot degraded to full")
         full = await self.capture_snapshot()
@@ -248,7 +267,10 @@ class CDPHelpers:
 
         normalized = ref.strip()
         if not normalized.startswith("@"):
-            normalized = "@e" + normalized if not normalized.startswith("e") else "@" + normalized
+            if normalized.startswith("e") and normalized[1:].isdigit():
+                normalized = "@" + normalized
+            else:
+                normalized = "@e" + normalized
 
         el = self._element_map.get(normalized)
         if el is None:

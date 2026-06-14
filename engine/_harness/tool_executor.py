@@ -16,6 +16,10 @@ from utils.logging import get_logger
 
 from engine._harness.tool_guardrails import ToolCallGuardrailState
 from engine._harness.iteration_budget import IterationBudget
+from engine.scratchpad import get as get_scratchpad
+from engine.scratchpad import store as store_scratchpad
+from engine.scratchpad import store_raw_html as scratchpad_store_raw_html
+from engine.scratchpad import sync_element_map as scratchpad_sync_element_map
 from prompts._loader import load_prompt
 
 logger = get_logger(__name__)
@@ -121,6 +125,9 @@ async def execute_tool_calls_sequential(
 
         ok = result_dict.get("ok", False)
         error_msg = result_dict.get("error", "")
+
+        _apply_heavy_data_filter(fn_name, fn_args, result_dict)
+
         result_text = _format_tool_result(fn_name, result_dict)
 
         if guardrail_state:
@@ -137,7 +144,14 @@ async def execute_tool_calls_sequential(
         if ok and fn_name in ("browser_goto", "browser_click", "browser_fill") and cdp_helpers is not None:
             if hasattr(cdp_helpers, "add_dom_highlights"):
                 try:
-                    await cdp_helpers.add_dom_highlights()  # type: ignore[union-attr]
+                    highlight_result = await cdp_helpers.add_dom_highlights()
+                    element_map = highlight_result.get("element_map", {})
+                    if element_map:
+                        elements_for_sync = [
+                            {"ref": ref, "selector": info.get("selector", "")}
+                            for ref, info in element_map.items()
+                        ]
+                        scratchpad_sync_element_map(elements_for_sync)
                 except Exception:
                     pass
 
@@ -170,23 +184,29 @@ async def _execute_single_tool_call(
     """Route a single tool call to the correct executor core function.
 
     Handles:
-    - goal_run budget pause/resume
     - TimeoutError 1x retry
     - CDP reconnect with 3x exponential backoff
     - Unrecoverable error detection
     """
-    from engine.executor import execute_browser_op, execute_tool, execute_goal
+    from engine.executor import execute_browser_op, execute_tool
 
-    is_goal = fn_name == "goal_run"
     reconnect_attempts = 0
 
     while True:
-        if is_goal and budget is not None:
-            budget.pause()
-
         try:
             if fn_name.startswith("browser_"):
                 op_type = fn_name.replace("browser_", "")
+
+                if op_type == "get_element_by_number":
+                    cached_result = _try_scratchpad_element_lookup(fn_args)
+                    if cached_result is not None:
+                        return cached_result
+
+                if op_type == "source" and fn_args.get("cached"):
+                    cached_result = _try_scratchpad_source_read()
+                    if cached_result is not None:
+                        return cached_result
+
                 return await execute_browser_op(op_type, fn_args, cdp_helpers)
 
             elif fn_name.startswith("pipeline_"):
@@ -219,14 +239,16 @@ async def _execute_single_tool_call(
                 except (json.JSONDecodeError, TypeError):
                     return {"ok": True, "result": result_str}
 
-            elif is_goal:
+            elif fn_name == "goal_run":
                 description = fn_args.get("description", fn_args.get("goal", ""))
-                return await execute_goal(
-                    description=description,
-                    cdp_helpers=cdp_helpers,
-                    pipeline_name=pipeline_name,
-                    tools_dir=tools_dir or Path("."),
-                )
+                return {
+                    "ok": True,
+                    "result": (
+                        f"目标已设定: {description}\n\n"
+                        f"请用 todo 工具将目标拆解为 3-6 个步骤逐项执行。"
+                        f"每步完成后调 record_step。不确定时直接问我。"
+                    ),
+                }
 
             elif fn_name == "todo":
                 from tools.todo_store import current_store
@@ -271,9 +293,9 @@ async def _execute_single_tool_call(
                 if cdp_helpers and hasattr(cdp_helpers, "_daemon"):
                     try:
                         await cdp_helpers._daemon.start()  # type: ignore[union-attr]
-                    except Exception:
-                        pass
-                if budget is not None and budget.is_paused and not is_goal:
+                    except Exception as e:
+                        logger.debug("CDP daemon restart failed: %s", e)
+                if budget is not None and budget.is_paused:
                     budget.resume()
                 if reconnect_attempts >= _CDP_RECONNECT_MAX and stream_callback:
                     stream_callback({
@@ -282,10 +304,6 @@ async def _execute_single_tool_call(
                     })
                 continue
             raise
-
-        finally:
-            if is_goal and budget is not None:
-                budget.resume()
 
 
 def _is_cdp_disconnect(error: Exception) -> bool:
@@ -368,3 +386,166 @@ def _truncate_args(args: dict, max_len: int = 120) -> str:
 
 # Alias for spec compatibility
 execute_tool_calls = execute_tool_calls_sequential
+
+
+def _apply_heavy_data_filter(
+    fn_name: str,
+    fn_args: dict,
+    result_dict: dict,
+) -> None:
+    """Extract heavy data from browser_snapshot/browser_source results.
+
+    Writes large payloads (HTML, elements, screenshots) to scratchpad and
+    replaces result_dict["result"] with concise summaries.
+    """
+    if not result_dict.get("ok"):
+        return
+
+    if fn_name == "browser_snapshot":
+        mode = fn_args.get("mode", "interactive")
+
+        if mode == "simplified":
+            result_payload = result_dict.get("result", {})
+            if isinstance(result_payload, dict) and result_payload.get("degraded"):
+                result_payload.pop("screenshot_base64", None)
+                result_payload.pop("html", None)
+                store_scratchpad({
+                    "elements": [],
+                    "url": result_payload.get("url", ""),
+                    "title": result_payload.get("title", ""),
+                })
+                result_dict["result"] = "简化快照已获取（降级为 full 模式），数据已缓存"
+            return
+
+        result_payload = result_dict.get("result", {})
+
+        if mode == "interactive":
+            if isinstance(result_payload, dict):
+                degraded = result_payload.get("degraded", False)
+                elements = result_payload.get("elements", [])
+                url = result_payload.get("url", "")
+                title = result_payload.get("title", "")
+                store_scratchpad({
+                    "elements": elements,
+                    "url": url,
+                    "title": title,
+                })
+                if degraded:
+                    result_payload.pop("screenshot_base64", None)
+                    result_payload.pop("html", None)
+                    el_count = len(elements)
+                    result_dict["result"] = f"\U0001F4F8 快照已获取（降级为 full 模式，{el_count}个可交互元素），数据已缓存"
+                else:
+                    result_dict["result"] = get_scratchpad().summary
+            else:
+                result_dict["result"] = "快照已获取（摘要不可用）"
+                logger.warning("browser_snapshot interactive returned non-dict result, using fallback")
+            return
+
+        elif mode == "full":
+            result_dict.pop("screenshot_base64", "")
+            html = result_dict.pop("html", "")
+            result_payload_val = result_dict.get("result", {})
+            url = result_payload_val.get("url", "") if isinstance(result_payload_val, dict) else ""
+            title = result_payload_val.get("title", "") if isinstance(result_payload_val, dict) else ""
+            store_scratchpad({
+                "elements": [],
+                "url": url,
+                "title": title,
+            })
+            if html:
+                scratchpad_store_raw_html(html)
+            result_dict["result"] = "\U0001F4F8 完整快照已获取（含截图+HTML），数据已缓存"
+            return
+
+        else:
+            result_dict["result"] = "快照已获取（无摘要）"
+            logger.warning("browser_snapshot: unknown mode '%s', using fallback", mode)
+            return
+
+    if fn_name == "browser_source":
+        result_payload = result_dict.get("result", {})
+        if isinstance(result_payload, dict) and result_payload.get("cached"):
+            result_dict.pop("html", None)
+            return
+        html = result_dict.pop("html", "")
+        if html:
+            scratchpad_store_raw_html(html)
+            result_payload = {"length": len(html)}
+            if fn_args.get("cached"):
+                result_payload["cached"] = False
+                result_payload["note"] = "无缓存，已从 CDP 获取"
+            result_dict["result"] = result_payload
+        return
+
+
+def _normalize_ref(ref: str) -> str:
+    """Normalize an element reference to @eN format."""
+    ref = ref.strip()
+    if ref.startswith("@"):
+        return ref
+    if ref.startswith("e") and ref[1:].isdigit():
+        return f"@{ref}"
+    return f"@e{ref}"
+
+
+def _try_scratchpad_element_lookup(fn_args: dict) -> dict | None:
+    """Try to resolve browser_get_element_by_number from scratchpad cache.
+
+    Returns a result dict if found, None to fall through to CDP.
+    """
+    raw_ref = fn_args.get("ref", "")
+    if not raw_ref:
+        return None
+
+    sp = get_scratchpad()
+    normalized = _normalize_ref(raw_ref)
+
+    if not sp.element_map:
+        return None
+
+    selector = sp.element_map.get(normalized)
+    if selector is None:
+        return None
+
+    el_info = None
+    for el in sp.elements:
+        if el.get("ref") == normalized:
+            el_info = el
+            break
+
+    if el_info is None:
+        return {
+            "ok": True,
+            "result": {
+                "ref": normalized,
+                "selector": selector,
+            },
+        }
+
+    return {
+        "ok": True,
+        "result": {
+            "ref": normalized,
+            "tag": el_info.get("tag", ""),
+            "type": el_info.get("type", ""),
+            "text": el_info.get("text", ""),
+            "selector": selector,
+        },
+    }
+
+
+def _try_scratchpad_source_read() -> dict | None:
+    """Try to read browser_source from scratchpad cache.
+
+    Returns a result dict with cached HTML length, or None to fall through to CDP.
+    """
+    sp = get_scratchpad()
+    if sp.raw_html:
+        length = len(sp.raw_html)
+        return {
+            "ok": True,
+            "result": {"length": length, "cached": True},
+            "html": sp.raw_html,
+        }
+    return None

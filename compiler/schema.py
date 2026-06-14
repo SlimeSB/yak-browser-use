@@ -22,6 +22,7 @@ class StepYaml(BaseModel):
     browser_ops: list[dict] | None = None
     tool_name: str | None = None
     goal_description: str | None = None
+    check: dict | None = None
 
     @model_validator(mode="after")
     def _check_mutual_exclusion(self):
@@ -85,6 +86,7 @@ class StepYaml(BaseModel):
             input_ref=self.input_ref if self.input_ref is not None else "",
             output_ref=self.output_ref,
             params=self.params,
+            check=self.check,
         )
 
 

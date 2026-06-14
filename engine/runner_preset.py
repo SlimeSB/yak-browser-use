@@ -16,7 +16,6 @@ import shutil
 import time
 import traceback
 from pathlib import Path
-from typing import Any
 
 from engine.events import EventSink
 from engine.executor import (
@@ -24,6 +23,7 @@ from engine.executor import (
     execute_goal_step,
     execute_tool_step,
     mask_sensitive_patterns,
+    run_check,
     sanitize_result,
     write_step_json,
 )
@@ -90,8 +90,11 @@ def _resolve_step_urls(steps: list[dict], url_aliases: dict[str, str]) -> None:
                 )
 
 
-def _setup_run_logger(run_dir: Path) -> None:
-    """Add a file handler for the current run log file."""
+def _setup_run_logger(run_dir: Path) -> logging.Handler | None:
+    """Add a file handler for the current run log file.
+
+    Returns the handler so the caller can clean it up when done.
+    """
     run_log = run_dir / "_pipeline.log"
     try:
         handler = logging.FileHandler(str(run_log), encoding="utf-8")
@@ -104,8 +107,10 @@ def _setup_run_logger(run_dir: Path) -> None:
         )
         logging.getLogger().addHandler(handler)
         logger.info("run log: %s", run_log)
+        return handler
     except (OSError, PermissionError) as e:
         logger.warning("could not create run log file %s: %s", run_log, e)
+    return None
 
 
 async def _execute_tool_step_with_guardian(
@@ -190,7 +195,7 @@ async def _execute_tool_step_with_guardian(
             }
 
         return {
-            "status": "completed",
+            "status": "failed",
             "error": {
                 "code": "RENAME_ERROR",
                 "message": rename_result.get("error", ""),
@@ -252,7 +257,7 @@ async def run_pipeline(
     pg = PathGuard(wm.root, run_dir)
     events = EventSink(run_dir, ws_clients=ws_clients or [])
 
-    _setup_run_logger(run_dir)
+    run_log_handler: logging.Handler | None = _setup_run_logger(run_dir)
 
     ver = version or wm.get_latest_version()
     ctx = RunContext(
@@ -309,7 +314,7 @@ async def run_pipeline(
                 break
 
             node = machine.begin_step()
-            step_def = steps[node.index]
+            step_def = machine.steps[node.index]
 
             ctx.step_index = node.index
             ctx.current_step = step_def.get("name", f"step_{node.index}")
@@ -354,7 +359,7 @@ async def run_pipeline(
 
             logger.info(
                 "  [%d/%d] %s (%s)",
-                node.index + 1, len(steps), ctx.current_step, step_type,
+                node.index + 1, len(machine.steps), ctx.current_step, step_type,
             )
 
             # ── Dispatch to executor ──
@@ -386,58 +391,21 @@ async def run_pipeline(
                     cdp_helpers=cdp_helpers,
                 )
 
-            write_step_json(step_dir, sanitize_result(step_result))
+            # ── Programmatic check (non-goal steps only) ──
+            check_def = step_def.get("check")
+            if check_def is not None and step_type != "goal" and step_result["status"] == "completed":
+                check_result = await run_check(check_def, cdp_helpers)
+                if not check_result["ok"]:
+                    step_result["status"] = "failed"
+                    step_result["error"] = {
+                        "code": "CHECK_FAILED",
+                        "message": check_result.get("error", "验收未通过"),
+                    }
 
-            # ── Goal interrupted check ──
-            if step_type == "goal":
-                agent_result = step_result.get("agent_result", {})
-                if agent_result.get("status") == "interrupted":
-                    err_msg = agent_result.get("error_message", "Human review required")
-                    machine.end_step(
-                        node,
-                        StepStatus.PENDING_REVIEW,
-                        error={
-                            "code": "REVIEW_INTERRUPT",
-                            "message": err_msg,
-                        },
-                    )
-                    wm.set_status(run_dir, "paused", current_step=ctx.current_step)
-                    events.emit_step_end(
-                        ctx.current_step, step_type, "paused",
-                        step_result.get("duration_ms", 0),
-                    )
-                    events.emit_error(
-                        ctx.current_step, "REVIEW_INTERRUPT",
-                        mask_sensitive_patterns(err_msg),
-                    )
-                    logger.info("  ⏸ %s: interrupted for human review", ctx.current_step)
-                    final_status = "paused"
-                    _write_execution_tree(run_dir, machine, pipeline_name)
-                    break
+            write_step_json(step_dir, sanitize_result(step_result))
 
             # ── Success path ──
             if step_result["status"] == "completed":
-                if step_type == "goal":
-                    ctx.learned_goals.append(step_def.get("name", ctx.current_step))
-                    try:
-                        from engine.delivery import write_delivery_report
-
-                        agent_result = step_result.get("agent_result", {})
-                        write_delivery_report(
-                            step_dir=step_dir,
-                            pipeline_name=pipeline_name,
-                            step_name=step_def.get("name", ""),
-                            goal_description=step_def.get(
-                                "goal_description",
-                                step_def.get("description", ""),
-                            ),
-                            status="completed",
-                            duration_ms=step_result.get("duration_ms", 0),
-                            saved_version=agent_result.get("saved_version"),
-                        )
-                    except ImportError:
-                        logger.warning("write_delivery_report not available, skipping delivery report")
-
                 machine.end_step(node, StepStatus.SUCCESS)
                 events.emit_step_end(
                     ctx.current_step,
@@ -449,27 +417,6 @@ async def run_pipeline(
                 )
                 logger.info("  ✓ %s", ctx.current_step)
                 machine.advance()
-
-                # ── Optional: replan after goal ──
-                if step_type == "goal":
-                    try:
-                        from engine.planner import RuntimePlanner
-
-                        planner = RuntimePlanner()
-                        new_steps = await planner.replan_after_goal.replan(
-                            helpers=cdp_helpers,
-                            steps=machine.steps,
-                            completed_step_index=node.index,
-                            pipeline_name=pipeline_name,
-                        )
-                        if new_steps is not None:
-                            machine.replace_remaining(new_steps)
-                            logger.info(
-                                "  ↻ planner: %d steps after goal '%s'",
-                                len(new_steps), ctx.current_step,
-                            )
-                    except Exception as e:
-                        logger.warning("planner: replan_after_goal degraded: %s", e)
 
                 _write_execution_tree(run_dir, machine, pipeline_name)
 
@@ -672,5 +619,8 @@ async def run_pipeline(
         ctx.errors.append({"step": "_engine_", "code": "RUNTIME_ERROR", "message": str(e)})
     finally:
         events.close()
+        if run_log_handler is not None:
+            logging.getLogger().removeHandler(run_log_handler)
+            run_log_handler.close()
 
     return ctx

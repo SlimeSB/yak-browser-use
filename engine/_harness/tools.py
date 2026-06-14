@@ -75,7 +75,13 @@ BROWSER_TOOLS: list[dict[str, Any]] = [
             "description": "Capture a screenshot and HTML snapshot of the current page.",
             "parameters": {
                 "type": "object",
-                "properties": {},
+                "properties": {
+                    "mode": {
+                        "type": "string",
+                        "enum": ["interactive", "full", "simplified"],
+                        "description": "Snapshot mode: interactive (default, returns @eN element list), full (screenshot + HTML), simplified (text summary only).",
+                    },
+                },
             },
         },
     },
@@ -108,7 +114,12 @@ BROWSER_TOOLS: list[dict[str, Any]] = [
             "description": "Get the full HTML source of the current page.",
             "parameters": {
                 "type": "object",
-                "properties": {},
+                "properties": {
+                    "cached": {
+                        "type": "boolean",
+                        "description": "If true, read HTML from scratchpad cache instead of CDP. Falls back to CDP if no cache.",
+                    },
+                },
             },
         },
     },
@@ -133,7 +144,7 @@ BROWSER_TOOLS: list[dict[str, Any]] = [
         "type": "function",
         "function": {
             "name": "browser_get_element_by_number",
-            "description": "Get detailed information about an interactive element by its @eN reference number. Use this to look up element details (tag, text, selector, bounds) before clicking or filling.",
+            "description": "Get detailed information about an interactive element by its @eN reference number. Looks up from the most recent browser_snapshot cache first, falls back to CDP if not found. Use this to check element details (tag, text, selector) before clicking or filling.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -153,10 +164,10 @@ GOAL_RUN_TOOL: dict[str, Any] = {
     "function": {
         "name": "goal_run",
         "description": (
-            "Use browser-use autonomous Agent to complete a complex multi-step task. "
-            "Use this only when the task requires reasoning across multiple pages "
-            "or analyzing page content to decide the next action. "
-            "For single atomic operations, prefer the browser_* tools."
+            "Set a complex multi-step goal. The system will guide you to use "
+            "todo + browser_* tools to break down and execute the task step by step. "
+            "Use this for tasks that require reasoning across multiple pages "
+            "or analyzing page content to decide the next action."
         ),
         "parameters": {
             "type": "object",
@@ -235,7 +246,7 @@ PIPELINE_UPDATE_STEP_TOOL: dict[str, Any] = {
                         "Fields to update on the step. Supported keys: browser_ops "
                         "(list of single-key dicts), tool_name (string), "
                         "goal_description (string), description (string), "
-                        "depends_on (list of strings)."
+                        "depends_on (list of strings), check (dict)."
                     ),
                 },
                 "explanation": {
@@ -298,6 +309,13 @@ PIPELINE_ADD_STEP_TOOL: dict[str, Any] = {
                     "type": "array",
                     "description": "List of step names this step depends on.",
                     "items": {"type": "string"},
+                },
+                "check": {
+                    "type": "object",
+                    "description": (
+                        "Optional programmatic check conditions for this step. "
+                        "Supported keys: url_contains, element_exists, text_contains, element_visible."
+                    ),
                 },
                 "after": {
                     "type": "string",
@@ -367,7 +385,7 @@ PIPELINE_CREATE_TOOL: dict[str, Any] = {
                         "List of step objects. Each step must have: name (string), "
                         "description (string). Optional: browser_ops (list of dicts), "
                         "tool_name (string), goal_description (string), "
-                        "depends_on (list of strings)."
+                        "depends_on (list of strings), check (dict)."
                     ),
                     "items": {"type": "object"},
                 },
@@ -396,7 +414,7 @@ RECORD_STEP_TOOL: dict[str, Any] = {
         "name": "record_step",
         "description": (
             "Record a browser operation as a step in the pipeline.yaml. "
-            "Call this AFTER each browser_* or goal_run operation completes successfully. "
+            "Call this AFTER each browser_* operation completes successfully. "
             "This appends the step to the pipeline so it can be replayed later."
         ),
         "parameters": {
@@ -416,7 +434,7 @@ RECORD_STEP_TOOL: dict[str, Any] = {
                 },
                 "op_type": {
                     "type": "string",
-                    "description": "The browser operation type: goto, click, fill, scroll, snapshot, source, eval, or goal_run.",
+                    "description": "The browser operation type: goto, click, fill, scroll, snapshot, source, eval.",
                 },
                 "op_args": {
                     "type": "object",

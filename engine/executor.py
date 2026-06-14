@@ -14,7 +14,6 @@ import asyncio
 import json
 import re
 import time
-import traceback
 from functools import partial
 from pathlib import Path
 
@@ -144,7 +143,7 @@ async def execute_browser_op(
                 result["result"] = {"selector": selector}
 
             elif op_type == "snapshot":
-                mode = params.get("mode", "full")
+                mode = params.get("mode", "interactive")
                 if mode == "interactive":
                     snapshot = await cdp_helpers.capture_snapshot_interactive()  # type: ignore[union-attr]
                     result["result"] = snapshot
@@ -162,6 +161,8 @@ async def execute_browser_op(
                     if html_data:
                         result["html"] = html_data
                         result["result"]["has_html"] = True
+                    result["result"]["url"] = snapshot.get("url", "")
+                    result["result"]["title"] = snapshot.get("title", "")
 
             elif op_type == "scroll":
                 direction = params.get("direction", "down")
@@ -351,65 +352,127 @@ async def execute_goal(
     pipeline_path: Path | None = None,
     system_prompt: str = "",
 ) -> dict:
-    """Execute a goal via browser-use Agent integration.
+    """Execute a goal — stub that delegates to main LLM via todo + browser_*.
 
-    No file I/O — returns result dict directly. Suitable for chat mode.
-
-    Returns: {ok, result, error, duration_ms, learned_ops?}
+    Goal execution no longer spawns a browser-use Agent. The main LLM uses
+    todo + browser_* tools to execute complex tasks step by step.
     """
-    start = time.time()
-    result: dict = {
+    return {
         "ok": True,
-        "result": None,
-        "error": None,
-        "duration_ms": 0,
+        "result": "Goal execution delegated to main LLM via todo + browser_* tools",
     }
 
-    source_text = ""
-    if pipeline_path and pipeline_path.exists():
-        try:
-            source_text = pipeline_path.read_text(encoding="utf-8")
-        except Exception:
-            pass
 
-    step_def = {
-        "goal_description": description,
-        "name": pipeline_name,
-        "system_prompt": system_prompt,
-    }
+# ──────────────────────────────────────────────────────────────
+#  Programmatic check (step verification)
+# ──────────────────────────────────────────────────────────────
+
+
+async def run_check(check_def: dict | None, cdp_helpers: object) -> dict:
+    """Run programmatic checks against the current page state.
+
+    Supports four check conditions:
+    - url_contains: current URL contains the given string
+    - element_exists: CSS selector exists in the DOM
+    - text_contains: page body text contains the given string
+    - element_visible: CSS selector is visible (not display:none/visibility:hidden)
+
+    All conditions must pass for the check to succeed.
+
+    Returns: {ok, result, error?}
+    """
+    if not check_def:
+        return {"ok": True, "result": "无验收条件，默认通过"}
 
     try:
-        from engine.agent import run_goal_step
+        current_url = ""
+        try:
+            url_result = await cdp_helpers.js("window.location.href")  # type: ignore[union-attr]
+            current_url = str(url_result) if url_result else ""
+        except Exception as e:
+            logger.debug("run_check: failed to get current URL: %s", e)
 
-        agent_result = await run_goal_step(
-            step_def=step_def,
-            cdp_helpers=cdp_helpers,
-            step_dir=Path("."),
-            pipeline_name=pipeline_name,
-            frontmatter=frontmatter,
-            source_text=source_text,
-            tools_dir=tools_dir,
-            pipeline_path=pipeline_path,
-            system_prompt=system_prompt,
-        )
+        for key in check_def:
+            value = check_def[key]
+            if not isinstance(value, str) or not value:
+                return {
+                    "ok": False,
+                    "result": f"{key}: 无效参数",
+                    "error": f"{key} 需要非空字符串值，实际为 {type(value).__name__}",
+                    "current_url": current_url,
+                }
 
-        agent_status = agent_result.get("status", "")
-        if agent_status not in ("success",):
-            result["ok"] = False
-            result["error"] = agent_result.get("error_message", f"Agent status: {agent_status}")
+        if "url_contains" in check_def:
+            expected = check_def["url_contains"]
+            if expected not in current_url:
+                return {
+                    "ok": False,
+                    "result": "url_contains: 失败",
+                    "error": f"URL 不包含 '{expected}'，当前: {current_url[:100]}",
+                    "current_url": current_url,
+                }
+
+        if "element_exists" in check_def:
+            selector = check_def["element_exists"]
+            exists = await cdp_helpers.js(  # type: ignore[union-attr]
+                f"!!document.querySelector({_json_dumps(selector)})"
+            )
+            if not exists:
+                return {
+                    "ok": False,
+                    "result": "element_exists: 失败",
+                    "error": f"元素 '{selector}' 不存在",
+                    "current_url": current_url,
+                }
+
+        if "text_contains" in check_def:
+            expected = check_def["text_contains"]
+            body_text = await cdp_helpers.js("document.body.innerText || ''")  # type: ignore[union-attr]
+            body_text = str(body_text) if body_text else ""
+            if expected not in body_text:
+                return {
+                    "ok": False,
+                    "result": "text_contains: 失败",
+                    "error": f"页面文本不包含 '{expected}'",
+                    "current_url": current_url,
+                }
+
+        if "element_visible" in check_def:
+            selector = check_def["element_visible"]
+            visible = await cdp_helpers.js(  # type: ignore[union-attr]
+                f"(function(){{"
+                f"var el=document.querySelector({_json_dumps(selector)});"
+                f"if(!el)return false;"
+                f"var s=getComputedStyle(el);"
+                f"return s.display!=='none'&&s.visibility!=='hidden'&&el.offsetWidth>0;"
+                f"}})()"
+            )
+            if not visible:
+                return {
+                    "ok": False,
+                    "result": "element_visible: 失败",
+                    "error": f"元素 '{selector}' 不可见或不存在",
+                    "current_url": current_url,
+                }
+
+        passed_checks = [k for k in check_def if k]
+        if len(passed_checks) == 1:
+            result_msg = f"{passed_checks[0]}: 通过"
         else:
-            result["result"] = agent_result.get("result", agent_result)
-
-        learned_ops = agent_result.get("learned_ops", [])
-        if learned_ops:
-            result["learned_ops"] = learned_ops
+            result_msg = f"{', '.join(passed_checks)}: 全部通过" if passed_checks else "check: 通过"
+        return {"ok": True, "result": result_msg, "current_url": current_url}
 
     except Exception as e:
-        result["ok"] = False
-        result["error"] = str(e)
+        return {
+            "ok": False,
+            "result": "验收执行出错",
+            "error": str(e),
+        }
 
-    result["duration_ms"] = int((time.time() - start) * 1000)
-    return result
+
+def _json_dumps(s: str) -> str:
+    """JSON-encode a string for safe embedding in JS."""
+    return json.dumps(s)
 
 
 # ──────────────────────────────────────────────────────────────
@@ -635,58 +698,25 @@ async def execute_goal_step(
     frontmatter: dict | None = None,
     pipeline_path: Path | None = None,
 ) -> dict:
-    """Execute a goal step: call browser-use Agent, write learned_ops.json.
+    """Execute a goal step — returns placeholder (goals execute via todo + browser_*).
 
-    Delegates to execute_goal() for core execution, then writes
-    learned_ops.json and agent_history.json to step_dir.
+    Goal steps no longer spawn a browser-use Agent.
     """
-    import json as _json
-
     goal_description = step_def.get("goal_description", "")
     if not goal_description:
         goal_description = step_def.get("description", "")
 
-    system_prompt = step_def.get("system_prompt", "")
-
-    result: dict = {
+    return {
         "step": step_def.get("name", ""),
         "type": "goal",
         "status": "completed",
         "duration_ms": 0,
         "goal_description": goal_description,
-        "agent_result": {},
+        "result": "Goal step skipped (stub) — goals execute via todo + browser_* in chat mode",
+        "skipped": True,
         "output_files": [],
         "error": {"code": None, "message": None, "stack": None},
     }
-
-    core_result = await execute_goal(
-        description=goal_description,
-        cdp_helpers=cdp_helpers,
-        pipeline_name=pipeline_name,
-        tools_dir=tools_dir,
-        frontmatter=frontmatter,
-        pipeline_path=pipeline_path,
-        system_prompt=system_prompt,
-    )
-    result["duration_ms"] = core_result["duration_ms"]
-
-    if core_result["ok"]:
-        result["agent_result"] = core_result.get("result", {})
-        learned_ops = core_result.get("learned_ops", [])
-        if learned_ops:
-            learned_path = step_dir / "learned_ops.json"
-            with open(learned_path, "w", encoding="utf-8") as f:
-                _json.dump(learned_ops, f, ensure_ascii=False, indent=2)
-            result.setdefault("output_files", []).append(str(learned_path))
-    else:
-        result["status"] = "failed"
-        result["error"] = {
-            "code": "RUNTIME_ERROR",
-            "message": core_result.get("error", ""),
-            "stack": None,
-        }
-
-    return result
 
 
 # ── Result writing ──
