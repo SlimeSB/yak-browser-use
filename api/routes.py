@@ -642,7 +642,6 @@ def register_all_routes(app: FastAPI) -> None:
         Request: {"message": "open baidu and search coffee"}
         Response: {"ok": true, "response": "...", "turn_count": 3, ...}
         """
-        from api.service import Service
         from engine.agent import _create_chat_llm_call
 
         message = request.get("message", "").strip()
@@ -650,7 +649,7 @@ def register_all_routes(app: FastAPI) -> None:
             raise APIError("message is required")
 
         logger.info("Chat message: %s", message[:120])
-        service = Service(engine_state)
+        service = await _get_service()
         try:
             from cdp.helpers import CDPHelpers
 
@@ -677,9 +676,7 @@ def register_all_routes(app: FastAPI) -> None:
     @app.post("/api/chat/reset")
     async def chat_reset() -> JSONResponse:
         """Reset the current chat session and start fresh."""
-        from api.service import Service
-
-        service = Service(engine_state)
+        service = await _get_service()
         session = service.reset_session()
         logger.info("Chat session reset: new session_id=%s", session.session_id)
         return JSONResponse({
@@ -691,9 +688,7 @@ def register_all_routes(app: FastAPI) -> None:
     @app.post("/api/chat/cancel")
     async def chat_cancel() -> JSONResponse:
         """Cancel the current chat session."""
-        from api.service import Service
-
-        service = Service(engine_state)
+        service = await _get_service()
         service.cancel_session()
         logger.info("Chat session cancelled")
         return JSONResponse({"ok": True})
@@ -777,9 +772,7 @@ def register_all_routes(app: FastAPI) -> None:
     @app.get("/api/session")
     async def get_session() -> JSONResponse:
         """Get the current session state."""
-        from api.service import Service
-
-        service = Service(engine_state)
+        service = await _get_service()
         session = service.get_session()
         if session is None:
             return JSONResponse({"session": None})
@@ -799,9 +792,7 @@ def register_all_routes(app: FastAPI) -> None:
     @app.get("/api/presets")
     async def list_presets() -> JSONResponse:
         """List all saved preset pipelines."""
-        from api.service import Service
-
-        service = Service(engine_state)
+        service = await _get_service()
         presets = service.list_presets()
         return JSONResponse({"presets": presets})
 
@@ -811,8 +802,6 @@ def register_all_routes(app: FastAPI) -> None:
 
         Request: {"name": "my-preset", "content": "..."}
         """
-        from api.service import Service
-
         name = request.get("name", "").strip()
         content = request.get("content", "")
         if not name:
@@ -820,7 +809,7 @@ def register_all_routes(app: FastAPI) -> None:
         if not content:
             raise APIError("content is required")
 
-        service = Service(engine_state)
+        service = await _get_service()
         path = service.save_preset(name, content)
         return JSONResponse({"ok": True, "path": str(path)})
 
@@ -841,13 +830,11 @@ def register_all_routes(app: FastAPI) -> None:
 
         Request: {"name": "my-preset"}
         """
-        from api.service import Service
-
         name = request.get("name", "").strip()
         if not name:
             raise APIError("name is required")
 
-        service = Service(engine_state)
+        service = await _get_service()
         session = service.get_session()
         if session is None:
             raise APIError("No active session to compile")
@@ -914,6 +901,16 @@ def register_all_routes(app: FastAPI) -> None:
 
 
 # ── Internal helpers ────────────────────────────────────────────────
+
+
+async def _get_service() -> Any:
+    """Return the singleton Service instance, creating it if needed."""
+    from api.service import Service
+
+    async with engine_state._service_lock:
+        if engine_state._service is None:
+            engine_state._service = Service(engine_state)
+        return engine_state._service
 
 
 def _get_workspace_manager(pipeline_name: str) -> Any:

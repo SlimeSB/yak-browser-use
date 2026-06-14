@@ -45,7 +45,7 @@ def test_pipeline_tools_names():
 
 def test_get_all_tools_with_goal():
     tools = get_all_tools(include_goal_run=True)
-    assert len(tools) == 16
+    assert len(tools) == 17
     names = [t["function"]["name"] for t in tools]
     assert "browser_goto" in names
     assert "goal_run" in names
@@ -58,11 +58,12 @@ def test_get_all_tools_with_goal():
     assert "record_step" in names
     assert "browser_get_element_by_number" in names
     assert "edit_pipeline" not in names
+    assert "todo" in names
 
 
 def test_get_all_tools_without_goal():
     tools = get_all_tools(include_goal_run=False)
-    assert len(tools) == 15
+    assert len(tools) == 16
     names = [t["function"]["name"] for t in tools]
     assert "goal_run" not in names
     assert "edit_pipeline" not in names
@@ -81,3 +82,15 @@ def test_get_browser_tools():
     assert "browser_source" in names
     assert "browser_eval" in names
     assert "browser_get_element_by_number" in names
+
+
+def test_todo_tool_definition():
+    tools = get_all_tools(include_goal_run=True)
+    todo_tool = next((t for t in tools if t["function"]["name"] == "todo"), None)
+    assert todo_tool is not None
+    assert todo_tool["type"] == "function"
+    fn = todo_tool["function"]
+    assert "todos" in fn["parameters"]["properties"]
+    assert "merge" in fn["parameters"]["properties"]
+    assert fn["parameters"]["properties"]["merge"]["type"] == "boolean"
+    assert fn["parameters"]["properties"]["todos"]["type"] == "array"

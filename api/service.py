@@ -15,6 +15,7 @@ from typing import Callable
 from utils.logging import get_logger
 
 from api.errors import APIError
+from tools.todo_store import TodoStore
 
 logger = get_logger(__name__)
 
@@ -33,6 +34,7 @@ class SessionState:
     messages: list[dict] = field(default_factory=list)
     error_info: dict | None = None
     budget_snapshot: dict | None = None
+    todo_store: TodoStore = field(default_factory=TodoStore)
 
 
 class Service:
@@ -103,6 +105,7 @@ class Service:
         from engine._harness.conversation_loop import run_conversation_loop, ConversationResult
         from engine._harness.tools import get_all_tools
         from prompts._loader import load_prompt
+        from tools.todo_store import current_store
 
         if self._active_session is None:
             self.create_session(pipeline_name)
@@ -134,6 +137,7 @@ class Service:
         def _interrupt_check() -> bool:
             return session.status in ("cancelled",)
 
+        _todo_token = current_store.set(session.todo_store)
         try:
             result: ConversationResult = await run_conversation_loop(
                 llm_call=llm_call,
@@ -175,6 +179,7 @@ class Service:
                 "status": session.status,
                 "session_id": session.session_id,
             })
+            current_store.reset(_todo_token)
 
     # ── Pipeline management ─────────────────────────────────────────
 
@@ -249,6 +254,9 @@ class Service:
                 result_text = str(tr.get("content", ""))[:200]
 
                 if tool_name == "edit_pipeline":
+                    continue
+
+                if tool_name == "todo":
                     continue
 
                 if tool_name.startswith("browser_"):

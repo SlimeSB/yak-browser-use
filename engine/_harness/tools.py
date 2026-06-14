@@ -432,6 +432,46 @@ RECORD_STEP_TOOL: dict[str, Any] = {
     },
 }
 
+TODO_TOOL: dict[str, Any] = {
+    "type": "function",
+    "function": {
+        "name": "todo",
+        "description": (
+            "Manage a structured task list for your current session. "
+            "Use this to track progress on multi-step tasks. "
+            "Call without arguments to read the current list. "
+            "Pass `todos` with `merge=false` (default) to replace the entire list. "
+            "Pass `todos` with `merge=true` to update existing items by id and append new ones. "
+            "Each item should have: id (unique string), content (description), "
+            "status (one of: pending, in_progress, completed, cancelled)."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "todos": {
+                    "type": "array",
+                    "description": (
+                        "List of todo items. Each item is an object with: "
+                        "id (string, auto-generated if omitted), "
+                        "content (string, description of the task), "
+                        "status (string, one of: pending, in_progress, completed, cancelled). "
+                        "Omit this parameter to read the current list."
+                    ),
+                    "items": {"type": "object"},
+                },
+                "merge": {
+                    "type": "boolean",
+                    "description": (
+                        "If true, merge the provided todos with the existing list by id "
+                        "(update matching ids, append new ones). "
+                        "If false (default), replace the entire list."
+                    ),
+                },
+            },
+        },
+    },
+}
+
 
 def get_all_tools(include_goal_run: bool = True) -> list[dict[str, Any]]:
     """Get the full list of registered tools.
@@ -447,6 +487,7 @@ def get_all_tools(include_goal_run: bool = True) -> list[dict[str, Any]]:
         tools.append(GOAL_RUN_TOOL)
     tools.extend(PIPELINE_TOOLS)
     tools.append(RECORD_STEP_TOOL)
+    tools.append(TODO_TOOL)
     logger.debug("get_all_tools: registered %d tools (include_goal_run=%s)", len(tools), include_goal_run)
     return tools
 

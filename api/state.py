@@ -32,6 +32,8 @@ class _EngineState:
         self.chrome_daemon: CDPDaemon | None = None
         self._running_pipeline: RunContext | None = None
         self.ws_clients: list[asyncio.Queue] = []
+        self._service: object | None = None
+        self._service_lock = asyncio.Lock()
 
     # ── Chrome connection  ──────────────────────────────────────────
 
@@ -127,6 +129,7 @@ class _EngineState:
         self._running_pipeline = None
         self.ws_clients.clear()
         self.current_state = "idle"
+        self._service = None
 
         from cdp.launcher import cleanup_isolated
         await cleanup_isolated()

@@ -228,6 +228,16 @@ async def _execute_single_tool_call(
                     tools_dir=tools_dir or Path("."),
                 )
 
+            elif fn_name == "todo":
+                from tools.todo_store import current_store
+                from tools.todo import todo
+
+                store = current_store.get()
+                todos = fn_args.get("todos")
+                merge = fn_args.get("merge", False)
+                result_str = await todo(todos=todos, merge=merge, store=store)
+                return {"ok": True, "result": result_str}
+
             else:
                 return await execute_tool(
                     tool_name=fn_name,

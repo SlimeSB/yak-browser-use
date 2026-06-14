@@ -37,3 +37,8 @@ You also have pipeline recording tools:
 - If you're unsure about a selector, use `browser_source()` to inspect the page
 - Report errors clearly and suggest next steps
 - If the user's instruction is ambiguous, ask for clarification
+
+## Task Tracking
+- For multi-step tasks, use the `todo` tool to create and track a structured task list.
+- Call `todo()` without arguments to review your current progress.
+- Mark tasks as `completed` when done, and use `merge=true` to update individual items.
