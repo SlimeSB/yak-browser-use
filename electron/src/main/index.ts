@@ -452,9 +452,10 @@ let _stopping = false;
 app.on('window-all-closed', () => {
   if (!_stopping) {
     _stopping = true;
-    py?.stop();
+    logger.info('All windows closed, force-stopping backend and exiting');
+    py?.stop(true);
+    app.exit(0);
   }
-  if (process.platform !== 'darwin') app.quit();
 });
 
 app.on('before-quit', () => {

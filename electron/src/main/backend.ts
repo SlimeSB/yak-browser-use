@@ -170,36 +170,33 @@ export class PythonBackend {
 
   private _stopping = false;
 
-  stop(): void {
+  stop(force = false): void {
     if (this._stopping || !this.process) return;
     this._stopping = true;
     const pid = this.process.pid;
-    logger.info('Stopping Python backend (pid=%d)', pid);
+    logger.info('Stopping Python backend (pid=%d, force=%s)', pid, force);
 
-    // Step 1: Send graceful shutdown signal.
-    // On Windows, taskkill without /F sends WM_CLOSE (SIGTERM equivalent).
-    // Uvicorn catches this and runs its @app.on_event("shutdown") handler,
-    // which calls engine_state.cleanup() to clean up daemon, pipeline, etc.
     if (pid) {
       try {
         if (process.platform === 'win32') {
-          execSync(`taskkill /PID ${pid} 2>nul`, { stdio: 'ignore' });
+          execSync(`taskkill /PID ${pid}${force ? ' /F' : ''} 2>nul`, { stdio: 'ignore' });
         } else {
-          process.kill(pid, 'SIGTERM');
+          process.kill(pid, force ? 'SIGKILL' : 'SIGTERM');
         }
       } catch { /* already dead */ }
     }
 
-    // Step 2: Wait up to 3 s for the process to exit gracefully, then force-kill
-    setTimeout(() => {
-      if (this.process && !this.process.killed && this.process.pid) {
-        logger.warn(
-          'Python backend still alive after graceful shutdown, force killing (pid=%d)',
-          this.process.pid,
-        );
-        _killProcess(this.process.pid);
-      }
-    }, 3000);
+    if (!force) {
+      setTimeout(() => {
+        if (this.process && !this.process.killed && this.process.pid) {
+          logger.warn(
+            'Python backend still alive after graceful shutdown, force killing (pid=%d)',
+            this.process.pid,
+          );
+          _killProcess(this.process.pid);
+        }
+      }, 3000);
+    }
 
     if (this._pidFile) {
       try { if (existsSync(this._pidFile)) unlinkSync(this._pidFile); } catch { /* ok */ }
