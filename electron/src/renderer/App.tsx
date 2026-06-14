@@ -73,11 +73,35 @@ export default function App() {
 
   const [pendingEdits, setPendingEdits] = useState<PendingEdit[]>([]);
   const processedEditIdsRef = useRef<Set<string>>(new Set());
+  const streamStatesRef = useRef<Record<number, { accumulating: string; reasoningParts: string[]; complete: boolean }>>({});
 
   const activePendingEdit = pendingEdits.length > 0 ? pendingEdits[0] : null;
 
   const [pipelineEditor, setPipelineEditor] = useState('');
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+
+  useEffect(() => {
+    const states = streamStatesRef.current;
+    for (let ti = chatMessages.length - 1; ti >= 0; ti--) {
+      const st = states[ti];
+      if (!st || st.complete) continue;
+      if (chatMessages[ti].role === 'assistant') {
+        const hasContent = st.accumulating.length > 0;
+        const hasReasoning = st.reasoningParts.length > 0;
+        if (hasContent || hasReasoning) {
+          setChatMessages(prev => {
+            const next = [...prev];
+            if (ti < next.length) {
+              next[ti] = { ...next[ti], content: st.accumulating || next[ti].content };
+              if (hasReasoning) next[ti] = { ...next[ti], reasoning: st.reasoningParts.join('') };
+            }
+            return next;
+          });
+        }
+        delete states[ti];
+      }
+    }
+  }, [chatMessages]);
 
   useEffect(() => {
     window.electronAPI.listPipelines().then(r => {
@@ -189,6 +213,51 @@ export default function App() {
               });
             } else if (et === 'chat.error') {
               setChatMessages(prev => [...prev, { role: 'assistant', content: `[Error] ${event.message || ''}` }]);
+            } else if (et === 'chat.stream_start') {
+              const ti = event.turn_index as number;
+              streamStatesRef.current[ti] = { accumulating: '', reasoningParts: [], complete: false };
+            } else if (et === 'chat.text_chunk') {
+              const ti = event.turn_index as number;
+              const content = event.content as string || '';
+              const st = streamStatesRef.current[ti];
+              if (!st) { streamStatesRef.current[ti] = { accumulating: content, reasoningParts: [], complete: false }; return; }
+              st.accumulating += content;
+              setChatMessages(prev => {
+                const next = [...prev];
+                if (ti < next.length && next[ti].role === 'assistant') {
+                  next[ti] = { ...next[ti], content: st.accumulating };
+                }
+                return next;
+              });
+            } else if (et === 'chat.think_chunk') {
+              const ti = event.turn_index as number;
+              const content = event.content as string || '';
+              const st = streamStatesRef.current[ti];
+              if (!st) { streamStatesRef.current[ti] = { accumulating: '', reasoningParts: [content], complete: false }; return; }
+              st.reasoningParts.push(content);
+              setChatMessages(prev => {
+                const next = [...prev];
+                if (ti < next.length && next[ti].role === 'assistant') {
+                  next[ti] = { ...next[ti], reasoning: st.reasoningParts.join('') };
+                }
+                return next;
+              });
+            } else if (et === 'chat.tool_generated') {
+              const ti = event.turn_index as number;
+              const toolName = event.tool_name as string || '';
+              setChatMessages(prev => {
+                const next = [...prev];
+                if (ti < next.length && next[ti].role === 'assistant') {
+                  const existing = next[ti].content;
+                  next[ti] = { ...next[ti], content: existing ? existing + `\n\n[正在调用 ${toolName}...]` : `[正在调用 ${toolName}...]` };
+                }
+                return next;
+              });
+            } else if (et === 'chat.stream_end') {
+              const ti = event.turn_index as number;
+              if (streamStatesRef.current[ti]) {
+                streamStatesRef.current[ti].complete = true;
+              }
             } else if (et === 'pipeline.edit') {
               const editId = event.edit_id as string;
               if (editId && !processedEditIdsRef.current.has(editId)) {

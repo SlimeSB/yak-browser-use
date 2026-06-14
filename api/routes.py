@@ -696,6 +696,48 @@ def register_all_routes(app: FastAPI) -> None:
 
         logger.info("Chat message: %s", message[:120])
         service = await _get_service()
+
+        session = service.get_session()
+        turn_index = (len(session.messages) if session else 0) + 1
+
+        def _push(event: dict) -> None:
+            if event.get("type") == "chat.message" and llm_call._streaming_active is not None:
+                if llm_call._streaming_active():
+                    return
+            service._push_event(event)
+
+        def _on_stream_start() -> None:
+            _push({"type": "chat.stream_start", "turn_index": turn_index})
+
+        def _on_stream_end(has_tool_calls: bool) -> None:
+            _push({"type": "chat.stream_end", "has_tool_calls": has_tool_calls, "turn_index": turn_index})
+
+        def _on_text_delta(text: str) -> None:
+            _push({"type": "chat.text_chunk", "content": text, "turn_index": turn_index})
+
+        def _on_reasoning_delta(text: str) -> None:
+            _push({"type": "chat.think_chunk", "content": text, "turn_index": turn_index})
+
+        def _on_tool_generated(name: str) -> None:
+            _push({"type": "chat.tool_generated", "tool_name": name, "turn_index": turn_index})
+
+        llm_call = _create_chat_llm_call(
+            on_stream_start=_on_stream_start,
+            on_stream_end=_on_stream_end,
+            on_text_delta=_on_text_delta,
+            on_reasoning_delta=_on_reasoning_delta,
+            on_tool_generated=_on_tool_generated,
+        )
+
+        _original_push = service._push_event
+
+        def _filtered_push(event: dict) -> None:
+            if event.get("type") == "chat.message" and llm_call._streaming_active():
+                return
+            _original_push(event)
+
+        service._push_event = _filtered_push
+
         try:
             from cdp.helpers import CDPHelpers
 
@@ -706,7 +748,7 @@ def register_all_routes(app: FastAPI) -> None:
                 cdp_helpers=browser,
                 tools_dir=Path("tools"),
                 pipeline_name="chat",
-                llm_call=_create_chat_llm_call(),
+                llm_call=llm_call,
             )
             resp_preview = (result.get("response") or "")[:80]
             logger.info("Chat response (%s, %d turns, %dms): %s",
@@ -718,6 +760,8 @@ def register_all_routes(app: FastAPI) -> None:
         except Exception as exc:
             logger.exception("Chat processing failed")
             raise ServerError(str(exc))
+        finally:
+            service._push_event = _original_push
 
     @app.post("/api/chat/reset")
     async def chat_reset() -> JSONResponse:

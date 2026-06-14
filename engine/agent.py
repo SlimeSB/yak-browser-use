@@ -102,18 +102,38 @@ async def start_chat_agent(
     }
 
 
-def _create_chat_llm_call():
+def _create_chat_llm_call(
+    on_stream_start=None,
+    on_stream_end=None,
+    on_text_delta=None,
+    on_reasoning_delta=None,
+    on_tool_generated=None,
+):
     """Create a callable for LLM API calls compatible with conversation_loop.
+
+    Args:
+        on_stream_start: Optional callback() called before streaming starts.
+        on_stream_end: Optional callback(has_tool_calls) called after streaming.
+        on_text_delta: Optional callback(text) for each delta.content chunk.
+        on_reasoning_delta: Optional callback(text) for each reasoning_content chunk.
+        on_tool_generated: Optional callback(name) when tool name first appears.
 
     Returns an async function that takes (messages, tools) and returns
     an object with .content and .tool_calls attributes.
     """
+    from types import SimpleNamespace
+
     from utils.browser import create_llm
     from browser_use.llm.messages import UserMessage, SystemMessage, AssistantMessage
+    from browser_use.llm.openai.serializer import OpenAIMessageSerializer
 
     llm = create_llm()
+    _streaming = any(cb is not None for cb in [on_text_delta, on_reasoning_delta])
+    _streaming_active = False
 
     async def _call(messages: list[dict], tools: list[dict]) -> object:
+        nonlocal _streaming_active
+
         converted: list = []
         for msg in messages:
             role = msg.get("role", "user")
@@ -122,13 +142,133 @@ def _create_chat_llm_call():
                 converted.append(SystemMessage(content=content))
             elif role == "assistant":
                 converted.append(AssistantMessage(content=content))
+            elif role == "tool":
+                converted.append(UserMessage(content=f"[tool result] {content}"))
             else:
                 converted.append(UserMessage(content=content))
 
-        kwargs = {"messages": converted}
+        if not _streaming:
+            kwargs: dict = {"messages": converted}
+            if tools:
+                kwargs["tools"] = tools
+            return await llm.ainvoke(**kwargs)
+
+        # ── Streaming path ──────────────────────────────────────────
+        openai_messages = list(OpenAIMessageSerializer.serialize_messages(converted))
+
+        for msg in messages:
+            if msg.get("role") == "tool":
+                tool_msg: dict = {
+                    "role": "tool",
+                    "content": msg.get("content", ""),
+                    "tool_call_id": msg.get("tool_call_id", ""),
+                }
+                found = False
+                for i, existing in enumerate(openai_messages):
+                    if isinstance(existing, dict) and existing.get("role") == "user":
+                        openai_messages[i] = tool_msg
+                        found = True
+                        break
+                if not found:
+                    openai_messages.append(tool_msg)
+
+        client = llm.get_client()
+
+        model_params: dict = {}
+        if llm.temperature is not None:
+            model_params["temperature"] = llm.temperature
+        if llm.frequency_penalty is not None:
+            model_params["frequency_penalty"] = llm.frequency_penalty
+        if llm.max_completion_tokens is not None:
+            model_params["max_completion_tokens"] = llm.max_completion_tokens
+        if llm.top_p is not None:
+            model_params["top_p"] = llm.top_p
+        if llm.seed is not None:
+            model_params["seed"] = llm.seed
+
+        if llm.reasoning_models and any(
+            str(m).lower() in str(llm.model).lower() for m in llm.reasoning_models
+        ):
+            model_params["reasoning_effort"] = llm.reasoning_effort
+            model_params.pop("temperature", None)
+            model_params.pop("frequency_penalty", None)
+
+        create_kwargs: dict = {
+            "model": llm.model,
+            "messages": openai_messages,
+            "stream": True,
+            **model_params,
+        }
         if tools:
-            kwargs["tools"] = tools
-        response = await llm.ainvoke(**kwargs)
-        return response
+            create_kwargs["tools"] = tools
+
+        _streaming_active = True
+        if on_stream_start:
+            on_stream_start()
+
+        stream = await client.chat.completions.create(**create_kwargs)
+
+        content_parts: list[str] = []
+        thinking_parts: list[str] = []
+        tool_calls_acc: dict[int, dict] = {}
+        tool_names_seen: set[str] = set()
+
+        async for chunk in stream:
+            if not chunk.choices:
+                continue
+            delta = chunk.choices[0].delta
+
+            reasoning = getattr(delta, "reasoning_content", None) or ""
+            if reasoning:
+                thinking_parts.append(reasoning)
+                if on_reasoning_delta:
+                    on_reasoning_delta(reasoning)
+
+            if delta.content:
+                content_parts.append(delta.content)
+                if on_text_delta:
+                    on_text_delta(delta.content)
+
+            if delta.tool_calls:
+                for tc in delta.tool_calls:
+                    idx = tc.index
+                    if idx not in tool_calls_acc:
+                        tool_calls_acc[idx] = {
+                            "id": "",
+                            "type": "function",
+                            "function": {"name": "", "arguments": ""},
+                        }
+                    entry = tool_calls_acc[idx]
+                    if tc.id:
+                        entry["id"] = tc.id
+                    if tc.function:
+                        if tc.function.name:
+                            entry["function"]["name"] += tc.function.name
+                            full_name = entry["function"]["name"]
+                            if full_name not in tool_names_seen:
+                                tool_names_seen.add(full_name)
+                                if on_tool_generated:
+                                    on_tool_generated(full_name)
+                        if tc.function.arguments:
+                            entry["function"]["arguments"] += tc.function.arguments
+
+        content = "".join(content_parts)
+        thinking = "".join(thinking_parts)
+
+        sorted_tc = sorted(tool_calls_acc.items(), key=lambda x: x[0])
+        final_tool_calls = [tc for _, tc in sorted_tc]
+
+        if on_stream_end:
+            on_stream_end(bool(final_tool_calls))
+
+        _streaming_active = False
+
+        resp = SimpleNamespace()
+        resp.content = content
+        resp.tool_calls = final_tool_calls if final_tool_calls else None
+        resp.thinking = thinking if thinking else None
+        return resp
+
+    _call._streaming_active = lambda: _streaming_active
 
     return _call

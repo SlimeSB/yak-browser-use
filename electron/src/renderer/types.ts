@@ -39,6 +39,7 @@ export interface PresetDefinition {
 export interface ChatMessage {
   role: 'user' | 'assistant' | 'tool' | 'system';
   content: string;
+  reasoning?: string;
   toolName?: string;
   toolOk?: boolean;
   toolDuration?: number;

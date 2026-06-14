@@ -36,6 +36,7 @@ export default function ChatTab({
   const scrollRef = useRef<HTMLDivElement>(null);
   const bodyRef = useRef<HTMLDivElement>(null);
   const draggingRef = useRef(false);
+  const [expandedThinks, setExpandedThinks] = useState<Set<number>>(new Set());
 
   const [splitRatio, setSplitRatio] = useState(() => {
     try {
@@ -278,6 +279,26 @@ export default function ChatTab({
                   </span>
                 )}
                 <div className={`chat-bubble ${msg.role}`}>
+                  {msg.role === 'assistant' && msg.reasoning && (
+                    <div className={`chat-think-block ${expandedThinks.has(i) ? 'expanded' : ''}`}>
+                      <div
+                        className="chat-think-header"
+                        onClick={() => {
+                          setExpandedThinks(prev => {
+                            const next = new Set(prev);
+                            if (next.has(i)) { next.delete(i); } else { next.add(i); }
+                            return next;
+                          });
+                        }}
+                      >
+                        <span className="chat-think-arrow">{expandedThinks.has(i) ? '▾' : '▸'}</span>
+                        <span className="chat-think-title">思考过程</span>
+                      </div>
+                      {expandedThinks.has(i) && (
+                        <div className="chat-think-content">{msg.reasoning}</div>
+                      )}
+                    </div>
+                  )}
                   {msg.role === 'tool' && msg.toolName && (
                     <div className="chat-tool-header">
                       <span className={`chat-tool-indicator ${msg.toolOk ? 'ok' : 'err'}`}>
