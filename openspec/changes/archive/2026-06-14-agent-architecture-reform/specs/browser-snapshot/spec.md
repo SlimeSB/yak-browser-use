@@ -1,0 +1,76 @@
+## MODIFIED Requirements
+
+### Requirement: browser_snapshot mode 参数
+`browser_snapshot` 工具的 schema MUST 新增可选的 `mode` 参数，支持 `interactive`、`full`、`simplified` 三种模式，默认值为 `interactive`。
+
+#### Scenario: 默认 interactive 模式
+- **WHEN** LLM 调用 `browser_snapshot()` 不传 mode 参数
+- **THEN** 使用 `mode="interactive"`
+- **AND** 调用 `capture_snapshot_interactive()` 获取 @eN 元素列表
+- **AND** 重数据（elements 完整列表）写入 scratchpad
+- **AND** messages 中只保留摘要（如 `"📸 快照已获取（15个可交互元素），页面标题: 淘宝网"`）
+
+#### Scenario: 显式指定 interactive 模式
+- **WHEN** LLM 调用 `browser_snapshot(mode="interactive")`
+- **THEN** 行为与默认模式一致
+
+#### Scenario: full 模式
+- **WHEN** LLM 调用 `browser_snapshot(mode="full")`
+- **THEN** 调用 `capture_snapshot()` 获取截图和完整 HTML
+- **AND** 重数据（screenshot_base64、html）写入 scratchpad
+- **AND** messages 中只保留摘要（如 `"📸 完整快照已获取（含截图+HTML），数据已缓存"`）
+
+#### Scenario: simplified 模式
+- **WHEN** LLM 调用 `browser_snapshot(mode="simplified")`
+- **THEN** 调用 `capture_snapshot_simplified()` 获取文本摘要
+- **AND** 数据量小，不隔离（直接返回摘要文本）
+
+### Requirement: execute_browser_op 默认 mode 变更
+`execute_browser_op()` 中 snapshot handler 的默认 mode MUST 从 `"full"` 改为 `"interactive"`。
+
+#### Scenario: 不传 mode 时默认 interactive
+- **WHEN** `execute_browser_op("snapshot", params, cdp_helpers)` 被调用且 `params` 中无 `mode` 字段
+- **THEN** `params.get("mode", "interactive")` 返回 `"interactive"`
+- **AND** 调用 `capture_snapshot_interactive()`
+
+#### Scenario: pipeline YAML 中 snapshot op 不受影响
+- **WHEN** pipeline YAML 中 snapshot op 显式指定 `mode: "full"`
+- **THEN** `execute_browser_step()` 传入 `core_params = {"mode": "full"}`
+- **AND** `execute_browser_op()` 读取 `params["mode"]` 得到 `"full"`
+- **AND** 行为与变更前一致
+
+### Requirement: 编排层重数据过滤
+`tool_executor.py` 的 `execute_tool_calls_sequential()` MUST 在工具结果回写 messages 前对 `browser_snapshot` 和 `browser_source` 的结果进行重数据摘录和 scratchpad 写入。
+
+#### Scenario: interactive 模式过滤
+- **WHEN** `browser_snapshot(mode="interactive")` 返回 `{result: {elements: [...], url: "...", title: "..."}}`
+- **THEN** `elements`、`url`、`title` 写入 scratchpad
+- **AND** `result_dict["result"]` 替换为摘要文本
+- **AND** 摘要包含元素数量和页面标题
+
+#### Scenario: full 模式过滤
+- **WHEN** `browser_snapshot(mode="full")` 返回 `{screenshot_base64: "...", html: "...", result: {}}`
+- **THEN** `screenshot_base64`、`html` 从 `result_dict` 顶层移除并写入 scratchpad
+- **AND** `result_dict["result"]` 替换为摘要文本
+
+#### Scenario: interactive 降级时重数据隔离
+- **WHEN** `browser_snapshot(mode="interactive")` 返回 `{result: {elements: [], mode: "interactive", degraded: true, screenshot_base64: "...", html: "..."}}`
+- **THEN** 编排层检测到 `degraded: true` 标记
+- **AND** `screenshot_base64` 和 `html` 从 `result_dict["result"]` 中移除并写入 scratchpad
+- **AND** `result_dict["result"]` 替换为摘要 `"📸 快照已获取（降级为 full 模式，0个可交互元素），数据已缓存"`
+- **AND** 降级带来的大体积数据不进入 messages
+
+#### Scenario: simplified 模式不过滤
+- **WHEN** `browser_snapshot(mode="simplified")` 返回文本摘要
+- **THEN** 不触发 scratchpad 写入
+- **AND** 结果原样进入 messages
+
+#### Scenario: browser_source 过滤
+- **WHEN** `browser_source()` 返回 `{html: "<html>...", result: {length: 15000}}`
+- **THEN** `html` 从 `result_dict` 顶层移除并写入 scratchpad
+- **AND** `result_dict["result"]` 保留 `{length: 15000}`
+
+#### Scenario: 非重数据工具不过滤
+- **WHEN** `browser_click`、`browser_fill`、`browser_goto` 等工具返回结果
+- **THEN** 不触发 scratchpad 写入
+- **AND** 结果原样进入 messages
