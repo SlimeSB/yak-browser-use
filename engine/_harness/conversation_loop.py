@@ -113,6 +113,9 @@ async def run_conversation_loop(
     consecutive_llm_failures = 0
     interrupted = False
     turn_count = 0
+    # Cache text content from turns where model also called tools
+    # so it can be used as final_response if the next turn is pure text.
+    last_content_with_tools: str = ""
 
     # Main loop
     if cdp_helpers is not None and hasattr(cdp_helpers, "add_dom_highlights"):
@@ -163,6 +166,13 @@ async def run_conversation_loop(
                          turn_count, len(tool_calls))
             messages.append(_build_assistant_message(response))
 
+            # Cache text content when model speaks while also calling tools
+            # TODO: stream to frontend via "chat.interim" event when UI supports it
+            if not preset_mode:
+                content = getattr(response, "content", "") or ""
+                if content.strip():
+                    last_content_with_tools = content
+
             try:
                 await execute_tool_calls_sequential(
                     messages=messages,
@@ -186,6 +196,12 @@ async def run_conversation_loop(
             if content is None:
                 content = getattr(response, "completion", "")
             final_response = content or ""
+
+            # Fall back to cached content from prior tool-calling turns
+            # TODO: push interim content from those turns via "chat.interim" when UI is ready
+            if not final_response.strip():
+                final_response = last_content_with_tools
+
             messages.append(_build_assistant_message(response))
             logger.debug("conversation_loop: turn %d text response (%d chars)",
                          turn_count, len(final_response or ""))
