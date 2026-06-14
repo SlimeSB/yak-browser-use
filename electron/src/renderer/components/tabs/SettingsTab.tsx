@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import i18n from '../../i18n';
+import type { PresetDefinition } from '../../types';
 
 interface SettingsTabProps {
   reviewMode: string;
@@ -11,38 +12,48 @@ interface SettingsTabProps {
   onThemeChange: (t: 'dark' | 'light') => void;
 }
 
+interface ProviderForm {
+  model: string;
+  api_key: string;
+  api_base: string;
+}
+
 export default function SettingsTab({
   reviewMode, onReviewModeChange,
   chatLayoutReversed, onChatLayoutReversedChange,
   theme, onThemeChange,
 }: SettingsTabProps) {
   const { t } = useTranslation();
-  const [providerConfig, setProviderConfig] = useState({ model: '', api_key: '', api_base: '' });
+  const [providerConfig, setProviderConfig] = useState<ProviderForm>({ model: '', api_key: '', api_base: '' });
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<{ ok: boolean; msg: string } | null>(null);
-  const [presets, setPresets] = useState<Record<string, { model: string; api_key: string; api_base: string }>>({});
-  const [activePreset, setActivePreset] = useState('');
+
+  // Presets from backend
+  const [presets, setPresets] = useState<PresetDefinition[]>([]);
+  const [activePresetId, setActivePresetId] = useState<string | null>(null);
+  const [presetsError, setPresetsError] = useState('');
 
   useEffect(() => {
     window.electronAPI.getProviderConfig().then(r => {
       if (r.ok && r.config) {
-        const { presets: p, ...rest } = r.config;
-        setProviderConfig(prev => ({ ...prev, ...rest }));
-        if (p) setPresets(p as Record<string, { model: string; api_key: string; api_base: string }>);
+        const { presets: _, ...rest } = r.config;
+        setProviderConfig(prev => ({ ...prev, ...rest } as ProviderForm));
+      }
+    });
+    window.electronAPI.getProviderPresets().then(r => {
+      if (r.ok && r.presets) {
+        setPresets(r.presets);
+      } else {
+        setPresetsError(r.error || 'Failed to load presets');
       }
     });
   }, []);
 
-  const applyPreset = (name: string) => {
-    const p = presets[name];
-    if (p) { setProviderConfig(p); setActivePreset(name); }
-  };
-
   const handleSaveProvider = async () => {
     setSaving(true);
-    const r = await window.electronAPI.setProviderConfig({ ...providerConfig, presets });
+    const r = await window.electronAPI.setProviderConfig({ ...providerConfig });
     if (r.ok) { setSaved(true); setTimeout(() => setSaved(false), 2000); }
     setSaving(false);
   };
@@ -50,10 +61,22 @@ export default function SettingsTab({
   const handleTest = async () => {
     setTesting(true);
     setTestResult(null);
-    const r = await window.electronAPI.testProvider(providerConfig);
+    const r = await window.electronAPI.testProvider(providerConfig as unknown as Record<string, string>);
     setTestResult(r.ok ? { ok: true, msg: t('settingsTab.testPassed') } : { ok: false, msg: r.error || 'Failed' });
     setTesting(false);
   };
+
+  const applyPreset = (preset: PresetDefinition) => {
+    // Set api_base, keep existing api_key, clear model so user picks one
+    setProviderConfig(p => ({ ...p, api_base: preset.api_base, model: '' }));
+    setActivePresetId(activePresetId === preset.id ? null : preset.id);
+  };
+
+  const selectModel = (modelId: string) => {
+    setProviderConfig(p => ({ ...p, model: modelId }));
+  };
+
+  const activePreset = presets.find(p => p.id === activePresetId) || null;
 
   return (
     <div className="set-layout">
@@ -143,16 +166,36 @@ export default function SettingsTab({
         <div className="set-group">
           <div className="set-group-title">LLM Provider</div>
           <div className="set-row" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 6 }}>
-            {Object.keys(presets).length > 0 && (
-              <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-                {Object.keys(presets).map(name => (
-                  <button key={name}
-                    className={`btn btn-xs ${activePreset === name ? 'btn-primary' : 'btn-secondary'}`}
-                    onClick={() => applyPreset(name)}
-                  >{name}</button>
-                ))}
-              </div>
+            {/* Preset buttons */}
+            <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+              {presets.map(p => (
+                <button key={p.id}
+                  className={`btn btn-xs ${activePresetId === p.id ? 'btn-primary' : 'btn-secondary'}`}
+                  onClick={() => applyPreset(p)}
+                  title={`API: ${p.api_base}`}
+                >{p.name}</button>
+              ))}
+            </div>
+            {presetsError && (
+              <div style={{ fontSize: 11, color: '#e81123' }}>✗ {presetsError}</div>
             )}
+
+            {/* Model dropdown — shown when a preset is active */}
+            {activePreset && (
+              <select className="set-input"
+                value={providerConfig.model}
+                onChange={e => selectModel(e.target.value)}
+                style={{ marginBottom: 4 }}
+              >
+                <option value="">-- Select model --</option>
+                {activePreset.models.map(m => (
+                  <option key={m.id} value={m.id}>
+                    {m.name} ({m.id}){m.context ? ` — ${(m.context / 1000).toFixed(0)}K ctx` : ''}
+                  </option>
+                ))}
+              </select>
+            )}
+
             <input className="set-input" placeholder="Model (e.g. gpt-4o, deepseek-chat)" value={providerConfig.model}
               onChange={e => setProviderConfig(p => ({ ...p, model: e.target.value }))} />
             <input className="set-input" type="password" placeholder="API Key" value={providerConfig.api_key}

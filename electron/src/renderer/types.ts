@@ -22,6 +22,20 @@ export interface VersionInfo {
   created_at: string;
 }
 
+export interface PresetModel {
+  id: string;
+  name: string;
+  context: number | null;
+}
+
+export interface PresetDefinition {
+  id: string;
+  name: string;
+  api_base: string;
+  env: string[];
+  models: PresetModel[];
+}
+
 export interface ChatMessage {
   role: 'user' | 'assistant' | 'tool' | 'system';
   content: string;
@@ -89,6 +103,7 @@ declare global {
       getProviderConfig: () => Promise<{ ok: boolean; config: Record<string, unknown> }>;
       setProviderConfig: (config: Record<string, unknown>) => Promise<{ ok: boolean }>;
       testProvider: (config: Record<string, string>) => Promise<{ ok: boolean; response?: string; error?: string }>;
+      getProviderPresets: () => Promise<{ ok: boolean; presets?: PresetDefinition[]; error?: string }>;
     };
   }
 }

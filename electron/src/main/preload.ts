@@ -54,6 +54,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getProviderConfig: () => ipcRenderer.invoke('api:provider-config-get'),
   setProviderConfig: (config: Record<string, string>) => ipcRenderer.invoke('api:provider-config-set', config),
   testProvider: (config: Record<string, string>) => ipcRenderer.invoke('api:provider-test', config),
+  getProviderPresets: () => ipcRenderer.invoke('api:provider-presets'),
 
   // Dialogs
   showAlert: (message: string) => ipcRenderer.invoke('dialog:alert', message),

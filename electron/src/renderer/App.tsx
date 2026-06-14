@@ -78,11 +78,6 @@ export default function App() {
 
   const [pipelineEditor, setPipelineEditor] = useState('');
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
-  const [chatInput, setChatInput] = useState('');
-  const [chatSending, setChatSending] = useState(false);
-  const [streamingMsg, setStreamingMsg] = useState('');
-  const [sessionStatus, setSessionStatus] = useState('idle');
-  const esRef = useRef<EventSource | null>(null);
 
   useEffect(() => {
     window.electronAPI.listPipelines().then(r => {
@@ -169,10 +164,7 @@ export default function App() {
             const et = event.type;
 
             // Chat events
-            if (et === 'chat.message') {
-              const c = event.content as string;
-              setChatMessages(prev => [...prev, { role: 'assistant', content: c || '' }]);
-            } else if (et === 'chat.tool_start') {
+            if (et === 'chat.tool_start') {
               setChatMessages(prev => [...prev, {
                 role: 'tool',
                 content: '',
@@ -197,11 +189,6 @@ export default function App() {
               });
             } else if (et === 'chat.error') {
               setChatMessages(prev => [...prev, { role: 'assistant', content: `[Error] ${event.message || ''}` }]);
-            } else if (et === 'session.state') {
-              setSessionStatus(event.status || '');
-              if (event.status === 'completed' || event.status === 'cancelled') {
-                setChatSending(false);
-              }
             } else if (et === 'pipeline.edit') {
               const editId = event.edit_id as string;
               if (editId && !processedEditIdsRef.current.has(editId)) {
@@ -402,33 +389,6 @@ export default function App() {
   const handleRestartCancel = useCallback(() => {
     setRestartDialog(null);
   }, []);
-
-  const handleChatSend = useCallback(async () => {
-    if (!chatInput.trim() || chatSending) return;
-    const userMsg = chatInput.trim();
-    setChatInput('');
-    setChatMessages(prev => [...prev, { role: 'user', content: userMsg }]);
-    setChatSending(true);
-
-    try {
-      const result = await window.electronAPI.chat(userMsg);
-      if (result.ok) {
-        const resp = result.response;
-        if (resp) {
-          setChatMessages(prev => [...prev, { role: 'assistant', content: resp }]);
-        }
-      } else {
-        setChatMessages(prev => [...prev, { role: 'assistant', content: `Error: ${result.error || 'Unknown'}` }]);
-      }
-    } catch (e) {
-      setChatMessages(prev => [...prev, { role: 'assistant', content: `Error: ${String(e)}` }]);
-    } finally {
-      setChatSending(false);
-    }
-  }, [chatInput, chatSending]);
-
-  const streamingMsgRef = useRef('');
-  useEffect(() => { streamingMsgRef.current = streamingMsg; }, [streamingMsg]);
 
   const refreshPipeline = useCallback(async () => {
     if (!activePreset) return;

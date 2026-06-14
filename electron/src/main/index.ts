@@ -440,6 +440,10 @@ app.whenReady().then(async () => {
     }, 'api:provider-test');
   });
 
+  ipcMain.handle('api:provider-presets', async () => {
+    return _apiFetch('/api/provider-presets', { method: 'GET' }, 'api:provider-presets');
+  });
+
   await createWindow();
 }).catch((e) => {
   logger.error('App startup failed: %s', (e as Error).message);

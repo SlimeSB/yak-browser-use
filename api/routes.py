@@ -93,6 +93,52 @@ def register_all_routes(app: FastAPI) -> None:
         except Exception as e:
             return JSONResponse({"ok": False, "error": str(e)})
 
+    @app.get("/api/provider-presets")
+    async def api_get_provider_presets() -> JSONResponse:
+        """Fetch LLM provider presets from models.dev API."""
+        import aiohttp
+
+        PRESET_IDS = {"opencode-go", "deepseek"}
+        CACHE_SECONDS = 300
+        _cache = getattr(api_get_provider_presets, "_cache", None)
+        _ts = getattr(api_get_provider_presets, "_ts", 0)
+        now = time.time()
+        if _cache and (now - _ts) < CACHE_SECONDS:
+            return JSONResponse({"ok": True, "presets": _cache})
+
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get("https://models.dev/api.json", timeout=15) as resp:
+                    raw = await resp.json()
+        except Exception as e:
+            logger.warning("Failed to fetch models.dev/api.json: %s", e)
+            return JSONResponse({"ok": False, "error": str(e)})
+
+        presets = []
+        for pid in PRESET_IDS:
+            entry = raw.get(pid)
+            if not entry:
+                continue
+            models = []
+            for mid, m in entry.get("models", {}).items():
+                models.append({
+                    "id": mid,
+                    "name": m.get("name", mid),
+                    "context": (m.get("limit") or {}).get("context"),
+                })
+            models.sort(key=lambda x: x["name"])
+            presets.append({
+                "id": pid,
+                "name": entry.get("name", pid),
+                "api_base": entry.get("api"),
+                "env": entry.get("env", []),
+                "models": models,
+            })
+
+        api_get_provider_presets._cache = presets
+        api_get_provider_presets._ts = now
+        return JSONResponse({"ok": True, "presets": presets})
+
     # =================================================================
     # CONVERT
     # =================================================================

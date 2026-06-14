@@ -44,6 +44,12 @@ def create_llm(model: str | None = None) -> object:
     api_key = cfg.get("api_key") or os.environ.get("YBU_API_KEY", "")
     api_base = cfg.get("api_base") or os.environ.get("YBU_API_BASE", "")
 
+    if not api_key:
+        raise ValueError(
+            "LLM provider not configured. "
+            "Please go to Settings → LLM Provider to set your API Key and Model."
+        )
+
     kwargs: dict = {"model": model_name}
     if api_key:
         kwargs["api_key"] = api_key

@@ -28,7 +28,7 @@ function _isProcessAlive(pid: number): boolean {
 function _killProcess(pid: number): void {
   try {
     if (process.platform === 'win32') {
-      execSync(`taskkill /PID ${pid} /F 2>nul`, { stdio: 'ignore' });
+      execSync(`taskkill /PID ${pid} /F /T 2>nul`, { stdio: 'ignore' });
     } else {
       process.kill(pid, 'SIGKILL');
     }
@@ -179,7 +179,7 @@ export class PythonBackend {
     if (pid) {
       try {
         if (process.platform === 'win32') {
-          execSync(`taskkill /PID ${pid}${force ? ' /F' : ''} 2>nul`, { stdio: 'ignore' });
+          execSync(`taskkill /PID ${pid}${force ? ' /F /T' : ''} 2>nul`, { stdio: 'ignore' });
         } else {
           process.kill(pid, force ? 'SIGKILL' : 'SIGTERM');
         }
