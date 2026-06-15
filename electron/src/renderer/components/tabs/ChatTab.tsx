@@ -1,5 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import type { ChatMessage, PipelineMeta, PendingEdit } from '../../types';
 import MonacoYamlEditor from '../editor/MonacoYamlEditor';
 
@@ -314,7 +316,9 @@ export default function ChatTab({
                         )}
                       </div>
                     )}
-                    <div className="chat-bubble-text">{msg.content}</div>
+                    <div className="chat-markdown">
+                      <ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.content}</ReactMarkdown>
+                    </div>
                   </div>
                 );
               }
@@ -322,14 +326,18 @@ export default function ChatTab({
                 return (
                   <div key={i} className="chat-msg user">
                     <div className="chat-bubble user">
-                      <div className="chat-bubble-text">{msg.content}</div>
+                      <div className="chat-markdown">
+                        <ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.content}</ReactMarkdown>
+                      </div>
                     </div>
                   </div>
                 );
               }
               return (
                 <div key={i} className="chat-msg system">
-                  <div className="chat-bubble-text">{msg.content}</div>
+                  <div className="chat-markdown">
+                    <ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.content}</ReactMarkdown>
+                  </div>
                 </div>
               );
             })}
