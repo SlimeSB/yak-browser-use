@@ -128,7 +128,7 @@ class TestSnapshotInteractiveLifecycle:
         assert isinstance(result_text, str)
         assert "X" in result_text
         assert "1个可交互元素" in result_text
-        assert "@e1" not in result_text  # raw elements NOT in message
+        assert "@e1" in result_text  # element refs now included in summary
 
     def test_subsequent_element_lookup_hits_scratchpad(self):
         elements = [{"ref": "@e1", "tag": "a", "text": "Link", "selector": "a.link"}]

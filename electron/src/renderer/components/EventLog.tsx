@@ -16,11 +16,12 @@ function cleanData(data: Record<string, unknown>): Record<string, unknown> {
   );
 }
 
-function getLineColor(type: string): string {
-  if (type === 'llm_turn') return 'var(--purple)';
-  if (type === 'chat.tool_start') return 'var(--info)';
-  if (type === 'chat.tool_end') return 'var(--success)';
-  if (type === 'step_error') return 'var(--danger)';
+function getLineColor(ev: EventData): string {
+  if (ev.type === 'chat.tool_end' && ev.data && !ev.data.ok) return 'var(--danger)';
+  if (ev.type === 'llm_turn') return 'var(--purple)';
+  if (ev.type === 'chat.tool_start') return 'var(--info)';
+  if (ev.type === 'chat.tool_end') return 'var(--success)';
+  if (ev.type === 'step_error') return 'var(--danger)';
   return 'var(--text-muted)';
 }
 
@@ -43,7 +44,7 @@ export default function EventLog({ events, maxHeight }: EventLogProps) {
       {events.length === 0 && <div style={{ color: 'var(--text-muted)' }}>{t('eventLog.noEvents')}</div>}
       {events.map((ev, i) => {
         const timeStr = ev.timestamp ? formatTime(ev.timestamp) : '';
-        const color = getLineColor(ev.type);
+        const color = getLineColor(ev);
         const json = JSON.stringify(cleanData(ev.data), null, 2);
         return (
           <div key={i} className="log-entry">

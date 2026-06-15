@@ -757,6 +757,9 @@ def register_all_routes(app: FastAPI) -> None:
         service = await _get_service()
 
         session = service.get_session()
+        if session is None:
+            session = service.create_session()
+        session_id = session.session_id
         turn_index = (len(session.messages) if session else 0) + 1
 
         def _push(event: dict) -> None:
@@ -781,7 +784,7 @@ def register_all_routes(app: FastAPI) -> None:
             _push({"type": "chat.tool_generated", "tool_name": name, "turn_index": turn_index})
 
         llm_call = _create_chat_llm_call(
-            persist_id=session.session_id,
+            persist_id=session_id,
             on_stream_start=_on_stream_start,
             on_stream_end=_on_stream_end,
             on_text_delta=_on_text_delta,

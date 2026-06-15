@@ -178,7 +178,9 @@ export default function App() {
   useEffect(() => {
     let ws: WebSocket | null = null;
     let reconnectTimer: ReturnType<typeof setTimeout>;
+    let stopped = false;
     const connect = async () => {
+      if (stopped) return;
       try {
         const port = await window.electronAPI.getPort();
         ws = new WebSocket(`ws://127.0.0.1:${port}/ws/events`);
@@ -293,15 +295,15 @@ export default function App() {
             }
           } catch (e) { logger.debug('WebSocket message parse error: %s', String(e)); }
         };
-        ws.onclose = () => { reconnectTimer = setTimeout(connect, 3000); };
+        ws.onclose = () => { if (!stopped) reconnectTimer = setTimeout(connect, 3000); };
         ws.onerror = () => { ws?.close(); };
       } catch (e) {
         logger.debug('WebSocket connect failed: %s', String(e));
-        reconnectTimer = setTimeout(connect, 5000);
+        if (!stopped) reconnectTimer = setTimeout(connect, 5000);
       }
     };
     connect();
-    return () => { clearTimeout(reconnectTimer); ws?.close(); };
+    return () => { stopped = true; clearTimeout(reconnectTimer); ws?.close(); };
   }, []);
 
   useEffect(() => {

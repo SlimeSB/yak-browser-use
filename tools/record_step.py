@@ -16,6 +16,8 @@ logger = get_logger(__name__)
 
 PRESETS_DIR = Path.home() / ".ybu" / "sessions" / "presets"
 
+_pipeline_edit_id: dict[str, str] = {}
+
 
 async def record_step(
     pipeline_name: str,
@@ -102,17 +104,29 @@ async def record_step(
 
 
 def _push_edit_event(pipeline_name: str, original: str, modified: str, step_name: str, explanation: str) -> None:
-    """Push a pipeline.edit event to WebSocket clients."""
+    """Push a pipeline.edit event to WebSocket clients. Reuses edit_id across
+    multiple record_step calls so the frontend accumulates diffs as a batch."""
     import difflib
 
     from api.state import engine_state
+    from tools.edit_pipeline import _checkpoints, _processed_edits, _edit_status
 
-    edit_id = f"rec_{step_name}_{int(time.time() * 1000)}"
+    existing_edit_id = _pipeline_edit_id.get(pipeline_name)
 
-    # Save checkpoint
-    checkpoint_path = PRESETS_DIR / f"{pipeline_name}.pipeline.yaml.{edit_id}.orig"
-    checkpoint_path.write_text(original, encoding="utf-8")
-    logger.debug("Saved checkpoint: %s", checkpoint_path)
+    if existing_edit_id and _edit_status.get(existing_edit_id) == "pending":
+        edit_id = existing_edit_id
+        cp = _checkpoints.get(edit_id)
+        if cp and cp.exists():
+            original = cp.read_text(encoding="utf-8")
+    else:
+        edit_id = f"rec_{pipeline_name}_{int(time.time() * 1000)}"
+        checkpoint_path = PRESETS_DIR / f"{pipeline_name}.pipeline.yaml.{edit_id}.orig"
+        checkpoint_path.write_text(original, encoding="utf-8")
+        logger.debug("Saved checkpoint: %s", checkpoint_path)
+        _checkpoints[edit_id] = checkpoint_path
+        _processed_edits.add(edit_id)
+        _edit_status[edit_id] = "pending"
+        _pipeline_edit_id[pipeline_name] = edit_id
 
     diff_lines = list(difflib.unified_diff(
         original.splitlines(keepends=True),
@@ -136,9 +150,3 @@ def _push_edit_event(pipeline_name: str, original: str, modified: str, step_name
                 q.put_nowait(event)
             except Exception:
                 pass
-
-    # Register edit for confirm/revert
-    from tools.edit_pipeline import _checkpoints, _processed_edits, _edit_status
-    _checkpoints[edit_id] = checkpoint_path
-    _processed_edits.add(edit_id)
-    _edit_status[edit_id] = "pending"

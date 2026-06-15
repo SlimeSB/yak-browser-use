@@ -1,4 +1,4 @@
-(function () {
+window.simplifyDom = (function () {
   'use strict';
 
   var MAX_ELEMENTS = 50;

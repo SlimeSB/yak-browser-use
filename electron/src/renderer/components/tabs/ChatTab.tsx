@@ -274,9 +274,10 @@ export default function ChatTab({
             {messages.map((msg, i) => {
               if (msg.role === 'tool') {
                 const statusClass = msg.toolOk === undefined ? '' : msg.toolOk ? 'ok' : 'err';
+                const failed = msg.toolOk === false;
                 return (
-                  <div key={i} className="chat-tool-inline">
-                    <span className="chat-tool-inline-arrow">↓</span>
+                  <div key={i} className={`chat-tool-inline${failed ? ' chat-tool-failed' : ''}`}>
+                    <span className="chat-tool-inline-arrow">{failed ? '✗' : '↓'}</span>
                     <span className="chat-tool-inline-name">{msg.toolName}</span>
                     {msg.toolDuration !== undefined && (
                       <span className="chat-tool-inline-dur">{msg.toolDuration}ms</span>
@@ -284,6 +285,9 @@ export default function ChatTab({
                     <span className={`chat-tool-inline-status ${statusClass}`}>
                       {msg.toolOk === undefined ? '...' : msg.toolOk ? '✓' : '✗'}
                     </span>
+                    {failed && msg.content && msg.content !== 'Failed' && (
+                      <div className="chat-tool-error">{msg.content}</div>
+                    )}
                   </div>
                 );
               }

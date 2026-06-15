@@ -107,17 +107,38 @@ def _build_element_map(elements: list[dict]) -> dict[str, str]:
 
 
 def _build_summary(record: ScratchpadRecord) -> str:
-    """Generate a one-line human-readable summary."""
-    parts: list[str] = []
+    """Generate a human-readable summary including element references (@eN)."""
+    lines: list[str] = []
 
     if record.title:
-        parts.append(f"页面标题: {record.title}")
+        lines.append(f"页面标题: {record.title}")
+    if record.url:
+        lines.append(f"页面URL: {record.url}")
 
     el_count = len(record.elements)
     if el_count > 0:
-        parts.append(f"{el_count}个可交互元素")
+        lines.append(f"{el_count}个可交互元素:")
+        for el in record.elements:
+            ref = el.get("ref", "")
+            tag = el.get("tag", "")
+            el_type = el.get("type", "")
+            text = el.get("text", "")
+            sel = el.get("selector", "")
 
-    if not parts:
+            parts: list[str] = [ref, f"<{tag}"]
+            if el_type:
+                parts.append(f' type="{el_type}"')
+            parts.append(">")
+
+            if text:
+                # Escape double quotes in text and quote it
+                text_escaped = text.replace('"', '\\"')
+                parts.append(f' "{text_escaped}"')
+            parts.append(f" {sel}")
+
+            lines.append("".join(parts))
+
+    if not lines:
         return "页面快照已获取"
 
-    return " | ".join(parts)
+    return "\n".join(lines)
