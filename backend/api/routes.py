@@ -346,6 +346,102 @@ def register_all_routes(app: FastAPI) -> None:
     # CHROME
     # =================================================================
 
+    async def _highlight_guard(daemon: object) -> None:
+        """Background task: re-inject highlights on page loads across all tabs.
+
+        Refresh on the *main* tab is driven by LLM tool calls + snapshots
+        (see ``_auto_refresh_highlights`` in tool_executor).  This guard covers
+        events the main flow cannot see: new tabs, page (re)loads, SPA
+        navigations, and a periodic 2 s safety-net refresh on the main session.
+        """
+        from cdp.helpers import CDPHelpers
+
+        helpers = CDPHelpers(daemon)
+        _pages_enabled: set[str] = set()
+
+        while True:
+            try:
+                event = await asyncio.wait_for(daemon._event_queue.get(), timeout=2.0)
+            except asyncio.TimeoutError:
+                if not (hasattr(daemon, "is_running") and daemon.is_running):
+                    return
+                try:
+                    helpers.target_session(None)
+                    await helpers.add_dom_highlights()
+                except Exception:
+                    pass
+                continue
+            except asyncio.CancelledError:
+                return
+
+            if not (hasattr(daemon, "is_running") and daemon.is_running):
+                return
+
+            method = event.get("method", "")
+            params = event.get("params", {})
+            sid = event.get("sessionId") or params.get("sessionId", "")
+            logger.debug("guard event: method=%s sid=%s", method, sid[:20] if sid else "none")
+
+            if method == "Target.attachedToTarget":
+                target_info = params.get("targetInfo", {})
+                if target_info.get("type") == "page" and sid and sid not in _pages_enabled:
+                    url = target_info.get("url", "")
+                    logger.info("highlight guard: new tab url=%s sid=%s", url[:60], sid[:20])
+                    try:
+                        await daemon._send("Page.enable", session_id=sid)
+                        await daemon._send("Runtime.enable", session_id=sid)
+                        await daemon._send("DOM.enable", session_id=sid)
+                        _pages_enabled.add(sid)
+                    except Exception:
+                        logger.debug("highlight guard: enable domains failed sid=%s", sid, exc_info=True)
+                    try:
+                        await asyncio.sleep(0.3)
+                        helpers.target_session(sid)
+                        await helpers.add_dom_highlights()
+                    except Exception:
+                        logger.warning("highlight guard: inject failed on new tab sid=%s", sid, exc_info=True)
+
+            elif method == "Target.detachedFromTarget":
+                _pages_enabled.discard(sid)
+                logger.debug("highlight guard: tab closed sid=%s", sid[:20])
+
+            elif method == "Page.loadEventFired" and sid:
+                logger.info("highlight guard: page loaded sid=%s", sid[:20])
+                try:
+                    await asyncio.sleep(0.3)
+                    helpers.target_session(sid)
+                    await helpers.add_dom_highlights()
+                except Exception:
+                    logger.warning("highlight guard: load refresh failed sid=%s", sid, exc_info=True)
+
+            elif method == "Page.frameNavigated":
+                frame = params.get("frame", {})
+                if frame.get("parentId") is not None:
+                    continue
+                logger.debug("highlight guard: frame nav url=%s", str(frame.get("url", ""))[:60])
+                try:
+                    await asyncio.sleep(0.2)
+                    helpers.target_session(sid or None)
+                    await helpers.add_dom_highlights()
+                except Exception:
+                    logger.debug("highlight guard: frame nav refresh failed", exc_info=True)
+
+    async def _start_highlight_guard() -> None:
+        """Start the highlight guard task and inject highlights on current page."""
+        from cdp.helpers import CDPHelpers
+
+        if engine_state._highlight_guard_task:
+            engine_state._highlight_guard_task.cancel()
+        engine_state._highlight_guard_task = asyncio.create_task(
+            _highlight_guard(engine_state.chrome_daemon)
+        )
+
+        try:
+            helpers = CDPHelpers(engine_state.chrome_daemon)
+            await helpers.add_dom_highlights()
+        except Exception:
+            logger.debug("initial highlight injection after connect failed", exc_info=True)
+
     @app.post("/api/chrome/connect")
     async def api_chrome_connect(request: dict) -> JSONResponse:
         """Connect to Chrome via CDP WebSocket.
@@ -371,6 +467,9 @@ def register_all_routes(app: FastAPI) -> None:
                 ws_url = await discover_ws_url(profile_name=profile_name)
 
             actual_ws = await engine_state.connect_chrome(ws_url)
+
+            await _start_highlight_guard()
+
             return JSONResponse({"connected": True, "ws_url": actual_ws[:80]})
         except Exception as exc:
             logger.exception("Chrome connect failed")
@@ -427,6 +526,9 @@ def register_all_routes(app: FastAPI) -> None:
             await engine_state.disconnect_chrome()
 
             actual_ws = await engine_state.connect_chrome(ws_url)
+
+            await _start_highlight_guard()
+
             return JSONResponse({"connected": True, "ws_url": str(actual_ws)[:80]})
         except Exception as exc:
             logger.exception("Chrome restart failed")
@@ -805,6 +907,11 @@ def register_all_routes(app: FastAPI) -> None:
             from cdp.helpers import CDPHelpers
 
             browser = CDPHelpers(engine_state.chrome_daemon) if engine_state.chrome_daemon else None
+            if browser is not None:
+                try:
+                    await browser.add_dom_highlights()
+                except Exception:
+                    logger.debug("initial highlight injection failed", exc_info=True)
 
             result = await service.process_chat_message(
                 message=message,

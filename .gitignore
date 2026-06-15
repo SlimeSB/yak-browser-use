@@ -51,3 +51,4 @@ userdata/presets/*.pipeline.yaml
 .codegraph/
 .history/
 opencode.jsonc
+/userdata

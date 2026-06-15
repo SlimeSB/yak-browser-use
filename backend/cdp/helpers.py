@@ -6,33 +6,88 @@ from __future__ import annotations
 
 import json as _json
 import logging
-from pathlib import Path
 from typing import Any
 
 logger = logging.getLogger(__name__)
 
-_SIMPLIFY_DOM_JS: str | None = None
+
+def _build_element_info(el: dict) -> dict:
+    return {
+        "ref": el.get("ref", ""),
+        "tag": el.get("tag", ""),
+        "type": el.get("type", ""),
+        "text": el.get("text", ""),
+        "selector": el.get("selector", ""),
+        "value": el.get("value", ""),
+        "x": el.get("x", 0),
+        "y": el.get("y", 0),
+        "width": el.get("width", 0),
+        "height": el.get("height", 0),
+    }
 
 
-def _load_simplify_dom_js() -> str | None:
-    global _SIMPLIFY_DOM_JS
-    if _SIMPLIFY_DOM_JS is not None:
-        return _SIMPLIFY_DOM_JS
-    script_path = Path(__file__).resolve().parent.parent / "assets" / "simplify-dom.js"
-    try:
-        _SIMPLIFY_DOM_JS = script_path.read_text(encoding="utf-8")
-        return _SIMPLIFY_DOM_JS
-    except Exception:
-        logger.warning("simplify-dom.js not found at %s", script_path)
-        return None
+_INTERACTIVE_TAGS = frozenset({
+    "a", "button", "input", "select", "textarea", "details", "summary",
+    "option", "optgroup", "label", "datalist", "output", "fieldset",
+    "video", "audio",
+})
+_INTERACTIVE_ROLES = frozenset({
+    "button", "link", "checkbox", "radio", "switch", "tab",
+    "menuitem", "menuitemcheckbox", "menuitemradio", "option",
+    "combobox", "listbox", "textbox", "searchbox", "slider",
+    "spinbutton", "treeitem",
+})
+
+
+def _is_interactive(tag: str, attrs: dict[str, str]) -> bool:
+    if tag in _INTERACTIVE_TAGS:
+        if tag == "a" and not attrs.get("href"):
+            return False
+        if tag == "input" and attrs.get("type", "").lower() == "hidden":
+            return False
+        return True
+    if attrs.get("role", "").lower() in _INTERACTIVE_ROLES:
+        return True
+    if attrs.get("tabindex") is not None:
+        return True
+    if attrs.get("onclick"):
+        return True
+    cedit = attrs.get("contenteditable")
+    if cedit is not None and cedit.lower() in ("true", ""):
+        return True
+    return False
+
+
+def _build_selector_from_node(tag: str, attrs: dict[str, str]) -> str:
+    node_id = attrs.get("id")
+    if node_id:
+        return f"#{node_id}"
+
+    parts = [tag]
+    cls = attrs.get("class", "")
+    for c in cls.split():
+        if c:
+            parts.append(f".{c}")
+
+    for attr_name in ("name", "type", "role", "aria-label", "href", "placeholder", "title", "target"):
+        val = attrs.get(attr_name)
+        if val and '"' not in val:
+            parts.append(f'[{attr_name}="{val}"]')
+
+    return "".join(parts)
 
 
 class CDPHelpers:
     """Wraps a CDPDaemon for common browser operations."""
 
-    def __init__(self, daemon: object):
+    def __init__(self, daemon: object, *, session_id: str | None = None):
         self._daemon = daemon
-        self._element_map: dict[str, dict] = {}
+        self._session_id = session_id
+        self._ref_map: dict[str, dict] = {}
+
+    def target_session(self, sid: str | None) -> None:
+        """Set the CDP session for subsequent calls (multi-tab targeting)."""
+        self._session_id = sid
 
     async def _cdp(self, method: str, params: dict | None = None, _sensitive: bool = False) -> Any:
         if _sensitive and params:
@@ -41,10 +96,13 @@ class CDPHelpers:
             logger.debug("browser_op: %s %s", method, masked)
         else:
             logger.debug("browser_op: %s %s", method, params)
-        return await self._daemon._send(method, params)
+        return await self._daemon._send(method, params, session_id=self._session_id)
 
     async def goto_url(self, url: str) -> dict:
         return await self._cdp("Page.navigate", {"url": url})
+
+    def reset_ref_map(self) -> None:
+        self._ref_map = {}
 
     async def click_at_xy(self, x: float, y: float) -> dict:
         await self._cdp("Input.dispatchMouseEvent", {
@@ -130,31 +188,117 @@ class CDPHelpers:
         result = await self._cdp("Runtime.evaluate", {"expression": code, "returnByValue": True})
         return result.get("result", {}).get("value")
 
-    async def _inject_simplify_js(self, mode: str) -> Any:
-        script = _load_simplify_dom_js()
-        if script is None:
-            return None
-        safe_mode = _json.dumps(mode)
-        expression = f"{script}\nsimplifyDom({{mode: {safe_mode}}})"
+    async def _discover_all_interactive(self) -> list[dict]:
+        """Discover ALL interactive elements from the full DOM tree.
+
+        Uses a single ``DOM.getDocument(depth=-1)`` call, then filters
+        element nodes by tag/role/attributes.  Returns a list of
+        ``{ref, selector, tag, type}`` — no position data (positions are
+        retrieved JS-side via ``getBoundingClientRect()`` in the highlight
+        injection).
+        """
+        doc = await self._cdp("DOM.getDocument", {"depth": -1, "pierce": True})
+        results: list[dict] = []
+
+        def walk(node: dict) -> None:
+            if node.get("nodeType") != 1:
+                for child in node.get("children", []):
+                    walk(child)
+                return
+
+            attrs_list = node.get("attributes", [])
+            attrs: dict[str, str] = {}
+            for i in range(0, len(attrs_list), 2):
+                if i + 1 < len(attrs_list):
+                    attrs[attrs_list[i]] = attrs_list[i + 1]
+
+            tag = node["nodeName"].lower()
+            bid = node["backendNodeId"]
+
+            if not _is_interactive(tag, attrs):
+                for child in node.get("children", []):
+                    walk(child)
+                return
+
+            selector = _build_selector_from_node(tag, attrs)
+            ref = f"@e_{bid}"
+
+            elem_type = attrs.get("type", "text") if tag == "input" else ""
+            results.append({
+                "ref": ref,
+                "selector": selector,
+                "tag": tag,
+                "type": elem_type,
+                "text": "",
+                "x": 0, "y": 0, "width": 0, "height": 0,
+            })
+
+            for child in node.get("children", []):
+                walk(child)
+
+        walk(doc.get("root", {}))
+        logger.debug("_discover_all_interactive: found %d interactive elements from full tree",
+                     len(results))
+        return results
+
+    async def _get_element_positions(self, elements: list[dict]) -> list[dict]:
+        """Enrich elements with bounding client rects via JS injection."""
+        if not elements:
+            return elements
+        sel_refs = _json.dumps([(e.get("selector", ""), e.get("ref", "")) for e in elements])
+        js = (
+            "(function(){"
+            "var pairs=" + sel_refs + ";"
+            "var selIdx={};"
+            "var out=[];"
+            "for(var i=0;i<pairs.length;i++){"
+            "var sel=pairs[i][0];var ref=pairs[i][1];"
+            "if(!sel){out.push({x:0,y:0,w:0,h:0});continue;}"
+            "var si=selIdx[sel]||0;selIdx[sel]=si+1;"
+            "try{"
+            "var all=document.querySelectorAll(sel);"
+            "if(all.length>si){"
+            "var r=all[si].getBoundingClientRect();"
+            "out.push({x:r.left,y:r.top,w:r.width,h:r.height});"
+            "}else{out.push({x:0,y:0,w:0,h:0});}"
+            "}catch(e){out.push({x:0,y:0,w:0,h:0});}"
+            "}"
+            "return JSON.stringify(out);"
+            "})()"
+        )
         try:
-            result = await self.js(expression)
-            return result
+            raw = await self.js(js)
+            if raw:
+                positions = _json.loads(raw)
+                for el, pos in zip(elements, positions):
+                    if isinstance(pos, dict):
+                        el["x"] = pos.get("x", 0)
+                        el["y"] = pos.get("y", 0)
+                        el["width"] = pos.get("w", 0)
+                        el["height"] = pos.get("h", 0)
         except Exception:
-            logger.warning("simplify-dom.js execution failed for mode=%s", mode)
-            return None
+            logger.debug("_get_element_positions failed", exc_info=True)
+        return elements
 
     async def capture_snapshot_interactive(self) -> dict:
-        js_result = await self._inject_simplify_js("interactive")
-        if js_result and isinstance(js_result, dict) and js_result.get("elements") is not None:
-            elements = js_result.get("elements", [])
-            result = {"elements": elements, "mode": "interactive"}
-            if js_result.get("truncated"):
-                result["truncated"] = True
-                result["total_found"] = js_result.get("total_found", 0)
+        try:
+            elements = await self._discover_all_interactive()
+            enriched = await self._get_element_positions(elements)
+            for el in enriched:
+                ref = el.get("ref", "")
+                if ref:
+                    if ref in self._ref_map:
+                        self._ref_map[ref].update({
+                            "x": el.get("x", 0), "y": el.get("y", 0),
+                            "width": el.get("width", 0), "height": el.get("height", 0),
+                        })
+                    else:
+                        self._ref_map[ref] = _build_element_info(el)
             try:
-                await self.add_dom_highlights(elements)
+                await self.add_dom_highlights(enriched)
             except Exception:
                 logger.warning("auto-highlight after interactive snapshot failed", exc_info=True)
+            result = {"elements": enriched, "mode": "interactive"}
             try:
                 meta = await self._cdp("Runtime.evaluate", {
                     "expression": "JSON.stringify({url: window.location.href, title: document.title})",
@@ -166,128 +310,211 @@ class CDPHelpers:
             except Exception:
                 pass
             return result
-        logger.info("interactive snapshot degraded to full")
-        full = await self.capture_snapshot()
-        return {"elements": [], "mode": "interactive", "degraded": True, **full}
+        except Exception:
+            logger.info("interactive snapshot degraded to full")
+            full = await self.capture_snapshot()
+            return {"elements": [], "mode": "interactive", "degraded": True, **full}
 
     async def capture_snapshot_simplified(self) -> dict:
-        js_result = await self._inject_simplify_js("simplified")
-        if js_result and isinstance(js_result, dict) and js_result.get("summary") is not None:
-            try:
-                await self.add_dom_highlights()
-            except Exception:
-                logger.warning("auto-highlight after simplified snapshot failed", exc_info=True)
-            return {
-                "summary": js_result.get("summary", ""),
-                "lists": js_result.get("lists", []),
-                "tables": js_result.get("tables", []),
-                "mode": "simplified",
-            }
-        logger.info("simplified snapshot degraded to full")
-        full = await self.capture_snapshot()
-        return {"summary": "", "lists": [], "tables": [], "mode": "simplified", "degraded": True, **full}
+        """Simplified page summary (headings, links, lists, tables) for LLM consumption."""
+        try:
+            raw = await self.js((
+                "(function(){"
+                "var r={title:document.title,h:[],l:[],lists:[],tables:[]};"
+                "document.querySelectorAll('h1,h2,h3,h4,h5,h6').forEach(function(h){"
+                "var t=(h.textContent||'').trim();if(t)r.h.push({l:h.tagName.toLowerCase(),t:t});"
+                "});"
+                "var seen={};"
+                "document.querySelectorAll('a[href]').forEach(function(a){"
+                "var t=(a.textContent||'').trim();var hr=a.getAttribute('href');"
+                "if(t&&hr&&!seen[hr+'|'+t]){seen[hr+'|'+t]=1;r.l.push({t:t,h:hr});}"
+                "});"
+                "document.querySelectorAll('ul,ol').forEach(function(lst){"
+                "var items=[];"
+                "lst.querySelectorAll('li').forEach(function(li){var t=(li.textContent||'').trim();if(t)items.push(t);});"
+                "if(items.length){"
+                "var sel='';"
+                "if(lst.id)sel='#'+lst.id;"
+                "else{sel=lst.tagName.toLowerCase();var c=lst.className;if(c)sel+='.'+c.split(/\\s+/).filter(Boolean).join('.');}"
+                "r.lists.push({selector:sel,tag:lst.tagName.toLowerCase(),item_count:items.length,sample_items:items.slice(0,5)});"
+                "}"
+                "});"
+                "document.querySelectorAll('table').forEach(function(tbl){"
+                "var rows=[];var headers=[];"
+                "tbl.querySelectorAll('tr').forEach(function(tr,i){"
+                "var cells=[];"
+                "tr.querySelectorAll('th,td').forEach(function(c){cells.push((c.textContent||'').trim());});"
+                "if(cells.length){"
+                "if(i===0)headers=cells.slice();"
+                "rows.push(cells);"
+                "}"
+                "});"
+                "if(rows.length)r.tables.push({row_count:rows.length,col_count:headers.length,headers:headers});"
+                "});"
+                "var body=document.body;"
+                "r.text=body?body.innerText.substring(0,2000):'';"
+                "return JSON.stringify(r);"
+                "})()"
+            ))
+            if not raw:
+                raise ValueError("empty JS result")
+            data = _json.loads(raw) if isinstance(raw, str) else raw
+        except Exception:
+            logger.info("simplified snapshot degraded to full")
+            full = await self.capture_snapshot()
+            return {"summary": "", "lists": [], "tables": [], "mode": "simplified", "degraded": True, **full}
+
+        # Build summary text
+        lines = []
+        if data.get("title"):
+            lines.append(f"Title: {data['title']}")
+        headings = data.get("h", [])
+        for h in headings:
+            lines.append(f"{h['l'].upper()}: {h['t']}")
+        links = data.get("l", [])
+        if links:
+            lines.append("")
+            lines.append("Links:")
+            for link in links[:20]:
+                lines.append(f"  - {link['t']} ({link['h'][:60]})")
+            if len(links) > 20:
+                lines.append(f"  ... and {len(links) - 20} more")
+        text = data.get("text", "")
+        if text:
+            lines.append("")
+            lines.append(text[:1500])
+
+        try:
+            await self.add_dom_highlights()
+        except Exception:
+            logger.warning("auto-highlight after simplified snapshot failed", exc_info=True)
+
+        return {
+            "summary": "\n".join(lines),
+            "lists": data.get("lists", []),
+            "tables": data.get("tables", []),
+            "mode": "simplified",
+        }
 
     async def add_dom_highlights(self, elements: list[dict] | None = None) -> dict:
         """Inject interactive element highlight badges into the page.
 
+        Scans the full DOM tree via ``DOM.getDocument``, then injects
+        outlines + scroll-aware badge overlays.
+
         Args:
-            elements: Optional pre-scanned element list. If None, scans via
-                      ``_inject_simplify_js("interactive")``.
+            elements: Optional pre-scanned element list. If None (typical),
+                      scans via ``_discover_all_interactive()``.
 
         Returns:
             ``{ok, count, element_map}``.
         """
-        if elements is None:
-            js_result = await self._inject_simplify_js("interactive")
-            if not js_result or not isinstance(js_result, dict):
-                return {"ok": True, "count": 0, "element_map": {}}
-            elements = js_result.get("elements", [])
+        highlight_elements: list[dict] | None = None
+        if elements:
+            for el in elements:
+                ref = el.get("ref", "")
+                if ref:
+                    if ref in self._ref_map:
+                        self._ref_map[ref].update({
+                            "x": el.get("x", 0),
+                            "y": el.get("y", 0),
+                            "width": el.get("width", 0),
+                            "height": el.get("height", 0),
+                        })
+                    else:
+                        self._ref_map[ref] = _build_element_info(el)
 
-        if not elements:
-            self._element_map = {}
-            return {"ok": True, "count": 0, "element_map": {}}
+        try:
+            highlight_elements = await self._discover_all_interactive()
+        except Exception:
+            logger.warning("_discover_all_interactive failed, using snapshot elements", exc_info=True)
+            highlight_elements = elements
 
-        self._element_map = {}
-        for el in elements:
-            ref = el.get("ref", "")
-            if ref:
-                self._element_map[ref] = {
-                    "ref": ref,
-                    "tag": el.get("tag", ""),
-                    "type": el.get("type", ""),
-                    "text": el.get("text", ""),
-                    "selector": el.get("selector", ""),
-                    "value": el.get("value", ""),
-                    "x": el.get("x", 0),
-                    "y": el.get("y", 0),
-                    "width": el.get("width", 0),
-                    "height": el.get("height", 0),
-                }
+        if not highlight_elements:
+            return {"ok": True, "count": 0, "element_map": dict(self._ref_map)}
 
-        elements_json = _json.dumps(elements)
+        elements_json = _json.dumps(highlight_elements)
         js_code = (
             "(function(){"
+            "function _ybu_run(){"
             "if(!document.body)return;"
-            "var old=document.getElementById('ybu-highlights');"
-            "if(old)old.remove();"
+            "var oldC=document.getElementById('ybu-highlights');"
+            "if(oldC){"
+            "if(oldC._ybu_scrollFn)window.removeEventListener('scroll',oldC._ybu_scrollFn);"
+            "if(oldC._ybu_resizeFn)window.removeEventListener('resize',oldC._ybu_resizeFn);"
+            "if(oldC._ybu_mo)oldC._ybu_mo.disconnect();"
+            "oldC.remove();"
+            "}"
+            "var outlined=document.querySelectorAll('[data-ybu-outlined]');"
+            "for(var i=0;i<outlined.length;i++){outlined[i].style.outline='';outlined[i].removeAttribute('data-ybu-outlined');}"
             "var container=document.createElement('div');"
             "container.id='ybu-highlights';"
             "container.style.cssText='position:fixed;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:2147483646;';"
             "document.body.appendChild(container);"
             "var elements=" + elements_json + ";"
+            "var selIdx={};"
             "for(var i=0;i<elements.length;i++){"
             "var el=elements[i];"
-            "var div=document.createElement('div');"
-            "div.setAttribute('data-ybu-highlight',el.ref);"
-            "div.style.cssText='position:absolute;"
-            "left:'+el.x+'px;top:'+el.y+'px;"
-            "width:'+el.width+'px;height:'+el.height+'px;"
-            "border:2px dashed #3b82f6;border-radius:2px;pointer-events:none;';"
+            "if(el.selector){"
+            "try{"
+            "var si=selIdx[el.selector]||0;selIdx[el.selector]=si+1;"
+            "var all=document.querySelectorAll(el.selector);"
+            "if(all.length>si){"
+            "var target=all[si];"
+            "target.style.outline='2px dashed #3b82f6';target.style.outlineOffset='0px';"
+            "target.setAttribute('data-ybu-outlined',el.ref);"
+            "var rect=target.getBoundingClientRect();"
+            "var badgeDiv=document.createElement('div');"
+            "badgeDiv.setAttribute('data-ybu-badge',el.ref);"
+            "badgeDiv.style.cssText='position:fixed;left:'+rect.left+'px;top:'+Math.max(0,rect.top-14)+'px;pointer-events:none;';"
             "var badge=document.createElement('span');"
             "badge.textContent=el.ref;"
-            "badge.style.cssText='position:absolute;top:-12px;left:-2px;"
-            "background:#3b82f6;color:#fff;font-size:10px;font-family:Arial,sans-serif;"
-            "padding:1px 4px;border-radius:2px;line-height:1.2;white-space:nowrap;pointer-events:none;';"
-            "div.appendChild(badge);"
-            "container.appendChild(div);"
+            "badge.style.cssText='background:#3b82f6;color:#fff;font-size:10px;font-family:Arial,sans-serif;padding:1px 4px;border-radius:2px;line-height:1.2;white-space:nowrap;';"
+            "badgeDiv.appendChild(badge);"
+            "container.appendChild(badgeDiv);"
+            "continue;"
             "}"
-            "var _ybu_redrawTimer=null;"
-            "var _ybu_mo=null;"
-            "var _ybu_ro=null;"
-            "function _ybu_redrawHighlights(){"
-            "if(!window.simplifyDom)return;"
-            "var result=window.simplifyDom({mode:'interactive'});"
-            "if(!result||!result.elements)return;"
-            "var els=result.elements;"
-            "while(container.firstChild)container.removeChild(container.firstChild);"
-            "for(var i=0;i<els.length;i++){"
-            "var el=els[i];"
+            "}catch(e){}"
+            "}"
             "var div=document.createElement('div');"
             "div.setAttribute('data-ybu-highlight',el.ref);"
-            "div.style.cssText='position:absolute;"
-            "left:'+el.x+'px;top:'+el.y+'px;"
-            "width:'+el.width+'px;height:'+el.height+'px;"
-            "border:2px dashed #3b82f6;border-radius:2px;pointer-events:none;';"
-            "var badge=document.createElement('span');"
-            "badge.textContent=el.ref;"
-            "badge.style.cssText='position:absolute;top:-12px;left:-2px;"
-            "background:#3b82f6;color:#fff;font-size:10px;font-family:Arial,sans-serif;"
-            "padding:1px 4px;border-radius:2px;line-height:1.2;white-space:nowrap;pointer-events:none;';"
-            "div.appendChild(badge);"
+            "div.style.cssText='position:absolute;left:'+el.x+'px;top:'+el.y+'px;width:'+el.width+'px;height:'+el.height+'px;border:2px dashed #3b82f6;border-radius:2px;pointer-events:none;';"
+            "var fb=document.createElement('span');"
+            "fb.textContent=el.ref;"
+            "fb.style.cssText='position:absolute;top:-12px;left:-2px;background:#3b82f6;color:#fff;font-size:10px;font-family:Arial,sans-serif;padding:1px 4px;border-radius:2px;line-height:1.2;white-space:nowrap;pointer-events:none;';"
+            "div.appendChild(fb);"
             "container.appendChild(div);"
             "}"
+            "function _ybu_updateBadges(){"
+            "var o=document.querySelectorAll('[data-ybu-outlined]');"
+            "for(var j=0;j<o.length;j++){"
+            "var t=o[j];"
+            "var ref=t.getAttribute('data-ybu-outlined');"
+            "var bd=container.querySelector('[data-ybu-badge=\"'+ref.replace(/\"/g,'\\\\\"')+'\"]');"
+            "if(bd){"
+            "var r=t.getBoundingClientRect();"
+            "bd.style.left=r.left+'px';"
+            "bd.style.top=Math.max(0,r.top-14)+'px';"
             "}"
-            "function _ybu_scheduleRedraw(){"
-            "if(_ybu_redrawTimer)clearTimeout(_ybu_redrawTimer);"
-            "_ybu_redrawTimer=setTimeout(_ybu_redrawHighlights,300);"
             "}"
+            "}"
+            "window.addEventListener('scroll',_ybu_updateBadges,{passive:true});"
+            "window.addEventListener('resize',_ybu_updateBadges,{passive:true});"
+            "container._ybu_scrollFn=_ybu_updateBadges;"
+            "container._ybu_resizeFn=_ybu_updateBadges;"
+            "var _ybu_moTimer=null;"
             "if(window.MutationObserver){"
-            "_ybu_mo=new MutationObserver(function(){_ybu_scheduleRedraw();});"
-            "_ybu_mo.observe(document.body,{childList:true,subtree:true,attributes:true,attributeFilter:['style','class','hidden']});"
+            "container._ybu_mo=new MutationObserver(function(){"
+            "if(_ybu_moTimer)clearTimeout(_ybu_moTimer);"
+            "_ybu_moTimer=setTimeout(_ybu_run,300);"
+            "});"
+            "container._ybu_mo.observe(document.body,{childList:true,subtree:true,attributes:true,attributeFilter:['style','class','hidden','aria-hidden']});"
             "}"
-            "if(window.ResizeObserver){"
-            "_ybu_ro=new ResizeObserver(function(){_ybu_scheduleRedraw();});"
-            "_ybu_ro.observe(document.documentElement);"
+            "}"
+            "if(document.readyState==='loading'){"
+            "document.addEventListener('DOMContentLoaded',_ybu_run);"
+            "}else{"
+            "_ybu_run();"
             "}"
             "})()"
         )
@@ -295,41 +522,65 @@ class CDPHelpers:
             await self.js(js_code)
         except Exception as e:
             logger.error("add_dom_highlights: js injection failed: %s", e)
-        return {"ok": True, "count": len(elements), "element_map": dict(self._element_map)}
+        return {"ok": True, "count": len(highlight_elements), "element_map": dict(self._ref_map)}
 
     async def remove_dom_highlights(self) -> None:
-        """Remove all highlight overlays from the page and clear the element map."""
-        await self.js("var el=document.getElementById('ybu-highlights');if(el)el.remove();")
-        self._element_map = {}
+        """Remove all highlight overlays and element outlines from the page."""
+        js = (
+            "(function(){"
+            "var o=document.querySelectorAll('[data-ybu-outlined]');"
+            "for(var i=0;i<o.length;i++){o[i].style.outline='';o[i].removeAttribute('data-ybu-outlined');}"
+            "var c=document.getElementById('ybu-highlights');"
+            "if(c){"
+            "if(c._ybu_scrollFn)window.removeEventListener('scroll',c._ybu_scrollFn);"
+            "if(c._ybu_resizeFn)window.removeEventListener('resize',c._ybu_resizeFn);"
+            "if(c._ybu_mo)c._ybu_mo.disconnect();"
+            "c.remove();"
+            "}"
+            "})()"
+        )
+        await self.js(js)
 
     def get_element_by_index(self, ref: str) -> dict:
-        """Look up an element by its @eN reference.
+        """Look up an element by its @e_XXXXX reference.
 
         Args:
-            ref: Reference string like ``"@e3"``, ``"e3"``, or ``"3"``.
+            ref: Reference string like ``"@e_12345"``, ``"e_12345"``,
+                 ``"12345"``, or the old-style ``"@e3"`` / ``"e3"``.
 
         Returns:
             Dict with element info or ``{ref, error}`` on failure.
         """
-        if not self._element_map:
+        if not self._ref_map:
             return {"ref": ref, "error": "no highlights injected"}
 
-        normalized = ref.strip()
-        if not normalized.startswith("@"):
-            if normalized.startswith("e") and normalized[1:].isdigit():
-                normalized = "@" + normalized
+        raw = ref.strip()
+        if raw.startswith("@"):
+            if raw.startswith("@e") and not raw.startswith("@e_") and raw[2:].isdigit():
+                normalized = "@e_" + raw[2:]
             else:
-                normalized = "@e" + normalized
+                normalized = raw
+        elif raw.startswith("e_"):
+            normalized = "@" + raw
+        elif raw.startswith("e") and raw[1:].isdigit():
+            normalized = "@e_" + raw[1:]
+        else:
+            normalized = "@e_" + raw
 
-        el = self._element_map.get(normalized)
+        el = self._ref_map.get(normalized)
         if el is None:
             return {"ref": normalized, "error": "not found"}
 
         return {
-            "ref": el["ref"],
-            "tag": el["tag"],
+            "ref": el.get("ref", normalized),
+            "tag": el.get("tag", ""),
             "type": el.get("type", ""),
-            "text": el["text"],
-            "selector": el["selector"],
-            "bounds": {"x": el["x"], "y": el["y"], "w": el["width"], "h": el["height"]},
+            "text": el.get("text", ""),
+            "selector": el.get("selector", ""),
+            "bounds": {
+                "x": el.get("x", 0),
+                "y": el.get("y", 0),
+                "w": el.get("width", 0),
+                "h": el.get("height", 0),
+            },
         }

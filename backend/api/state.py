@@ -34,6 +34,7 @@ class _EngineState:
         self.ws_clients: list[asyncio.Queue] = []
         self._service: object | None = None
         self._service_lock = asyncio.Lock()
+        self._highlight_guard_task: asyncio.Task | None = None
 
     # ── Chrome connection  ──────────────────────────────────────────
 
@@ -72,6 +73,10 @@ class _EngineState:
         """Disconnect from Chrome and reset state."""
         if self._running_pipeline is not None:
             raise RuntimeError("A pipeline is currently running")
+
+        if self._highlight_guard_task:
+            self._highlight_guard_task.cancel()
+            self._highlight_guard_task = None
 
         if self.chrome_daemon:
             await self.chrome_daemon.stop()
@@ -121,6 +126,10 @@ class _EngineState:
     async def cleanup(self) -> None:
         """Gracefully shut down everything: daemon, pipeline, WS clients."""
         logger.info("EngineState: cleaning up …")
+
+        if self._highlight_guard_task:
+            self._highlight_guard_task.cancel()
+            self._highlight_guard_task = None
 
         if self.chrome_daemon:
             await self.chrome_daemon.stop()

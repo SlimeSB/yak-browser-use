@@ -126,6 +126,8 @@ async def execute_browser_op(
             if op_type == "goto":
                 url = params.get("url", "")
                 await cdp_helpers.goto_url(url)  # type: ignore[union-attr]
+                if hasattr(cdp_helpers, "reset_ref_map"):
+                    cdp_helpers.reset_ref_map()  # type: ignore[union-attr]
                 result["result"] = {"url": url}
 
             elif op_type == "click":

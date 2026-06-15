@@ -89,10 +89,11 @@ class CDPDaemon:
     # CDP command / send
     # ------------------------------------------------------------------
 
-    async def _send(self, method: str, params: dict | None = None) -> Any:
+    async def _send(self, method: str, params: dict | None = None, *, session_id: str | None = None) -> Any:
         """Send a CDP command and wait for its result.
 
         This is the interface that :class:`cdp.helpers.CDPHelpers` calls.
+        Pass *session_id* to target a specific tab (auto-attach mode).
         """
         logger.debug("CDP send: %s", method)
 
@@ -101,8 +102,9 @@ class CDPDaemon:
         payload: dict[str, Any] = {"id": msg_id, "method": method}
         if params:
             payload["params"] = params
-        if self._session_id:
-            payload["sessionId"] = self._session_id
+        sid = session_id if session_id is not None else self._session_id
+        if sid:
+            payload["sessionId"] = sid
 
         future = asyncio.get_event_loop().create_future()
         self._pending[msg_id] = future
@@ -233,12 +235,17 @@ class CDPDaemon:
             self._session_id = session.get("sessionId")
 
     async def enable_default_domains(self) -> None:
-        """Enable Page, DOM, Runtime, and Network CDP domains."""
+        """Enable Page, DOM, Runtime, Network CDP domains and auto-attach to all targets."""
         logger.debug("Enabling default CDP domains")
         await self._send("Page.enable")
         await self._send("DOM.enable")
         await self._send("Runtime.enable")
         await self._send("Network.enable")
+        await self._send("Target.setAutoAttach", {
+            "autoAttach": True,
+            "waitForDebuggerOnStart": False,
+            "flatten": True,
+        }, session_id="")
 
     # ------------------------------------------------------------------
     # IPC handler (for daemon-server mode)

@@ -9,12 +9,17 @@ You have access to browser control tools:
 - `browser_scroll(direction)` — scroll the page up or down
 - `browser_source(cached?)` — get the full page HTML
 - `browser_eval(code)` — run JavaScript on the page
-- `browser_get_element_by_number(ref)` — get details of an @eN element
+- `browser_get_element_by_number(ref)` — get details of an @eN or @e_XXXXX element
 - `goal_run(description)` — set a complex multi-step goal (use todo + browser_* to execute)
 
 You also have pipeline recording tools:
 - `record_step(...)` — record a browser operation as a pipeline step
 - `edit_pipeline(...)` — edit the full pipeline.yaml structure
+
+## 页面内容与滚动
+- `browser_snapshot(mode="interactive")` 只返回**当前视口内可见**的交互元素
+- 如果要操作页面上方/下方的元素，先 `browser_scroll` 滚动，再 `browser_snapshot` 刷新
+- 同一元素在多次 snapshot 中的 `@e_XXXXX` 编号是**稳定不变的**（只要 DOM 不重建）
 
 ## How to Work
 1. Understand the user's request

@@ -72,14 +72,14 @@ BROWSER_TOOLS: list[dict[str, Any]] = [
         "type": "function",
         "function": {
             "name": "browser_snapshot",
-            "description": "Capture a screenshot and HTML snapshot of the current page.",
+            "description": "Capture a screenshot and HTML snapshot of the current page. In interactive mode, elements are labeled with @eN (sequential) or @e_XXXXX (stable CDP backend_node_id) references.",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "mode": {
                         "type": "string",
                         "enum": ["interactive", "full", "simplified"],
-                        "description": "Snapshot mode: interactive (default, returns @eN element list), full (screenshot + HTML), simplified (text summary only).",
+                        "description": "Snapshot mode: interactive (default, returns @eN or @e_XXXXX element list), full (screenshot + HTML), simplified (text summary only).",
                     },
                 },
             },
@@ -144,13 +144,13 @@ BROWSER_TOOLS: list[dict[str, Any]] = [
         "type": "function",
         "function": {
             "name": "browser_get_element_by_number",
-            "description": "Get detailed information about an interactive element by its @eN reference number. Looks up from the most recent browser_snapshot cache first, falls back to CDP if not found. Use this to check element details (tag, text, selector) before clicking or filling.",
+            "description": "Get detailed information about an interactive element by its reference number (e.g. @e3, @e_12345). Looks up from the most recent browser_snapshot cache first, falls back to CDP if not found. Use this to check element details (tag, text, selector) before clicking or filling.",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "ref": {
                         "type": "string",
-                        "description": "Element reference number, e.g. '@e3', 'e3', or '3'.",
+                        "description": "Element reference, e.g. '@e3', 'e3', '3' (sequential) or '@e_12345', 'e_12345', '12345' (stable CDP backend_node_id).",
                     },
                 },
                 "required": ["ref"],

@@ -146,18 +146,10 @@ async def execute_tool_calls_sequential(
             break
 
         if ok and fn_name in ("browser_goto", "browser_click", "browser_fill") and cdp_helpers is not None:
-            if hasattr(cdp_helpers, "add_dom_highlights"):
-                try:
-                    highlight_result = await cdp_helpers.add_dom_highlights()
-                    element_map = highlight_result.get("element_map", {})
-                    if element_map:
-                        elements_for_sync = [
-                            {"ref": ref, "selector": info.get("selector", "")}
-                            for ref, info in element_map.items()
-                        ]
-                        scratchpad_sync_element_map(elements_for_sync)
-                except Exception:
-                    pass
+            await _auto_refresh_highlights(cdp_helpers)
+
+        if ok and fn_name == "browser_scroll" and cdp_helpers is not None:
+            await _auto_refresh_highlights(cdp_helpers)
 
         if stream_callback:
             stream_callback({
@@ -403,6 +395,22 @@ def _truncate_args(args: dict, max_len: int = 120) -> str:
 execute_tool_calls = execute_tool_calls_sequential
 
 
+async def _auto_refresh_highlights(cdp_helpers: object) -> None:
+    if not hasattr(cdp_helpers, "add_dom_highlights"):
+        return
+    try:
+        highlight_result = await cdp_helpers.add_dom_highlights()
+        element_map = highlight_result.get("element_map", {})
+        if element_map:
+            elements_for_sync = [
+                {"ref": ref, "selector": info.get("selector", "")}
+                for ref, info in element_map.items()
+            ]
+            scratchpad_sync_element_map(elements_for_sync)
+    except Exception:
+        logger.debug("auto_refresh_highlights failed", exc_info=True)
+
+
 def _apply_heavy_data_filter(
     fn_name: str,
     fn_args: dict,
@@ -495,13 +503,17 @@ def _apply_heavy_data_filter(
 
 
 def _normalize_ref(ref: str) -> str:
-    """Normalize an element reference to @eN format."""
+    """Normalize an element reference to @e_XXXXX format."""
     ref = ref.strip()
     if ref.startswith("@"):
+        if ref.startswith("@e") and not ref.startswith("@e_") and ref[2:].isdigit():
+            return "@e_" + ref[2:]
         return ref
-    if ref.startswith("e") and ref[1:].isdigit():
+    if ref.startswith("e_"):
         return f"@{ref}"
-    return f"@e{ref}"
+    if ref.startswith("e") and ref[1:].isdigit():
+        return "@e_" + ref[1:]
+    return f"@e_{ref}"
 
 
 def _try_scratchpad_element_lookup(fn_args: dict) -> dict | None:

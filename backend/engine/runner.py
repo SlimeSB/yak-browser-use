@@ -96,6 +96,10 @@ async def _ensure_browser_connected() -> object:
         daemon = await ensure_daemon("ybu-chat")
         helpers = CDPHelpers(daemon)
         logger.info("Browser connected for chat mode")
+        try:
+            await helpers.add_dom_highlights()
+        except Exception:
+            logger.warning("initial highlight injection failed", exc_info=True)
         return helpers
     except Exception as e:
         logger.error("Failed to connect browser: %s", e)
