@@ -127,7 +127,7 @@ class CDPHelpers:
         await asyncio.sleep(0.5)
 
     async def js(self, code: str) -> Any:
-        result = await self._cdp("Runtime.evaluate", {"expression": code})
+        result = await self._cdp("Runtime.evaluate", {"expression": code, "returnByValue": True})
         return result.get("result", {}).get("value")
 
     async def _inject_simplify_js(self, mode: str) -> Any:
@@ -222,17 +222,15 @@ class CDPHelpers:
             "if(old)old.remove();"
             "var container=document.createElement('div');"
             "container.id='ybu-highlights';"
-            "container.style.cssText='position:absolute;top:0;left:0;width:100%;pointer-events:none;z-index:2147483646;';"
+            "container.style.cssText='position:fixed;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:2147483646;';"
             "document.body.appendChild(container);"
             "var elements=" + elements_json + ";"
-            "var sx=window.scrollX||window.pageXOffset||0;"
-            "var sy=window.scrollY||window.pageYOffset||0;"
             "for(var i=0;i<elements.length;i++){"
             "var el=elements[i];"
             "var div=document.createElement('div');"
             "div.setAttribute('data-ybu-highlight',el.ref);"
             "div.style.cssText='position:absolute;"
-            "left:'+(el.x+sx)+'px;top:'+(el.y+sy)+'px;"
+            "left:'+el.x+'px;top:'+el.y+'px;"
             "width:'+el.width+'px;height:'+el.height+'px;"
             "border:2px dashed #3b82f6;border-radius:2px;pointer-events:none;';"
             "var badge=document.createElement('span');"
