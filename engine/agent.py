@@ -103,6 +103,7 @@ async def start_chat_agent(
 
 
 def _create_chat_llm_call(
+    persist_id: str = "",
     on_stream_start=None,
     on_stream_end=None,
     on_text_delta=None,
@@ -112,6 +113,7 @@ def _create_chat_llm_call(
     """Create a callable for LLM API calls compatible with conversation_loop.
 
     Args:
+        persist_id: Identifier for persisting LLM response logs (session_id or run_id).
         on_stream_start: Optional callback() called before streaming starts.
         on_stream_end: Optional callback(has_tool_calls) called after streaming.
         on_text_delta: Optional callback(text) for each delta.content chunk.
@@ -124,6 +126,7 @@ def _create_chat_llm_call(
     from types import SimpleNamespace
 
     from utils.browser import create_llm
+    from utils.response_logger import _log_non_streaming_response, _log_streaming_response
     from browser_use.llm.messages import UserMessage, SystemMessage, AssistantMessage
     from browser_use.llm.openai.serializer import OpenAIMessageSerializer
 
@@ -133,8 +136,20 @@ def _create_chat_llm_call(
     _streaming = any(cb is not None for cb in [on_text_delta, on_reasoning_delta])
     _streaming_active = False
 
+    _turn_counter = {"value": 0}
+
+    def _advance_turn():
+        _turn_counter["value"] += 1
+        return _turn_counter["value"]
+
     async def _call(messages: list[dict], tools: list[dict]) -> object:
         nonlocal _streaming_active
+
+        request_summary = {
+            "model": llm.model,
+            "messages_count": len(messages),
+            "tools_count": len(tools) if tools else 0,
+        }
 
         converted: list = []
         for msg in messages:
@@ -158,7 +173,10 @@ def _create_chat_llm_call(
             kwargs: dict = {"messages": converted}
             if tools:
                 kwargs["tools"] = tools
-            return await llm.ainvoke(**kwargs)
+            response = await llm.ainvoke(**kwargs)
+            _local_turn = _advance_turn()
+            _log_non_streaming_response(persist_id, _local_turn, response, request_summary)
+            return response
 
         # ── Streaming path ──────────────────────────────────────────
         openai_messages = list(OpenAIMessageSerializer.serialize_messages(converted))
@@ -222,6 +240,9 @@ def _create_chat_llm_call(
         tool_calls_acc: dict[int, dict] = {}
         tool_names_seen: set[str] = set()
 
+        _last_chunk_usage = None
+        _last_chunk_model = None
+
         async for chunk in stream:
             if not chunk.choices:
                 continue
@@ -261,6 +282,9 @@ def _create_chat_llm_call(
                         if tc.function.arguments:
                             entry["function"]["arguments"] += tc.function.arguments
 
+            _last_chunk_usage = chunk.usage if getattr(chunk, "usage", None) else _last_chunk_usage
+            _last_chunk_model = getattr(chunk, "model", None) or _last_chunk_model
+
         content = "".join(content_parts)
         thinking = "".join(thinking_parts)
 
@@ -269,6 +293,20 @@ def _create_chat_llm_call(
 
         if on_stream_end:
             on_stream_end(bool(final_tool_calls))
+
+        _local_turn = _advance_turn()
+        usage_dict: dict | None = None
+        if _last_chunk_usage is not None:
+            usage_dict = {
+                "prompt_tokens": getattr(_last_chunk_usage, "prompt_tokens", None),
+                "completion_tokens": getattr(_last_chunk_usage, "completion_tokens", None),
+                "total_tokens": getattr(_last_chunk_usage, "total_tokens", None),
+            }
+        _log_streaming_response(
+            persist_id, _local_turn, create_kwargs, content, thinking, final_tool_calls,
+            usage=usage_dict,
+            model=_last_chunk_model,
+        )
 
         _streaming_active = False
 
@@ -283,7 +321,7 @@ def _create_chat_llm_call(
     return _call
 
 
-def create_pipeline_llm_call():
+def create_pipeline_llm_call(persist_id: str = ""):
     """Create a simple llm_call for pipeline fallback (RuntimePlanner + Agent Swimlane).
 
     Returns an async function that takes (messages, tools) and returns
@@ -291,12 +329,25 @@ def create_pipeline_llm_call():
     No streaming callbacks — designed for programmatic use.
     """
     from utils.browser import create_llm
+    from utils.response_logger import _log_non_streaming_response
     from browser_use.llm.messages import UserMessage, SystemMessage, AssistantMessage
     from browser_use.llm.messages import ToolCall as BUMessageToolCall
 
     llm = create_llm()
 
+    _turn_counter = {"value": 0}
+
+    def _advance_turn():
+        _turn_counter["value"] += 1
+        return _turn_counter["value"]
+
     async def _call(messages: list[dict], tools: list[dict]) -> object:
+        request_summary = {
+            "model": llm.model,
+            "messages_count": len(messages),
+            "tools_count": len(tools) if tools else 0,
+        }
+
         converted: list = []
         for msg in messages:
             role = msg.get("role", "user")
@@ -318,6 +369,9 @@ def create_pipeline_llm_call():
         kwargs: dict = {"messages": converted}
         if tools:
             kwargs["tools"] = tools
-        return await llm.ainvoke(**kwargs)
+        response = await llm.ainvoke(**kwargs)
+        _local_turn = _advance_turn()
+        _log_non_streaming_response(persist_id, _local_turn, response, request_summary)
+        return response
 
     return _call

@@ -224,7 +224,6 @@ def register_all_routes(app: FastAPI) -> None:
                 )
 
             from engine.agent import create_pipeline_llm_call
-            llm_call = create_pipeline_llm_call()
 
             if engine == "agent":
                 from engine._harness.conversation_loop import run_preset_loop
@@ -240,6 +239,8 @@ def register_all_routes(app: FastAPI) -> None:
                     version="0",
                 )
                 engine_state.running_pipeline = ctx
+
+                llm_call = create_pipeline_llm_call(persist_id=run_dir.name)
 
                 budget = IterationBudget(max_total=50)
                 try:
@@ -272,6 +273,7 @@ def register_all_routes(app: FastAPI) -> None:
                 else:
                     wm.set_status(run_dir, "completed")
             else:
+                llm_call = create_pipeline_llm_call(persist_id=f"pipeline_{parsed.name}")
                 ctx = await run_pipeline(
                     pipeline_name=parsed.name,
                     steps=steps,
@@ -626,7 +628,7 @@ def register_all_routes(app: FastAPI) -> None:
             browser = CDPHelpers(engine_state.chrome_daemon)
 
             from engine.agent import create_pipeline_llm_call
-            llm_call = create_pipeline_llm_call()
+            llm_call = create_pipeline_llm_call(persist_id=run_id)
 
             ctx = await run_pipeline(
                 pipeline_name=pipeline_name,
@@ -779,6 +781,7 @@ def register_all_routes(app: FastAPI) -> None:
             _push({"type": "chat.tool_generated", "tool_name": name, "turn_index": turn_index})
 
         llm_call = _create_chat_llm_call(
+            persist_id=session.session_id,
             on_stream_start=_on_stream_start,
             on_stream_end=_on_stream_end,
             on_text_delta=_on_text_delta,

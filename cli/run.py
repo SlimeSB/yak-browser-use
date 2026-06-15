@@ -182,7 +182,6 @@ async def _execute_pipeline(input_path: Path, content: str, params: dict | None 
         logger.info("  Guardian enabled: approval steps=%s", guardian.approval_steps)
 
     from engine.agent import create_pipeline_llm_call
-    llm_call = create_pipeline_llm_call()
 
     if engine == "agent":
         import shutil as _shutil
@@ -198,6 +197,8 @@ async def _execute_pipeline(input_path: Path, content: str, params: dict | None 
             run_dir=run_dir,
             version="0",
         )
+
+        llm_call = create_pipeline_llm_call(persist_id=run_dir.name)
 
         budget = IterationBudget(max_total=50)
         try:
@@ -224,6 +225,7 @@ async def _execute_pipeline(input_path: Path, content: str, params: dict | None 
             if not pipeline_finished:
                 ctx.errors.append({"step": "_agent_", "code": "AGENT_ERROR", "message": "budget exhausted"})
     else:
+        llm_call = create_pipeline_llm_call(persist_id=f"pipeline_{parsed.name}")
         ctx = await run_pipeline(
             pipeline_name=parsed.name,
             steps=resolved_steps,
