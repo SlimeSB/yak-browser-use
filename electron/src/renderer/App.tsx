@@ -128,9 +128,9 @@ export default function App() {
         setPipelineEditor(pipelineContent);
       } else {
         window.electronAPI.getPipeline(activePreset).then(resp => {
-          if (resp.agent_md) {
-            setPipelineCache(prev => ({ ...prev, [activePreset]: resp.agent_md }));
-            setPipelineEditor(resp.agent_md);
+          if (resp.content) {
+            setPipelineCache(prev => ({ ...prev, [activePreset]: resp.content }));
+            setPipelineEditor(resp.content);
           }
     }).catch((e) => { logger.error('getPipeline failed: %s', String(e)); });
       }
@@ -340,8 +340,8 @@ export default function App() {
     if (!pipelineContent) {
       try {
         const resp = await window.electronAPI.getPipeline(activePreset);
-        if (resp.agent_md) {
-          pipelineContent = resp.agent_md;
+        if (resp.content) {
+          pipelineContent = resp.content;
           setPipelineCache(prev => ({ ...prev, [activePreset]: pipelineContent }));
           setPipelineEditor(pipelineContent);
         } else {
@@ -470,9 +470,9 @@ export default function App() {
     if (!activePreset) return;
     try {
       const resp = await window.electronAPI.getPipeline(activePreset);
-      if (resp.agent_md) {
-        setPipelineCache(prev => ({ ...prev, [activePreset]: resp.agent_md }));
-        setPipelineEditor(resp.agent_md);
+      if (resp.content) {
+        setPipelineCache(prev => ({ ...prev, [activePreset]: resp.content }));
+        setPipelineEditor(resp.content);
       }
     } catch (e) { logger.error('refreshPipeline failed: %s', String(e)); }
   }, [activePreset]);

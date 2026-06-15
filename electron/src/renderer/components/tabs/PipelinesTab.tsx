@@ -47,8 +47,8 @@ export default function PipelinesTab({
               <button className="btn btn-secondary btn-xs" onClick={() => {
                 onSelectPreset(p.name);
                 window.electronAPI.getPipeline(p.name).then(resp => {
-                  if (resp.agent_md) {
-                    navigator.clipboard.writeText(resp.agent_md);
+                  if (resp.content) {
+                    navigator.clipboard.writeText(resp.content);
                   }
                 }).catch((e) => { console.error('getPipeline failed:', e); });
               }}>📋 Copy</button>

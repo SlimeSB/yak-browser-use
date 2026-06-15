@@ -128,19 +128,23 @@ class CDPHelpers:
 
     async def js(self, code: str) -> Any:
         result = await self._cdp("Runtime.evaluate", {"expression": code, "returnByValue": True})
-        return result.get("result", {}).get("value")
+        value = result.get("result", {}).get("value")
+        logger.debug("js: result keys=%s value_type=%s", list(result.keys()) if isinstance(result, dict) else "N/A", type(value).__name__)
+        return value
 
     async def _inject_simplify_js(self, mode: str) -> Any:
         script = _load_simplify_dom_js()
         if script is None:
+            logger.warning("_inject_simplify_js: simplify-dom.js not loaded")
             return None
         safe_mode = _json.dumps(mode)
         expression = f"{script}\nsimplifyDom({{mode: {safe_mode}}})"
         try:
             result = await self.js(expression)
+            logger.debug("_inject_simplify_js: mode=%s result=%s", mode, result)
             return result
-        except Exception:
-            logger.warning("simplify-dom.js execution failed for mode=%s", mode)
+        except Exception as e:
+            logger.warning("simplify-dom.js execution failed for mode=%s: %s", mode, e)
             return None
 
     async def capture_snapshot_interactive(self) -> dict:
@@ -190,11 +194,17 @@ class CDPHelpers:
         """
         if elements is None:
             js_result = await self._inject_simplify_js("interactive")
+            logger.debug("add_dom_highlights: js_result type=%s keys=%s",
+                         type(js_result).__name__,
+                         list(js_result.keys()) if isinstance(js_result, dict) else "N/A")
             if not js_result or not isinstance(js_result, dict):
+                logger.warning("add_dom_highlights: js_result is None or not dict, returning early")
                 return {"ok": True, "count": 0, "element_map": {}}
             elements = js_result.get("elements", [])
+            logger.debug("add_dom_highlights: got %d elements", len(elements))
 
         if not elements:
+            logger.warning("add_dom_highlights: elements is empty, returning early")
             self._element_map = {}
             return {"ok": True, "count": 0, "element_map": {}}
 
@@ -218,6 +228,7 @@ class CDPHelpers:
         elements_json = _json.dumps(elements)
         js_code = (
             "(function(){"
+            "if(!document.body)return JSON.stringify({error:'no document.body'});"
             "var old=document.getElementById('ybu-highlights');"
             "if(old)old.remove();"
             "var container=document.createElement('div');"
@@ -225,6 +236,7 @@ class CDPHelpers:
             "container.style.cssText='position:fixed;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:2147483646;';"
             "document.body.appendChild(container);"
             "var elements=" + elements_json + ";"
+            "var created=0;"
             "for(var i=0;i<elements.length;i++){"
             "var el=elements[i];"
             "var div=document.createElement('div');"
@@ -240,10 +252,16 @@ class CDPHelpers:
             "padding:1px 4px;border-radius:2px;line-height:1.2;white-space:nowrap;pointer-events:none;';"
             "div.appendChild(badge);"
             "container.appendChild(div);"
+            "created++;"
             "}"
+            "return JSON.stringify({created:created,total:elements.length});"
             "})()"
         )
-        await self.js(js_code)
+        try:
+            diag = await self.js(js_code)
+            logger.debug("add_dom_highlights: highlight JS returned: %s", diag)
+        except Exception as e:
+            logger.error("add_dom_highlights: js injection failed: %s", e)
         return {"ok": True, "count": len(elements), "element_map": dict(self._element_map)}
 
     async def remove_dom_highlights(self) -> None:
