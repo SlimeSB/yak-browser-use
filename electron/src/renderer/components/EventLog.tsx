@@ -7,6 +7,23 @@ interface EventLogProps {
   maxHeight?: number;
 }
 
+const DATA_BLACKLIST = new Set(['_ts', 'session_id', 'timestamp']);
+
+function cleanData(data: Record<string, unknown>): Record<string, unknown> {
+  if (!data || typeof data !== 'object') return {};
+  return Object.fromEntries(
+    Object.entries(data).filter(([k]) => !DATA_BLACKLIST.has(k))
+  );
+}
+
+function getLineColor(type: string): string {
+  if (type === 'llm_turn') return 'var(--purple)';
+  if (type === 'chat.tool_start') return 'var(--info)';
+  if (type === 'chat.tool_end') return 'var(--success)';
+  if (type === 'step_error') return 'var(--danger)';
+  return 'var(--text-muted)';
+}
+
 export default function EventLog({ events, maxHeight }: EventLogProps) {
   const { t } = useTranslation();
   const logRef = useRef<HTMLDivElement>(null);
@@ -18,52 +35,22 @@ export default function EventLog({ events, maxHeight }: EventLogProps) {
     try {
       const d = new Date(ts);
       return d.toTimeString().split(' ')[0];
-    } catch (e) { console.debug('formatTime failed:', e); return ts; }
-  };
-
-  const getTypeClass = (ev: EventData): string => {
-    if (ev.type === 'step_start' || ev.type === 'step_end' || ev.type === 'step_error') {
-      if (ev.data?.is_goal || ev.data?.goal_description) return ev.type + '_goal';
-      if (ev.data?.browser_ops) return ev.type + '_browser';
-    }
-    return ev.type;
-  };
-
-  const getTypeIcon = (ev: EventData): string => {
-    if (ev.type === 'step_start') return ev.data?.is_goal ? '✦' : '●';
-    if (ev.type === 'step_end') return ev.data?.is_goal ? '✓' : '✓';
-    if (ev.type === 'step_error') return '✗';
-    return '';
+    } catch { return ts; }
   };
 
   return (
     <div className="log-terminal" ref={logRef} style={maxHeight ? { maxHeight, overflow: 'auto' } : { flex: 1 }}>
       {events.length === 0 && <div style={{ color: 'var(--text-muted)' }}>{t('eventLog.noEvents')}</div>}
       {events.map((ev, i) => {
-        const cls = getTypeClass(ev);
-        const isThought = ev.data?.type === 'thought' || ev.data?.thought;
-        const isAction = ev.type === 'step_start' || ev.data?.action || ev.data?.browser_ops;
-        const isError = ev.type === 'step_error';
-        const isResult = ev.type === 'step_end';
-
-        let lineClass = '';
-        if (isError) lineClass = 'error';
-        else if (isThought) lineClass = 'thought';
-        else if (isAction) lineClass = 'action';
-        else if (isResult) lineClass = 'result';
-
+        const timeStr = ev.timestamp ? formatTime(ev.timestamp) : '';
+        const color = getLineColor(ev.type);
+        const json = JSON.stringify(cleanData(ev.data), null, 2);
         return (
-          <div key={i} className={`step-log-line${lineClass ? ' ' + lineClass : ''}`}>
-            <span className="step-log-time">[{ev.timestamp ? formatTime(ev.timestamp) : ''}]</span>
-            <span className="step-log-msg">
-              <span className={`log-type-${cls}`}>{getTypeIcon(ev)} {ev.type}</span>{' '}
-              <span>{ev.node_name}</span>
-              {(ev.data?.goal_description || ev.data?.description) ? (
-                <span style={{ color: 'var(--text-muted)', marginLeft: 4 }}>
-                  — {String(ev.data.goal_description || ev.data.description || '')}
-                </span>
-              ) : null}
+          <div key={i} className="log-entry">
+            <span className="log-entry-header" style={{ color }}>
+              [{timeStr}] {ev.type}
             </span>
+            <pre className="log-entry-body">{json}</pre>
           </div>
         );
       })}

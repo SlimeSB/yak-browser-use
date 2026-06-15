@@ -87,7 +87,7 @@ async def execute_tool_calls_sequential(
 
         if stream_callback:
             stream_callback({
-                "type": "tool_start",
+                "type": "chat.tool_start",
                 "tool_name": fn_name,
                 "args": fn_args,
                 "id": tool_call_id,
@@ -157,7 +157,7 @@ async def execute_tool_calls_sequential(
 
         if stream_callback:
             stream_callback({
-                "type": "tool_end",
+                "type": "chat.tool_end",
                 "tool_name": fn_name,
                 "ok": ok,
                 "duration_ms": result_dict.get("duration_ms", 0),

@@ -127,6 +127,8 @@ def _create_chat_llm_call(
     from browser_use.llm.messages import UserMessage, SystemMessage, AssistantMessage
     from browser_use.llm.openai.serializer import OpenAIMessageSerializer
 
+    from browser_use.llm.messages import ToolCall as BUMessageToolCall
+
     llm = create_llm()
     _streaming = any(cb is not None for cb in [on_text_delta, on_reasoning_delta])
     _streaming_active = False
@@ -141,7 +143,12 @@ def _create_chat_llm_call(
             if role == "system":
                 converted.append(SystemMessage(content=content))
             elif role == "assistant":
-                converted.append(AssistantMessage(content=content))
+                tool_calls_data = msg.get("tool_calls")
+                if tool_calls_data:
+                    tc_objs = [BUMessageToolCall(**tc) for tc in tool_calls_data]
+                    converted.append(AssistantMessage(content=content, tool_calls=tc_objs))
+                else:
+                    converted.append(AssistantMessage(content=content))
             elif role == "tool":
                 converted.append(UserMessage(content=f"[tool result] {content}"))
             else:
@@ -166,9 +173,11 @@ def _create_chat_llm_call(
                 found = False
                 for i, existing in enumerate(openai_messages):
                     if isinstance(existing, dict) and existing.get("role") == "user":
-                        openai_messages[i] = tool_msg
-                        found = True
-                        break
+                        ec = existing.get("content", "")
+                        if isinstance(ec, str) and ec.startswith("[tool result]"):
+                            openai_messages[i] = tool_msg
+                            found = True
+                            break
                 if not found:
                     openai_messages.append(tool_msg)
 

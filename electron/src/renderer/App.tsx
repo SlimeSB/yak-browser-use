@@ -195,6 +195,7 @@ export default function App() {
                 toolName: event.tool_name || '',
                 toolOk: undefined,
               }]);
+              setEvents(prev => [...prev, { type: et, timestamp: event.timestamp || (event._ts != null ? new Date(event._ts * 1000).toISOString() : new Date().toISOString()), node_name: event.step || event.pipeline || '', data: event }]);
             } else if (et === 'chat.tool_end') {
               setChatMessages(prev => {
                 const next = [...prev];
@@ -211,6 +212,7 @@ export default function App() {
                 }
                 return next;
               });
+              setEvents(prev => [...prev, { type: et, timestamp: event.timestamp || (event._ts != null ? new Date(event._ts * 1000).toISOString() : new Date().toISOString()), node_name: event.step || event.pipeline || '', data: event }]);
             } else if (et === 'chat.error') {
               setChatMessages(prev => [...prev, { role: 'assistant', content: `[Error] ${event.message || ''}` }]);
             } else if (et === 'chat.stream_start') {
@@ -281,7 +283,7 @@ export default function App() {
               }
             } else {
               // Pipeline events
-              setEvents(prev => [...prev, { type: et, timestamp: event.timestamp, node_name: event.step || event.pipeline || '', data: event }]);
+              setEvents(prev => [...prev, { type: et, timestamp: event.timestamp || (event._ts != null ? new Date(event._ts * 1000).toISOString() : new Date().toISOString()), node_name: event.step || event.pipeline || '', data: event }]);
             }
 
             if (et === 'run_end') {

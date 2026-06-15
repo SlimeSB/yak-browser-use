@@ -271,56 +271,67 @@ export default function ChatTab({
                 <p>{t('chat.startPrompt')}</p>
               </div>
             )}
-            {messages.map((msg, i) => (
-              <div key={i} className={`chat-msg ${msg.role}`}>
-                {msg.role !== 'user' && (
-                  <span className={`chat-avatar ${msg.role}`}>
-                    {msg.role === 'assistant' ? 'A' : msg.role === 'tool' ? '🔧' : '⚡'}
-                  </span>
-                )}
-                <div className={`chat-bubble ${msg.role}`}>
-                  {msg.role === 'assistant' && msg.reasoning && (
-                    <div className={`chat-think-block ${expandedThinks.has(i) ? 'expanded' : ''}`}>
-                      <div
-                        className="chat-think-header"
-                        onClick={() => {
-                          setExpandedThinks(prev => {
-                            const next = new Set(prev);
-                            if (next.has(i)) { next.delete(i); } else { next.add(i); }
-                            return next;
-                          });
-                        }}
-                      >
-                        <span className="chat-think-arrow">{expandedThinks.has(i) ? '▾' : '▸'}</span>
-                        <span className="chat-think-title">思考过程</span>
+            {messages.map((msg, i) => {
+              if (msg.role === 'tool') {
+                const statusClass = msg.toolOk === undefined ? '' : msg.toolOk ? 'ok' : 'err';
+                return (
+                  <div key={i} className="chat-tool-inline">
+                    <span className="chat-tool-inline-arrow">↓</span>
+                    <span className="chat-tool-inline-name">{msg.toolName}</span>
+                    {msg.toolDuration !== undefined && (
+                      <span className="chat-tool-inline-dur">{msg.toolDuration}ms</span>
+                    )}
+                    <span className={`chat-tool-inline-status ${statusClass}`}>
+                      {msg.toolOk === undefined ? '...' : msg.toolOk ? '✓' : '✗'}
+                    </span>
+                  </div>
+                );
+              }
+              if (msg.role === 'assistant') {
+                return (
+                  <div key={i} className="chat-msg assistant">
+                    {msg.reasoning && (
+                      <div className={`chat-think-block ${expandedThinks.has(i) ? 'expanded' : ''}`}>
+                        <div
+                          className="chat-think-header"
+                          onClick={() => {
+                            setExpandedThinks(prev => {
+                              const next = new Set(prev);
+                              if (next.has(i)) { next.delete(i); } else { next.add(i); }
+                              return next;
+                            });
+                          }}
+                        >
+                          <span className="chat-think-arrow">{expandedThinks.has(i) ? '▾' : '▸'}</span>
+                          <span className="chat-think-title">思考过程</span>
+                        </div>
+                        {expandedThinks.has(i) && (
+                          <div className="chat-think-content">{msg.reasoning}</div>
+                        )}
                       </div>
-                      {expandedThinks.has(i) && (
-                        <div className="chat-think-content">{msg.reasoning}</div>
-                      )}
+                    )}
+                    <div className="chat-bubble-text">{msg.content}</div>
+                  </div>
+                );
+              }
+              if (msg.role === 'user') {
+                return (
+                  <div key={i} className="chat-msg user">
+                    <div className="chat-bubble user">
+                      <div className="chat-bubble-text">{msg.content}</div>
                     </div>
-                  )}
-                  {msg.role === 'tool' && msg.toolName && (
-                    <div className="chat-tool-header">
-                      <span className={`chat-tool-indicator ${msg.toolOk ? 'ok' : 'err'}`}>
-                        {msg.toolOk ? '✓' : '✗'}
-                      </span>
-                      <span className="chat-tool-name">{msg.toolName}</span>
-                      {msg.toolDuration !== undefined && (
-                        <span className="chat-tool-duration">{msg.toolDuration}ms</span>
-                      )}
-                    </div>
-                  )}
+                  </div>
+                );
+              }
+              return (
+                <div key={i} className="chat-msg system">
                   <div className="chat-bubble-text">{msg.content}</div>
                 </div>
-                {msg.role === 'user' && <span className="chat-avatar user">U</span>}
-              </div>
-            ))}
+              );
+            })}
             {sending && (
               <div className="chat-msg assistant">
-                <span className="chat-avatar assistant">A</span>
-                <div className="chat-bubble assistant">
-                  <span className="chat-typing">...</span>
-                </div>
+                <span className="chat-typing">...</span>
               </div>
             )}
           </div>

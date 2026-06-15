@@ -150,10 +150,32 @@ async def run_conversation_loop(
             consecutive_llm_failures += 1
             if consecutive_llm_failures >= _MAX_CONSECUTIVE_LLM_FAILURES:
                 logger.error("conversation_loop: max consecutive LLM failures reached")
+                if stream_callback:
+                    stream_callback({
+                        "type": "chat.error",
+                        "message": f"LLM 调用连续失败 {_MAX_CONSECUTIVE_LLM_FAILURES} 次，请检查 API 配置或网络连接。",
+                    })
+                interrupted = True
                 break
             continue
         else:
             consecutive_llm_failures = 0
+
+        # Emit llm_turn with full LLM response for LogTab
+        if stream_callback:
+            thinking = getattr(response, 'reasoning', None) or getattr(response, 'thinking', None)
+            content = getattr(response, 'content', '') or ''
+            tool_calls_data = getattr(response, 'tool_calls', None) or []
+            stream_callback({
+                "type": "llm_turn",
+                "turn": turn_count,
+                "content": content or None,
+                "thinking": thinking or None,
+                "tool_calls": [{
+                    "name": (tc.get("function") or {}).get("name", ""),
+                    "args": (tc.get("function") or {}).get("arguments", "{}"),
+                } for tc in tool_calls_data] if tool_calls_data else None,
+            })
 
         # Consume budget for this round-trip
         budget.consume(1)
@@ -205,11 +227,6 @@ async def run_conversation_loop(
             messages.append(_build_assistant_message(response))
             logger.debug("conversation_loop: turn %d text response (%d chars)",
                          turn_count, len(final_response or ""))
-            if stream_callback:
-                stream_callback({
-                    "type": "chat.message",
-                    "content": final_response,
-                })
             break
 
     # Check for interrupt
