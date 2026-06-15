@@ -13,7 +13,7 @@ from utils.logging import get_logger
 
 logger = get_logger(__name__)
 
-_DEFAULT_STORE_PATH = Path.home() / ".ybu" / "params.json"
+_DEFAULT_STORE_PATH = Path(__file__).resolve().parent.parent.parent / "userdata" / "params.json"
 
 
 class ParamRef:

@@ -89,12 +89,12 @@ class TestWorkspaceManagerInit:
         assert wm.pipeline_name == "test_pipe"
         assert wm.root.name == "test_pipe"
         assert wm.root.parent.name == "workspaces"
-        assert ".ybu" in str(wm.root)
+        assert "workspaces" in str(wm.root)
 
 
 class TestWorkspaceManagerEnsureWorkspace:
     def test_creates_directories(self, tmp_path, monkeypatch):
-        monkeypatch.setattr("workspace.manager.Path.home", lambda: tmp_path)
+        monkeypatch.setattr("workspace.manager._WORKSPACES_ROOT", tmp_path)
         wm = WorkspaceManager("test_pipe")
         root = wm.ensure_workspace()
         assert root.exists()
@@ -103,7 +103,7 @@ class TestWorkspaceManagerEnsureWorkspace:
         assert wm.tools_dir.exists()
 
     def test_idempotent(self, tmp_path, monkeypatch):
-        monkeypatch.setattr("workspace.manager.Path.home", lambda: tmp_path)
+        monkeypatch.setattr("workspace.manager._WORKSPACES_ROOT", tmp_path)
         wm = WorkspaceManager("test_pipe")
         wm.ensure_workspace()
         wm.ensure_workspace()  # should not crash
@@ -112,7 +112,7 @@ class TestWorkspaceManagerEnsureWorkspace:
 
 class TestWorkspaceManagerCreateRun:
     def test_creates_run_directory(self, tmp_path, monkeypatch):
-        monkeypatch.setattr("workspace.manager.Path.home", lambda: tmp_path)
+        monkeypatch.setattr("workspace.manager._WORKSPACES_ROOT", tmp_path)
         wm = WorkspaceManager("test_pipe")
         run_dir = wm.create_run()
         assert run_dir.exists()
@@ -120,7 +120,7 @@ class TestWorkspaceManagerCreateRun:
         assert (run_dir / "_run.json").exists()
 
     def test_run_metadata(self, tmp_path, monkeypatch):
-        monkeypatch.setattr("workspace.manager.Path.home", lambda: tmp_path)
+        monkeypatch.setattr("workspace.manager._WORKSPACES_ROOT", tmp_path)
         wm = WorkspaceManager("test_pipe")
         run_dir = wm.create_run()
         meta = json.loads((run_dir / "_run.json").read_text(encoding="utf-8"))
@@ -133,7 +133,7 @@ class TestWorkspaceManagerCreateRun:
 
 class TestWorkspaceManagerSetGetStatus:
     def test_set_status(self, tmp_path, monkeypatch):
-        monkeypatch.setattr("workspace.manager.Path.home", lambda: tmp_path)
+        monkeypatch.setattr("workspace.manager._WORKSPACES_ROOT", tmp_path)
         wm = WorkspaceManager("test_pipe")
         run_dir = wm.create_run()
         wm.set_status(run_dir, "running")
@@ -141,14 +141,14 @@ class TestWorkspaceManagerSetGetStatus:
         assert meta["status"] == "running"
 
     def test_get_status(self, tmp_path, monkeypatch):
-        monkeypatch.setattr("workspace.manager.Path.home", lambda: tmp_path)
+        monkeypatch.setattr("workspace.manager._WORKSPACES_ROOT", tmp_path)
         wm = WorkspaceManager("test_pipe")
         run_dir = wm.create_run()
         wm.set_status(run_dir, "completed")
         assert wm.get_status(run_dir) == "completed"
 
     def test_set_status_with_current_step(self, tmp_path, monkeypatch):
-        monkeypatch.setattr("workspace.manager.Path.home", lambda: tmp_path)
+        monkeypatch.setattr("workspace.manager._WORKSPACES_ROOT", tmp_path)
         wm = WorkspaceManager("test_pipe")
         run_dir = wm.create_run()
         wm.set_status(run_dir, "running", current_step="step_1")
@@ -156,14 +156,14 @@ class TestWorkspaceManagerSetGetStatus:
         assert meta["current_step"] == "step_1"
 
     def test_invalid_status_raises(self, tmp_path, monkeypatch):
-        monkeypatch.setattr("workspace.manager.Path.home", lambda: tmp_path)
+        monkeypatch.setattr("workspace.manager._WORKSPACES_ROOT", tmp_path)
         wm = WorkspaceManager("test_pipe")
         run_dir = wm.create_run()
         with pytest.raises(ValueError, match="Invalid status"):
             wm.set_status(run_dir, "invalid_status")
 
     def test_completed_sets_completed_at(self, tmp_path, monkeypatch):
-        monkeypatch.setattr("workspace.manager.Path.home", lambda: tmp_path)
+        monkeypatch.setattr("workspace.manager._WORKSPACES_ROOT", tmp_path)
         wm = WorkspaceManager("test_pipe")
         run_dir = wm.create_run()
         wm.set_status(run_dir, "completed")
@@ -171,7 +171,7 @@ class TestWorkspaceManagerSetGetStatus:
         assert meta["completed_at"] is not None
 
     def test_failed_sets_completed_at(self, tmp_path, monkeypatch):
-        monkeypatch.setattr("workspace.manager.Path.home", lambda: tmp_path)
+        monkeypatch.setattr("workspace.manager._WORKSPACES_ROOT", tmp_path)
         wm = WorkspaceManager("test_pipe")
         run_dir = wm.create_run()
         wm.set_status(run_dir, "failed")
@@ -179,7 +179,7 @@ class TestWorkspaceManagerSetGetStatus:
         assert meta["completed_at"] is not None
 
     def test_crashed_sets_both_timestamps(self, tmp_path, monkeypatch):
-        monkeypatch.setattr("workspace.manager.Path.home", lambda: tmp_path)
+        monkeypatch.setattr("workspace.manager._WORKSPACES_ROOT", tmp_path)
         wm = WorkspaceManager("test_pipe")
         run_dir = wm.create_run()
         wm.set_status(run_dir, "crashed")
@@ -188,19 +188,19 @@ class TestWorkspaceManagerSetGetStatus:
         assert meta["crashed_detected_at"] is not None
 
     def test_get_status_nonexistent(self, tmp_path, monkeypatch):
-        monkeypatch.setattr("workspace.manager.Path.home", lambda: tmp_path)
+        monkeypatch.setattr("workspace.manager._WORKSPACES_ROOT", tmp_path)
         wm = WorkspaceManager("test_pipe")
         assert wm.get_status(tmp_path / "nonexistent_run") is None
 
 
 class TestWorkspaceManagerListRuns:
     def test_empty_list(self, tmp_path, monkeypatch):
-        monkeypatch.setattr("workspace.manager.Path.home", lambda: tmp_path)
+        monkeypatch.setattr("workspace.manager._WORKSPACES_ROOT", tmp_path)
         wm = WorkspaceManager("test_pipe")
         assert wm.list_runs() == []
 
     def test_returns_metadata(self, tmp_path, monkeypatch):
-        monkeypatch.setattr("workspace.manager.Path.home", lambda: tmp_path)
+        monkeypatch.setattr("workspace.manager._WORKSPACES_ROOT", tmp_path)
         wm = WorkspaceManager("test_pipe")
         run1 = wm.create_run()
         run2 = wm.create_run()
@@ -216,7 +216,7 @@ class TestWorkspaceManagerListRuns:
 
 class TestWorkspaceManagerDetectCrashed:
     def test_no_crashed_runs(self, tmp_path, monkeypatch):
-        monkeypatch.setattr("workspace.manager.Path.home", lambda: tmp_path)
+        monkeypatch.setattr("workspace.manager._WORKSPACES_ROOT", tmp_path)
         wm = WorkspaceManager("test_pipe")
         run_dir = wm.create_run()
         wm.set_status(run_dir, "completed")
@@ -224,7 +224,7 @@ class TestWorkspaceManagerDetectCrashed:
         assert crashed == []
 
     def test_detects_running_as_crashed(self, tmp_path, monkeypatch):
-        monkeypatch.setattr("workspace.manager.Path.home", lambda: tmp_path)
+        monkeypatch.setattr("workspace.manager._WORKSPACES_ROOT", tmp_path)
         wm = WorkspaceManager("test_pipe")
         run_dir = wm.create_run()
         wm.set_status(run_dir, "running")
@@ -236,7 +236,7 @@ class TestWorkspaceManagerDetectCrashed:
         assert meta["status"] == "crashed"
 
     def test_skips_non_run_dirs(self, tmp_path, monkeypatch):
-        monkeypatch.setattr("workspace.manager.Path.home", lambda: tmp_path)
+        monkeypatch.setattr("workspace.manager._WORKSPACES_ROOT", tmp_path)
         wm = WorkspaceManager("test_pipe")
         # Create a non-run directory
         (wm.runs_dir / "not_a_run").mkdir(parents=True, exist_ok=True)
@@ -244,7 +244,7 @@ class TestWorkspaceManagerDetectCrashed:
         assert crashed == []
 
     def test_detect_only_marks_running(self, tmp_path, monkeypatch):
-        monkeypatch.setattr("workspace.manager.Path.home", lambda: tmp_path)
+        monkeypatch.setattr("workspace.manager._WORKSPACES_ROOT", tmp_path)
         wm = WorkspaceManager("test_pipe")
         r1 = wm.create_run()
         r2 = wm.create_run()
@@ -260,7 +260,7 @@ class TestWorkspaceManagerDetectCrashed:
 
 class TestWorkspaceManagerCleanup:
     def test_removes_oldest_beyond_max(self, tmp_path, monkeypatch):
-        monkeypatch.setattr("workspace.manager.Path.home", lambda: tmp_path)
+        monkeypatch.setattr("workspace.manager._WORKSPACES_ROOT", tmp_path)
         wm = WorkspaceManager("test_pipe")
         # Create 5 runs
         for _ in range(5):
@@ -270,7 +270,7 @@ class TestWorkspaceManagerCleanup:
         assert len(wm.list_runs()) == 3
 
     def test_no_removal_below_max(self, tmp_path, monkeypatch):
-        monkeypatch.setattr("workspace.manager.Path.home", lambda: tmp_path)
+        monkeypatch.setattr("workspace.manager._WORKSPACES_ROOT", tmp_path)
         wm = WorkspaceManager("test_pipe")
         for _ in range(3):
             wm.create_run()
@@ -279,7 +279,7 @@ class TestWorkspaceManagerCleanup:
         assert len(wm.list_runs()) == 3
 
     def test_no_runs_dir(self, tmp_path, monkeypatch):
-        monkeypatch.setattr("workspace.manager.Path.home", lambda: tmp_path)
+        monkeypatch.setattr("workspace.manager._WORKSPACES_ROOT", tmp_path)
         wm = WorkspaceManager("test_pipe")
         # Don't create any runs
         removed = wm.cleanup_old_runs()
@@ -288,7 +288,7 @@ class TestWorkspaceManagerCleanup:
 
 class TestWorkspaceManagerFillFinal:
     def test_copies_step_directory(self, tmp_path, monkeypatch):
-        monkeypatch.setattr("workspace.manager.Path.home", lambda: tmp_path)
+        monkeypatch.setattr("workspace.manager._WORKSPACES_ROOT", tmp_path)
         wm = WorkspaceManager("test_pipe")
         run_dir = wm.create_run()
 
@@ -304,14 +304,14 @@ class TestWorkspaceManagerFillFinal:
         assert (final_dir / "data.json").exists()
 
     def test_handles_missing_last_step_dir(self, tmp_path, monkeypatch):
-        monkeypatch.setattr("workspace.manager.Path.home", lambda: tmp_path)
+        monkeypatch.setattr("workspace.manager._WORKSPACES_ROOT", tmp_path)
         wm = WorkspaceManager("test_pipe")
         run_dir = wm.create_run()
         # Should not crash when last_step_dir doesn't exist
         wm.fill_final(run_dir, run_dir / "nonexistent")
 
     def test_copies_subdirectories(self, tmp_path, monkeypatch):
-        monkeypatch.setattr("workspace.manager.Path.home", lambda: tmp_path)
+        monkeypatch.setattr("workspace.manager._WORKSPACES_ROOT", tmp_path)
         wm = WorkspaceManager("test_pipe")
         run_dir = wm.create_run()
 

@@ -1,6 +1,6 @@
 """Parameter management CLI — replaces the old credential/auth system.
 
-Stores persistent key-value parameters in a plain JSON file (~/.ybu/params.json).
+Stores persistent key-value parameters in a plain JSON file (<project>/params.json).
 """
 
 from __future__ import annotations

@@ -31,7 +31,7 @@ def _cmd_list() -> None:
     from workspace.manager import WorkspaceManager
 
     # Use root workspace dir (same as WorkspaceManager uses internally)
-    base_dir = Path.home() / ".ybu" / "workspaces"
+    base_dir = Path(__file__).resolve().parent.parent.parent / "userdata" / "workspaces"
 
     if not base_dir.exists():
         print("(no workspace)")

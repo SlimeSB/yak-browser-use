@@ -38,7 +38,12 @@ release/
 Thumbs.db
 
 # Project runtime data
-.ybu/
+userdata/sessions/
+userdata/workspaces/
+userdata/params.json
+userdata/provider.json
+userdata/presets/*.pipeline.yaml
+!userdata/presets/.gitkeep
 
 # Hermes / tooling
 .hermes/

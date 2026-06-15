@@ -11,7 +11,7 @@ logger = get_logger(__name__)
 
 
 def _get_config_path() -> Path:
-    p = Path.home() / ".ybu" / "provider.json"
+    p = Path(__file__).resolve().parent.parent.parent / "userdata" / "provider.json"
     logger.debug("Config path: %s", p)
     return p
 
@@ -33,7 +33,7 @@ def _load_config() -> dict:
 def create_llm(model: str | None = None) -> object:
     """Create a browser-use LLM instance.
 
-    Reads from ~/.ybu/provider.json first, then falls back to
+    Reads from <project>/provider.json first, then falls back to
     YBU_MODEL / YBU_API_KEY / YBU_API_BASE env vars.
     """
     from browser_use.llm.openai.chat import ChatOpenAI

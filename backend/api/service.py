@@ -20,7 +20,9 @@ from tools.todo_store import TodoStore
 logger = get_logger(__name__)
 
 # Default session directory
-_SESSIONS_DIR = Path.home() / ".ybu" / "sessions"
+_DATA_DIR = Path(__file__).resolve().parent.parent.parent / "userdata"
+_SESSIONS_DIR = _DATA_DIR / "sessions"
+_PRESETS_DIR = _DATA_DIR / "presets"
 
 
 @dataclass
@@ -195,7 +197,7 @@ class Service:
 
     def list_presets(self) -> list[dict]:
         """List saved preset pipelines."""
-        presets_dir = _SESSIONS_DIR / "presets"
+        presets_dir = _PRESETS_DIR
         if not presets_dir.exists():
             return []
         presets: list[dict] = []
@@ -213,7 +215,7 @@ class Service:
 
     def save_preset(self, name: str, pipeline_text: str) -> Path:
         """Save conversation history as a preset pipeline.yaml file."""
-        presets_dir = _SESSIONS_DIR / "presets"
+        presets_dir = _PRESETS_DIR
         presets_dir.mkdir(parents=True, exist_ok=True)
         path = presets_dir / f"{name}.pipeline.yaml"
         path.write_text(pipeline_text, encoding="utf-8")
@@ -343,7 +345,7 @@ class Service:
         import os
         import time
 
-        presets_dir = _SESSIONS_DIR / "presets"
+        presets_dir = _PRESETS_DIR
         preset_path = presets_dir / f"{pipeline_name}.pipeline.yaml"
 
         edit_id = f"auto_{session_id}"

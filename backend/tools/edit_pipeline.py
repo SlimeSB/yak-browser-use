@@ -17,7 +17,7 @@ from utils.logging import get_logger
 logger = get_logger(__name__)
 
 
-PRESETS_DIR = Path.home() / ".ybu" / "sessions" / "presets"
+PRESETS_DIR = Path(__file__).resolve().parent.parent.parent / "userdata" / "presets"
 
 _checkpoints: dict[str, Path] = {}
 _processed_edits: set[str] = set()

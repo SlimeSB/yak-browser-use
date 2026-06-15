@@ -1,6 +1,6 @@
 """WorkspaceManager — manages the workspace directory layout, run lifecycle, and cleanup.
 
-Root: ~/.ybu/workspaces/<pipeline_name>/
+Root: <project>/workspaces/<pipeline_name>/
 Run dirs: runs/<datetime>/
 Version snapshots: versions/
 Tool dir: tools/
@@ -20,13 +20,15 @@ logger = get_logger(__name__)
 DEFAULT_MAX_RUNS = 20
 VALID_STATUSES = frozenset({"running", "completed", "failed", "paused", "cancelled", "crashed"})
 
+_WORKSPACES_ROOT = Path(__file__).resolve().parent.parent.parent / "userdata" / "workspaces"
+
 
 class WorkspaceManager:
     """Manages the workspace directory layout, run lifecycle, and cleanup."""
 
     def __init__(self, pipeline_name: str):
         self.pipeline_name = pipeline_name
-        self.root = (Path.home() / ".ybu" / "workspaces" / pipeline_name).resolve()
+        self.root = (_WORKSPACES_ROOT / pipeline_name).resolve()
         self.runs_dir = self.root / "runs"
         self.versions_dir = self.root / "versions"
         self.tools_dir = self.root / "tools"

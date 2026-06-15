@@ -970,7 +970,7 @@ def register_all_routes(app: FastAPI) -> None:
     async def delete_preset(name: str) -> JSONResponse:
         """Delete a saved preset."""
         import os
-        presets_dir = Path.home() / ".ybu" / "sessions" / "presets"
+        presets_dir = Path(__file__).resolve().parent.parent.parent / "userdata" / "presets"
         path = presets_dir / f"{name}.pipeline.yaml"
         if path.exists():
             os.remove(str(path))
@@ -1003,7 +1003,7 @@ def register_all_routes(app: FastAPI) -> None:
     @app.get("/api/pipelines")
     async def api_list_pipelines() -> JSONResponse:
         """List all workspace pipelines."""
-        workspaces_dir = Path.home() / ".ybu" / "workspaces"
+        workspaces_dir = Path(__file__).resolve().parent.parent.parent / "userdata" / "workspaces"
         pipelines = []
         if workspaces_dir.exists():
             for d in sorted(workspaces_dir.iterdir()):
@@ -1017,7 +1017,7 @@ def register_all_routes(app: FastAPI) -> None:
     @app.get("/api/pipelines/{name}")
     async def api_get_pipeline(name: str) -> JSONResponse:
         """Get a specific pipeline's content."""
-        pipe_path = Path.home() / ".ybu" / "workspaces" / name / "pipeline.yaml"
+        pipe_path = Path(__file__).resolve().parent.parent.parent / "userdata" / "workspaces" / name / "pipeline.yaml"
         if not pipe_path.exists():
             raise APIError("pipeline not found", status_code=404)
         content = pipe_path.read_text(encoding="utf-8")

@@ -8,7 +8,7 @@ from typing import Any
 
 logger = logging.getLogger("ybu.response_logger")
 
-_RESPONSES_DIR = Path.home() / ".ybu" / "sessions" / "responses"
+_RESPONSES_DIR = Path(__file__).resolve().parent.parent.parent / "userdata" / "sessions" / "responses"
 
 
 def _ensure_dir() -> Path:

@@ -128,32 +128,33 @@ class CDPHelpers:
 
     async def js(self, code: str) -> Any:
         result = await self._cdp("Runtime.evaluate", {"expression": code, "returnByValue": True})
-        value = result.get("result", {}).get("value")
-        logger.debug("js: result keys=%s value_type=%s", list(result.keys()) if isinstance(result, dict) else "N/A", type(value).__name__)
-        return value
+        return result.get("result", {}).get("value")
 
     async def _inject_simplify_js(self, mode: str) -> Any:
         script = _load_simplify_dom_js()
         if script is None:
-            logger.warning("_inject_simplify_js: simplify-dom.js not loaded")
             return None
         safe_mode = _json.dumps(mode)
         expression = f"{script}\nsimplifyDom({{mode: {safe_mode}}})"
         try:
             result = await self.js(expression)
-            logger.debug("_inject_simplify_js: mode=%s result=%s", mode, result)
             return result
-        except Exception as e:
-            logger.warning("simplify-dom.js execution failed for mode=%s: %s", mode, e)
+        except Exception:
+            logger.warning("simplify-dom.js execution failed for mode=%s", mode)
             return None
 
     async def capture_snapshot_interactive(self) -> dict:
         js_result = await self._inject_simplify_js("interactive")
         if js_result and isinstance(js_result, dict) and js_result.get("elements") is not None:
-            result = {"elements": js_result.get("elements", []), "mode": "interactive"}
+            elements = js_result.get("elements", [])
+            result = {"elements": elements, "mode": "interactive"}
             if js_result.get("truncated"):
                 result["truncated"] = True
                 result["total_found"] = js_result.get("total_found", 0)
+            try:
+                await self.add_dom_highlights(elements)
+            except Exception:
+                logger.warning("auto-highlight after interactive snapshot failed", exc_info=True)
             try:
                 meta = await self._cdp("Runtime.evaluate", {
                     "expression": "JSON.stringify({url: window.location.href, title: document.title})",
@@ -172,6 +173,10 @@ class CDPHelpers:
     async def capture_snapshot_simplified(self) -> dict:
         js_result = await self._inject_simplify_js("simplified")
         if js_result and isinstance(js_result, dict) and js_result.get("summary") is not None:
+            try:
+                await self.add_dom_highlights()
+            except Exception:
+                logger.warning("auto-highlight after simplified snapshot failed", exc_info=True)
             return {
                 "summary": js_result.get("summary", ""),
                 "lists": js_result.get("lists", []),
@@ -194,17 +199,11 @@ class CDPHelpers:
         """
         if elements is None:
             js_result = await self._inject_simplify_js("interactive")
-            logger.debug("add_dom_highlights: js_result type=%s keys=%s",
-                         type(js_result).__name__,
-                         list(js_result.keys()) if isinstance(js_result, dict) else "N/A")
             if not js_result or not isinstance(js_result, dict):
-                logger.warning("add_dom_highlights: js_result is None or not dict, returning early")
                 return {"ok": True, "count": 0, "element_map": {}}
             elements = js_result.get("elements", [])
-            logger.debug("add_dom_highlights: got %d elements", len(elements))
 
         if not elements:
-            logger.warning("add_dom_highlights: elements is empty, returning early")
             self._element_map = {}
             return {"ok": True, "count": 0, "element_map": {}}
 
@@ -228,7 +227,7 @@ class CDPHelpers:
         elements_json = _json.dumps(elements)
         js_code = (
             "(function(){"
-            "if(!document.body)return JSON.stringify({error:'no document.body'});"
+            "if(!document.body)return;"
             "var old=document.getElementById('ybu-highlights');"
             "if(old)old.remove();"
             "var container=document.createElement('div');"
@@ -236,7 +235,6 @@ class CDPHelpers:
             "container.style.cssText='position:fixed;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:2147483646;';"
             "document.body.appendChild(container);"
             "var elements=" + elements_json + ";"
-            "var created=0;"
             "for(var i=0;i<elements.length;i++){"
             "var el=elements[i];"
             "var div=document.createElement('div');"
@@ -252,14 +250,49 @@ class CDPHelpers:
             "padding:1px 4px;border-radius:2px;line-height:1.2;white-space:nowrap;pointer-events:none;';"
             "div.appendChild(badge);"
             "container.appendChild(div);"
-            "created++;"
             "}"
-            "return JSON.stringify({created:created,total:elements.length});"
+            "var _ybu_redrawTimer=null;"
+            "var _ybu_mo=null;"
+            "var _ybu_ro=null;"
+            "function _ybu_redrawHighlights(){"
+            "if(!window.simplifyDom)return;"
+            "var result=window.simplifyDom({mode:'interactive'});"
+            "if(!result||!result.elements)return;"
+            "var els=result.elements;"
+            "while(container.firstChild)container.removeChild(container.firstChild);"
+            "for(var i=0;i<els.length;i++){"
+            "var el=els[i];"
+            "var div=document.createElement('div');"
+            "div.setAttribute('data-ybu-highlight',el.ref);"
+            "div.style.cssText='position:absolute;"
+            "left:'+el.x+'px;top:'+el.y+'px;"
+            "width:'+el.width+'px;height:'+el.height+'px;"
+            "border:2px dashed #3b82f6;border-radius:2px;pointer-events:none;';"
+            "var badge=document.createElement('span');"
+            "badge.textContent=el.ref;"
+            "badge.style.cssText='position:absolute;top:-12px;left:-2px;"
+            "background:#3b82f6;color:#fff;font-size:10px;font-family:Arial,sans-serif;"
+            "padding:1px 4px;border-radius:2px;line-height:1.2;white-space:nowrap;pointer-events:none;';"
+            "div.appendChild(badge);"
+            "container.appendChild(div);"
+            "}"
+            "}"
+            "function _ybu_scheduleRedraw(){"
+            "if(_ybu_redrawTimer)clearTimeout(_ybu_redrawTimer);"
+            "_ybu_redrawTimer=setTimeout(_ybu_redrawHighlights,300);"
+            "}"
+            "if(window.MutationObserver){"
+            "_ybu_mo=new MutationObserver(function(){_ybu_scheduleRedraw();});"
+            "_ybu_mo.observe(document.body,{childList:true,subtree:true,attributes:true,attributeFilter:['style','class','hidden']});"
+            "}"
+            "if(window.ResizeObserver){"
+            "_ybu_ro=new ResizeObserver(function(){_ybu_scheduleRedraw();});"
+            "_ybu_ro.observe(document.documentElement);"
+            "}"
             "})()"
         )
         try:
-            diag = await self.js(js_code)
-            logger.debug("add_dom_highlights: highlight JS returned: %s", diag)
+            await self.js(js_code)
         except Exception as e:
             logger.error("add_dom_highlights: js injection failed: %s", e)
         return {"ok": True, "count": len(elements), "element_map": dict(self._element_map)}

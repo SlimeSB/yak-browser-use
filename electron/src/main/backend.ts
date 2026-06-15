@@ -63,7 +63,7 @@ export class PythonBackend {
   private _pidFile: string | null = null;
 
   async start(): Promise<number> {
-    const serverDir = join(__dirname, '../../..');
+    const serverDir = join(__dirname, '../../../backend');
     logger.info('Starting Python backend...');
 
     _cleanupZombieBackends();

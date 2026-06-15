@@ -49,13 +49,6 @@ _DEFAULT_LLM_RETRY_MAX_MS = 30000
 _MAX_CONSECUTIVE_LLM_FAILURES = 5
 
 
-async def _safe_inject_highlights(cdp_helpers: object) -> None:
-    try:
-        await cdp_helpers.add_dom_highlights()  # type: ignore[union-attr]
-    except Exception:
-        pass
-
-
 async def run_conversation_loop(
     *,
     llm_call: Callable,
@@ -118,9 +111,6 @@ async def run_conversation_loop(
     last_content_with_tools: str = ""
 
     # Main loop
-    if cdp_helpers is not None and hasattr(cdp_helpers, "add_dom_highlights"):
-        asyncio.create_task(_safe_inject_highlights(cdp_helpers))
-
     while not check_exit_conditions(budget, interrupt_check, guardrail_state):
         turn_count += 1
         turn_ctx = build_turn_context(guardrail_state=guardrail_state)

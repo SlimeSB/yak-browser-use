@@ -286,6 +286,9 @@ export default function App() {
                     : e
                 ));
               }
+              window.electronAPI.listPipelines().then(r => {
+                if (r.pipelines) setPipelines(r.pipelines);
+              }).catch(() => {});
             } else {
               // Pipeline events
               setEvents(prev => [...prev, { type: et, timestamp: event.timestamp || (event._ts != null ? new Date(event._ts * 1000).toISOString() : new Date().toISOString()), node_name: event.step || event.pipeline || '', data: event }]);

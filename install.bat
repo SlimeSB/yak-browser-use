@@ -16,6 +16,7 @@ if %ERRORLEVEL% neq 0 (
 )
 
 echo [1/3] Installing Python dependencies...
+cd /d "%~dp0backend"
 uv sync
 if %ERRORLEVEL% neq 0 (
     echo Python dependency installation failed
@@ -44,7 +45,7 @@ echo.
 echo ============================================
 echo   Setup complete!
 echo.
-echo  Run CLI: python __main__.py --help
+echo  Run CLI: cd backend ^&^& uv run python __main__.py --help
 echo  Run Electron: cd electron ^&^& npm run electron:dev
 echo  Or double-click run.bat
 echo ============================================
