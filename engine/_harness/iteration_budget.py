@@ -70,6 +70,16 @@ class IterationBudget:
         self._used = 0
         self._paused = False
 
+    def exhaust(self) -> None:
+        """Immediately exhaust the budget by setting used to max_total.
+
+        Used by pipeline_finish tool to trigger natural exit from
+        conversation_loop without modifying the while loop.
+        """
+        self._used = self.max_total
+        self._paused = False
+        logger.info("Iteration budget manually exhausted: used=%d, max_total=%d", self._used, self.max_total)
+
     def to_dict(self) -> dict:
         return {
             "max_total": self.max_total,

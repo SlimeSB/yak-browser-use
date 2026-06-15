@@ -37,6 +37,8 @@ def main() -> None:
     run_p.add_argument("--convert", action="store_true", help="Force conversion before execution")
     run_p.add_argument("--verbose", action="store_true", help="Emit full event stream")
     run_p.add_argument("--mode", default="auto", choices=["auto", "static", "learn", "replay"])
+    run_p.add_argument("--engine", default="programmatic", choices=["programmatic", "agent"],
+                       help="Execution engine: programmatic (three-tier fallback) or agent (LLM-driven)")
     run_p.add_argument(
         "-D", "--param", action="append", default=[], dest="params",
         help="Pass pipeline parameters as key=value (repeatable). e.g. -D keyword=\"pizza oven\" -D price_min=80",
@@ -179,7 +181,7 @@ def main() -> None:
             if "=" in p:
                 k, v = p.split("=", 1)
                 params[k.strip()] = v.strip()
-        asyncio.run(_cmd_run(args.path, convert=args.convert, verbose=args.verbose, mode=args.mode, params=params))
+        asyncio.run(_cmd_run(args.path, convert=args.convert, verbose=args.verbose, mode=args.mode, params=params, engine=args.engine))
 
     elif args.command == "chrome":
         from cli.chrome import dispatch as chrome_dispatch  # noqa: E402

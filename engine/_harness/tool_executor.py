@@ -8,6 +8,7 @@ use the same executor core.
 from __future__ import annotations
 
 import asyncio
+import json
 import time
 from pathlib import Path
 from typing import Callable
@@ -141,6 +142,9 @@ async def execute_tool_calls_sequential(
 
         _append_tool_result(messages, tool_call_id, fn_name, result_text)
 
+        if result_dict.get("_pipeline_finish"):
+            break
+
         if ok and fn_name in ("browser_goto", "browser_click", "browser_fill") and cdp_helpers is not None:
             if hasattr(cdp_helpers, "add_dom_highlights"):
                 try:
@@ -208,6 +212,15 @@ async def _execute_single_tool_call(
                         return cached_result
 
                 return await execute_browser_op(op_type, fn_args, cdp_helpers)
+
+            elif fn_name == "pipeline_finish":
+                status = fn_args.get("status", "")
+                if status not in ("completed", "failed"):
+                    status = "completed"
+                summary = fn_args.get("summary", "")
+                if budget is not None:
+                    budget.exhaust()
+                return {"ok": True, "status": status, "summary": summary, "_pipeline_finish": True}
 
             elif fn_name.startswith("pipeline_"):
                 from engine._harness.pipeline_tools import (
@@ -352,6 +365,8 @@ def _append_tool_result(
 
 def _format_tool_result(tool_name: str, result_dict: dict) -> str:
     if result_dict.get("ok"):
+        if result_dict.get("_pipeline_finish"):
+            return json.dumps({"status": result_dict.get("status", ""), "summary": result_dict.get("summary", "")}, ensure_ascii=False)
         r = result_dict.get("result", "")
         if isinstance(r, str):
             return r

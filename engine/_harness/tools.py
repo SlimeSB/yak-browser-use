@@ -399,6 +399,33 @@ PIPELINE_CREATE_TOOL: dict[str, Any] = {
     },
 }
 
+PIPELINE_FINISH_TOOL: dict[str, Any] = {
+    "type": "function",
+    "function": {
+        "name": "pipeline_finish",
+        "description": (
+            "Signal that the pipeline execution is complete. Call this when you "
+            "have finished all remaining pipeline steps. Use status='completed' "
+            "for success or status='failed' with a summary if you cannot complete."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "status": {
+                    "type": "string",
+                    "enum": ["completed", "failed"],
+                    "description": "Whether the pipeline completed successfully or failed.",
+                },
+                "summary": {
+                    "type": "string",
+                    "description": "Brief summary of what was accomplished or why it failed.",
+                },
+            },
+            "required": ["status"],
+        },
+    },
+}
+
 PIPELINE_TOOLS: list[dict[str, Any]] = [
     PIPELINE_LOAD_TOOL,
     PIPELINE_LIST_TOOL,
@@ -406,6 +433,7 @@ PIPELINE_TOOLS: list[dict[str, Any]] = [
     PIPELINE_ADD_STEP_TOOL,
     PIPELINE_REMOVE_STEP_TOOL,
     PIPELINE_CREATE_TOOL,
+    PIPELINE_FINISH_TOOL,
 ]
 
 RECORD_STEP_TOOL: dict[str, Any] = {

@@ -17,6 +17,7 @@ async def assess_page_state(
     failed_op: dict,
     error: str,
 ) -> tuple[bool, int]:
+    # DEPRECATED: 已被 Agent Swimlane 替代，保留仅为向后兼容
     """Assess whether the current page state is recoverable after a failure.
 
     Captures URL, title, and body text from the current page, then (in a
@@ -151,6 +152,7 @@ async def generate_recovery_plan(
     page_state: tuple[bool, int],
     pipeline_name: str,
 ) -> list[dict] | None:
+    # DEPRECATED: 已被 RuntimePlanner 替代，保留仅为向后兼容
     """Generate a recovery plan based on page state and compensation history.
 
     In a full implementation this would call an LLM to produce replacement

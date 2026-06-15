@@ -19,6 +19,7 @@ async def _cmd_run(
     verbose: bool = False,
     mode: str = "auto",
     params: dict | None = None,
+    engine: str = "programmatic",
 ) -> None:
     """Execute pipeline.yaml or convert + execute.
 
@@ -28,6 +29,7 @@ async def _cmd_run(
         verbose: Print full event stream output.
         mode: Pipeline execution mode (auto, static, learn, replay).
         params: Pipeline parameters from CLI (-D key=value).
+        engine: Execution engine: "programmatic" (three-tier fallback) or "agent" (LLM-driven).
     """
     input_path = Path(path)
     if not input_path.exists():
@@ -42,7 +44,7 @@ async def _cmd_run(
         if content is None:
             raise SystemExit(1)
 
-    result = await _execute_pipeline(input_path, content, params=params)
+    result = await _execute_pipeline(input_path, content, params=params, engine=engine)
     _print_summary(result)
 
     browser = result.get("browser")
@@ -89,13 +91,14 @@ async def _convert_to_pipeline(path: str, content: str) -> str | None:
     return pipeline_text
 
 
-async def _execute_pipeline(input_path: Path, content: str, params: dict | None = None) -> dict:
+async def _execute_pipeline(input_path: Path, content: str, params: dict | None = None, engine: str = "programmatic") -> dict:
     """Parse and execute a pipeline.
 
     Args:
         input_path: Path object for the input file.
         content: pipeline.yaml text content.
         params: CLI-injected parameters.
+        engine: "programmatic" or "agent".
 
     Returns:
         Dict containing parsed, ctx, browser, daemon, elapsed.
@@ -178,14 +181,58 @@ async def _execute_pipeline(input_path: Path, content: str, params: dict | None 
     if guardian.approval_steps:
         logger.info("  Guardian enabled: approval steps=%s", guardian.approval_steps)
 
-    ctx = await run_pipeline(
-        pipeline_name=parsed.name,
-        steps=resolved_steps,
-        cdp_helpers=browser,
-        pipeline_path=input_path,
-        frontmatter=parsed.frontmatter,
-        guardian=guardian,
-    )
+    from engine.agent import create_pipeline_llm_call
+    llm_call = create_pipeline_llm_call()
+
+    if engine == "agent":
+        import shutil as _shutil
+        import tempfile
+        from engine._harness.conversation_loop import run_preset_loop
+        from engine._harness.iteration_budget import IterationBudget
+        from engine.state import RunContext
+
+        run_dir = Path(tempfile.mkdtemp(prefix="ybu_agent_"))
+        ctx = RunContext(
+            pipeline_name=parsed.name,
+            run_id=run_dir.name,
+            run_dir=run_dir,
+            version="0",
+        )
+
+        budget = IterationBudget(max_total=50)
+        try:
+            result = await run_preset_loop(
+                step_defs=resolved_steps,
+                frontmatter=parsed.frontmatter,
+                llm_call=llm_call,
+                cdp_helpers=browser,
+                budget=budget,
+            )
+        except Exception:
+            _shutil.rmtree(str(run_dir), ignore_errors=True)
+            raise
+
+        _shutil.rmtree(str(run_dir), ignore_errors=True)
+
+        if result.interrupted:
+            ctx.errors.append({"step": "_agent_", "code": "AGENT_ERROR", "message": "agent interrupted"})
+        elif result.budget.is_exhausted:
+            pipeline_finished = any(
+                msg.get("role") == "tool" and msg.get("name") == "pipeline_finish"
+                for msg in result.messages
+            )
+            if not pipeline_finished:
+                ctx.errors.append({"step": "_agent_", "code": "AGENT_ERROR", "message": "budget exhausted"})
+    else:
+        ctx = await run_pipeline(
+            pipeline_name=parsed.name,
+            steps=resolved_steps,
+            cdp_helpers=browser,
+            pipeline_path=input_path,
+            frontmatter=parsed.frontmatter,
+            guardian=guardian,
+            llm_call=llm_call,
+        )
 
     return {
         "parsed": parsed,

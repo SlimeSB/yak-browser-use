@@ -281,3 +281,43 @@ def _create_chat_llm_call(
     _call._streaming_active = lambda: _streaming_active
 
     return _call
+
+
+def create_pipeline_llm_call():
+    """Create a simple llm_call for pipeline fallback (RuntimePlanner + Agent Swimlane).
+
+    Returns an async function that takes (messages, tools) and returns
+    an object with .content and .tool_calls attributes.
+    No streaming callbacks — designed for programmatic use.
+    """
+    from utils.browser import create_llm
+    from browser_use.llm.messages import UserMessage, SystemMessage, AssistantMessage
+    from browser_use.llm.messages import ToolCall as BUMessageToolCall
+
+    llm = create_llm()
+
+    async def _call(messages: list[dict], tools: list[dict]) -> object:
+        converted: list = []
+        for msg in messages:
+            role = msg.get("role", "user")
+            content = msg.get("content", "")
+            if role == "system":
+                converted.append(SystemMessage(content=content))
+            elif role == "assistant":
+                tool_calls_data = msg.get("tool_calls")
+                if tool_calls_data:
+                    tc_objs = [BUMessageToolCall(**tc) for tc in tool_calls_data]
+                    converted.append(AssistantMessage(content=content, tool_calls=tc_objs))
+                else:
+                    converted.append(AssistantMessage(content=content))
+            elif role == "tool":
+                converted.append(UserMessage(content=f"[tool result] {content}"))
+            else:
+                converted.append(UserMessage(content=content))
+
+        kwargs: dict = {"messages": converted}
+        if tools:
+            kwargs["tools"] = tools
+        return await llm.ainvoke(**kwargs)
+
+    return _call

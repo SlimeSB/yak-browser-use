@@ -31,6 +31,7 @@ ERROR_CODES: dict[str, str] = {
     "INPUT_ERROR": "Input file not found or unreadable",
     "BROWSER_ERROR": "Browser operation failed",
     "BROWSER_UNAVAILABLE": "Browser not available",
+    "CHECK_FAILED": "Step check validation failed",
     "GUARDIAN_ERROR": "Guardian validation failed",
     "PATH_ERROR": "Path security check failed",
     "LLM_ERROR": "LLM tool code generation failed",
