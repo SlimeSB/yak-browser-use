@@ -41,6 +41,7 @@ export interface ChatMessage {
   content: string;
   reasoning?: string;
   toolName?: string;
+  toolCallId?: string;
   toolOk?: boolean;
   toolDuration?: number;
 }

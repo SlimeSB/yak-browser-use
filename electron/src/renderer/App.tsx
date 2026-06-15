@@ -183,6 +183,7 @@ export default function App() {
       if (stopped) return;
       try {
         const port = await window.electronAPI.getPort();
+        if (stopped) return;
         ws = new WebSocket(`ws://127.0.0.1:${port}/ws/events`);
         ws.onmessage = (ev) => {
           try {
@@ -195,14 +196,16 @@ export default function App() {
                 role: 'tool',
                 content: '',
                 toolName: event.tool_name || '',
+                toolCallId: event.id || '',
                 toolOk: undefined,
               }]);
               setEvents(prev => [...prev, { type: et, timestamp: event.timestamp || (event._ts != null ? new Date(event._ts * 1000).toISOString() : new Date().toISOString()), node_name: event.step || event.pipeline || '', data: event }]);
             } else if (et === 'chat.tool_end') {
+              const toolCallId: string = event.id || '';
               setChatMessages(prev => {
                 const next = [...prev];
                 for (let i = next.length - 1; i >= 0; i--) {
-                  if (next[i].role === 'tool' && next[i].toolName === event.tool_name && next[i].toolOk === undefined) {
+                  if (next[i].role === 'tool' && next[i].toolCallId === toolCallId) {
                     next[i] = {
                       ...next[i],
                       toolOk: event.ok,
