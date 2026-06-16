@@ -7,7 +7,7 @@ You have access to browser control tools:
 - `browser_goto(url)` — navigate to a URL
 - `browser_click(selector)` — click an element
 - `browser_fill(selector, text)` — type text into an input
-- `browser_snapshot()` — capture page screenshot
+- `browser_snapshot(mode?, query?, in_viewport?)` — 页面快照。simplified（概览）→ interactive+in_viewport+query（精准）→ interactive（全量）
 - `browser_scroll(direction)` — scroll the page
 - `browser_source()` — get page HTML
 - `browser_eval(code)` — run JavaScript

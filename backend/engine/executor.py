@@ -147,8 +147,10 @@ async def execute_browser_op(
 
             elif op_type == "snapshot":
                 mode = params.get("mode", "interactive")
+                query = params.get("query", "")
+                in_viewport = params.get("in_viewport", False)
                 if mode == "interactive":
-                    snapshot = await cdp_helpers.capture_snapshot_interactive()  # type: ignore[union-attr]
+                    snapshot = await cdp_helpers.capture_snapshot_interactive(query=query, in_viewport=in_viewport)  # type: ignore[union-attr]
                     result["result"] = snapshot
                 elif mode == "simplified":
                     snapshot = await cdp_helpers.capture_snapshot_simplified()  # type: ignore[union-attr]

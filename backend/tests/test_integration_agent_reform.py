@@ -61,7 +61,7 @@ class MockCDP:
                 return el.get("visible", True)
         return False
 
-    async def capture_snapshot_interactive(self):
+    async def capture_snapshot_interactive(self, query: str = "", in_viewport: bool = False):
         return {
             "elements": self._elements,
             "url": self._url,
@@ -131,7 +131,7 @@ class TestSnapshotInteractiveLifecycle:
         assert "@e1" in result_text  # element refs now included in summary
 
     def test_subsequent_element_lookup_hits_scratchpad(self):
-        elements = [{"ref": "@e1", "tag": "a", "text": "Link", "selector": "a.link"}]
+        elements = [{"ref": "@e_1", "tag": "a", "text": "Link", "selector": "a.link"}]
         store_scratchpad({"elements": elements, "url": "https://x.com", "title": "X"})
 
         result = _try_scratchpad_element_lookup({"ref": "@e1"})
@@ -264,14 +264,14 @@ class TestBrowserSourceLifecycle:
 
     def test_source_then_snapshot_preserves_element_map(self):
         store_scratchpad({
-            "elements": [{"ref": "@e1", "selector": "button#go"}],
+            "elements": [{"ref": "@e_1", "selector": "button#go"}],
             "url": "https://x.com",
             "title": "X",
         })
         store_raw_html("<html>big</html>")
 
         sp = get_scratchpad()
-        assert sp.element_map == {"@e1": "button#go"}
+        assert sp.element_map == {"@e_1": "button#go"}
         assert sp.raw_html == "<html>big</html>"
         assert sp.url == "https://x.com"
 
@@ -363,7 +363,7 @@ class TestElementLookupDualPath:
 
     def test_scratchpad_path_receives_full_element_info(self):
         elements = [
-            {"ref": "@e3", "tag": "input", "type": "text", "text": "",
+            {"ref": "@e_3", "tag": "input", "type": "text", "text": "",
              "selector": "input[name='q']"},
         ]
         store_scratchpad({"elements": elements, "url": "https://x.com", "title": "X"})
@@ -372,7 +372,7 @@ class TestElementLookupDualPath:
         assert result["result"]["tag"] == "input"
         assert result["result"]["type"] == "text"
         assert result["result"]["selector"] == "input[name='q']"
-        assert result["result"]["ref"] == "@e3"
+        assert result["result"]["ref"] == "@e_3"
 
     def test_scratchpad_path_with_partial_elements_returns_selector_only(self):
         store_scratchpad({
@@ -380,12 +380,12 @@ class TestElementLookupDualPath:
             "url": "https://x.com",
             "title": "X",
         })
-        get_scratchpad().element_map = {"@e7": "div.content"}
+        get_scratchpad().element_map = {"@e_7": "div.content"}
         get_scratchpad().elements = []
 
         result = _try_scratchpad_element_lookup({"ref": "@e7"})
         assert result is not None
-        assert result["result"]["ref"] == "@e7"
+        assert result["result"]["ref"] == "@e_7"
         assert result["result"]["selector"] == "div.content"
         assert "tag" not in result["result"]
 

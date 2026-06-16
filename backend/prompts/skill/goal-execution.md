@@ -8,15 +8,16 @@
 2. **逐步执行**：按顺序执行每个步骤，使用 `browser_*` 工具完成浏览器操作
 3. **每步记录**：每个步骤成功完成后调 `record_step` 写入 pipeline
 4. **不确定问用户**：遇到模糊、多选、验证等不确定情况时，输出文字描述并等待用户回复
-5. **失败恢复**：某步失败时，用 `browser_snapshot()` 确认当前页面状态，分析原因后重试或调整策略
+5. **失败恢复**：某步失败时，用 `browser_snapshot(mode="simplified")` 确认当前页面状态，分析原因后重试或调整策略
 
 ### 工具使用优先级
 
 | 场景 | 优先工具 | 说明 |
 |------|---------|------|
-| 了解页面状态 | `browser_snapshot()` | 默认 interactive 模式，返回 @eN 可交互元素列表 |
+| 了解页面结构 | `browser_snapshot(mode="simplified")` | token 最少，含标题/链接/表格 |
+| 找可交互元素 | `browser_snapshot(mode="interactive", in_viewport=true, query="关键词")` | 精准匹配，减少噪音 |
 | 查看完整 HTML | `browser_source()` | 大数据自动缓存到 scratchpad |
-| 查询元素详情 | `browser_get_element_by_number(@eN)` | 优先从缓存读取，无需 CDP 调用 |
+| 查询元素详情 | `browser_get_element_by_number(@e_XXXXX)` | 优先从缓存读取，无需 CDP 调用 |
 | 执行操作 | `browser_click` / `browser_fill` / `browser_goto` | 直接操作 |
 
 ### 记录规则
@@ -27,7 +28,7 @@
 
 ### 失败恢复
 
-1. 某步操作失败 → 调 `browser_snapshot()` 确认当前页面状态
+1. 某步操作失败 → 调 `browser_snapshot(mode="simplified")` 确认当前页面状态
 2. 元素不存在 → 用 `browser_get_element_by_number` 重新定位，或换用其他选择器
 3. 重试 1-2 次后仍失败 → 输出文字告诉用户当前情况，询问如何继续
 

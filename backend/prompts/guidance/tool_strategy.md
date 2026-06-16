@@ -5,15 +5,17 @@ Prefer these tools for most operations:
 - `browser_goto(url)` — navigate to a URL
 - `browser_click(selector)` — click an element
 - `browser_fill(selector, text)` — fill an input field
-- `browser_snapshot(mode?)` — capture page snapshot (interactive/full/simplified)
+- `browser_snapshot(mode?, query?, in_viewport?)` — 页面快照。推荐渐进式：simplified（概览）→ interactive+in_viewport+query（精准）→ interactive+query（全量搜）→ interactive（全量）
 - `browser_scroll(direction)` — scroll the page (up/down)
 - `browser_source(cached?)` — get the full page HTML source
 - `browser_eval(js_code)` — execute JavaScript on the page
-- `browser_get_element_by_number(ref)` — get element details by @eN or @e_XXXXX reference
+- `browser_get_element_by_number(ref)` — get element details by @e_XXXXX reference
 
 ### 页面内容与滚动
-- `browser_snapshot(mode="interactive")` 只返回**当前视口内可见**的交互元素
-- 如果要操作页面上方/下方的元素，先 `browser_scroll` 滚动，再 `browser_snapshot` 刷新
+- 先用 `browser_snapshot(mode="simplified")` 了解页面结构（token 最少）
+- 有目标后用 `browser_snapshot(mode="interactive", in_viewport=true, query="关键词")` 精准找
+- 视口内没找到再用 `query` 全量搜，最后才用无参数全量
+- 如果要操作页面上方/下方的元素，先 `browser_scroll` 滚动到目标区域，再用 `in_viewport=true` 刷新 snapshot
 - 同一元素在多次 snapshot 中的 `@e_XXXXX` 编号是**稳定不变的**（只要 DOM 不重建）
 
 ### When to use goal_run
@@ -21,7 +23,7 @@ Use `goal_run(description)` to set a complex multi-step goal. After calling goal
 - `todo` to break the goal into 3-6 concrete steps
 - `browser_*` tools to execute each step
 - `record_step` to save each successful step
-- `browser_snapshot()` to verify page state between steps
+- `browser_snapshot(mode="simplified")` to verify page state between steps
 
 Typical scenarios:
 - Multi-page workflows (search → filter → select → checkout)

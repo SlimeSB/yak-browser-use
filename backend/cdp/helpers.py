@@ -19,6 +19,7 @@ def _build_element_info(el: dict) -> dict:
         "text": el.get("text", ""),
         "selector": el.get("selector", ""),
         "value": el.get("value", ""),
+        "role": el.get("role", ""),
         "x": el.get("x", 0),
         "y": el.get("y", 0),
         "width": el.get("width", 0),
@@ -54,6 +55,8 @@ def _is_interactive(tag: str, attrs: dict[str, str]) -> bool:
         return True
     cedit = attrs.get("contenteditable")
     if cedit is not None and cedit.lower() in ("true", ""):
+        return True
+    if tag in ("div", "span") and any(k.startswith("data-v-") or k.startswith("data-react-") for k in attrs):
         return True
     return False
 
@@ -230,6 +233,8 @@ class CDPHelpers:
                 "tag": tag,
                 "type": elem_type,
                 "text": "",
+                "value": attrs.get("value", ""),
+                "role": attrs.get("role", ""),
                 "x": 0, "y": 0, "width": 0, "height": 0,
             })
 
@@ -280,10 +285,67 @@ class CDPHelpers:
             logger.debug("_get_element_positions failed", exc_info=True)
         return elements
 
-    async def capture_snapshot_interactive(self) -> dict:
+    async def _enrich_elements_with_text(self, elements: list[dict]) -> list[dict]:
+        """Batch-fetch textContent for interactive elements via JS."""
+        if not elements:
+            return elements
+        sels = [e["selector"] for e in elements]
+        js = (
+            "(function(){"
+            "var sels=" + _json.dumps(sels) + ";"
+            "var out=[];"
+            "var idx={};"
+            "for(var i=0;i<sels.length;i++){"
+            "var si=idx[sels[i]]||0;idx[sels[i]]=si+1;"
+            "try{"
+            "var all=document.querySelectorAll(sels[i]);"
+            "if(all.length>si){"
+            "var t=all[si].textContent||all[si].innerText||'';"
+            "out.push(t.trim().substring(0,100));"
+            "}else{out.push('');}"
+            "}catch(e){out.push('');}"
+            "}"
+            "return JSON.stringify(out);"
+            "})()"
+        )
+        try:
+            raw = await self.js(js)
+            if raw:
+                texts = _json.loads(raw)
+                for el, text in zip(elements, texts):
+                    el["text"] = text
+        except Exception:
+            logger.debug("_enrich_elements_with_text failed", exc_info=True)
+        return elements
+
+    async def capture_snapshot_interactive(self, query: str = "", in_viewport: bool = False) -> dict:
         try:
             elements = await self._discover_all_interactive()
             enriched = await self._get_element_positions(elements)
+            enriched = await self._enrich_elements_with_text(enriched)
+
+            if in_viewport:
+                vp_w = await self.js("window.innerWidth") or 1920
+                vp_h = await self.js("window.innerHeight") or 1080
+                enriched = [
+                    el for el in enriched
+                    if el["y"] + el["height"] > 0 and el["y"] < vp_h
+                    and el["x"] + el["width"] > 0 and el["x"] < vp_w
+                ]
+
+            if query:
+                q = query.lower()
+                if q.startswith("#") or q.startswith("."):
+                    enriched = [el for el in enriched if q in el.get("selector", "").lower()]
+                else:
+                    enriched = [
+                        el for el in enriched
+                        if q in el.get("text", "").lower()
+                        or q in el.get("tag", "").lower()
+                        or q in el.get("type", "").lower()
+                        or q in el.get("role", "").lower()
+                    ]
+
             for el in enriched:
                 ref = el.get("ref", "")
                 if ref:

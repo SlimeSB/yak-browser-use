@@ -72,14 +72,22 @@ BROWSER_TOOLS: list[dict[str, Any]] = [
         "type": "function",
         "function": {
             "name": "browser_snapshot",
-            "description": "Capture a screenshot and HTML snapshot of the current page. In interactive mode, elements are labeled with @eN (sequential) or @e_XXXXX (stable CDP backend_node_id) references.",
+            "description": "Capture page snapshot. 推荐渐进式使用：simplified 看概览 → interactive+in_viewport+query 精准找 → interactive+query 全量搜 → interactive 全量看。",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "mode": {
                         "type": "string",
                         "enum": ["interactive", "full", "simplified"],
-                        "description": "Snapshot mode: interactive (default, returns @eN or @e_XXXXX element list), full (screenshot + HTML), simplified (text summary only).",
+                        "description": "simplified（页面概览，含标题/链接/表格，token 最少）→ interactive（可交互元素列表，带 @e_XXXXX ref，token 较多）→ full（截图+HTML，token 最多，一般不需要）。",
+                    },
+                    "query": {
+                        "type": "string",
+                        "description": "仅 interactive 模式有效。不以 #/. 开头时按文本/tag/type/role 模糊匹配；以 # 或 . 开头时按 CSS selector 精确匹配。过滤后只有匹配元素会注册高亮和 ref 查找。如果没找到目标，省略 query 重新调用获取全量。",
+                    },
+                    "in_viewport": {
+                        "type": "boolean",
+                        "description": "仅 interactive 模式有效。为 true 时只返回当前屏幕可见区域内的元素，减少无关噪音。默认 false（全量）。",
                     },
                 },
             },
@@ -144,13 +152,13 @@ BROWSER_TOOLS: list[dict[str, Any]] = [
         "type": "function",
         "function": {
             "name": "browser_get_element_by_number",
-            "description": "Get detailed information about an interactive element by its reference number (e.g. @e3, @e_12345). Looks up from the most recent browser_snapshot cache first, falls back to CDP if not found. Use this to check element details (tag, text, selector) before clicking or filling.",
+            "description": "Get detailed information about an interactive element by its reference number (e.g. @e_12345). Looks up from the most recent browser_snapshot cache first, falls back to CDP if not found. Use this to check element details (tag, text, selector) before clicking or filling.",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "ref": {
                         "type": "string",
-                        "description": "Element reference, e.g. '@e3', 'e3', '3' (sequential) or '@e_12345', 'e_12345', '12345' (stable CDP backend_node_id).",
+                        "description": "Element reference, e.g. '@e_12345', 'e_12345', '12345' (stable CDP backend_node_id).",
                     },
                 },
                 "required": ["ref"],

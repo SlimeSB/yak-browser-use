@@ -45,7 +45,7 @@ def test_pipeline_tools_names():
 
 def test_get_all_tools_with_goal():
     tools = get_all_tools(include_goal_run=True)
-    assert len(tools) == 18
+    assert len(tools) == 19
     names = [t["function"]["name"] for t in tools]
     assert "browser_goto" in names
     assert "goal_run" in names
@@ -63,7 +63,7 @@ def test_get_all_tools_with_goal():
 
 def test_get_all_tools_without_goal():
     tools = get_all_tools(include_goal_run=False)
-    assert len(tools) == 17
+    assert len(tools) == 18
     names = [t["function"]["name"] for t in tools]
     assert "goal_run" not in names
     assert "edit_pipeline" not in names

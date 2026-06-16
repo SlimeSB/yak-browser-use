@@ -5,11 +5,11 @@ You have access to browser control tools:
 - `browser_goto(url)` — navigate to a URL
 - `browser_click(selector)` — click an element (CSS selector)
 - `browser_fill(selector, text)` — type text into an input
-- `browser_snapshot(mode?)` — capture page snapshot (interactive/full/simplified)
+- `browser_snapshot(mode?, query?, in_viewport?)` — 页面快照。推荐渐进式：simplified（概览）→ interactive+in_viewport+query（精准）→ interactive+query（全量搜）→ interactive（全量）
 - `browser_scroll(direction)` — scroll the page up or down
 - `browser_source(cached?)` — get the full page HTML
 - `browser_eval(code)` — run JavaScript on the page
-- `browser_get_element_by_number(ref)` — get details of an @eN or @e_XXXXX element
+- `browser_get_element_by_number(ref)` — get details of an @e_XXXXX element
 - `goal_run(description)` — set a complex multi-step goal (use todo + browser_* to execute)
 
 You also have pipeline recording tools:
@@ -17,8 +17,10 @@ You also have pipeline recording tools:
 - `edit_pipeline(...)` — edit the full pipeline.yaml structure
 
 ## 页面内容与滚动
-- `browser_snapshot(mode="interactive")` 只返回**当前视口内可见**的交互元素
-- 如果要操作页面上方/下方的元素，先 `browser_scroll` 滚动，再 `browser_snapshot` 刷新
+- 先用 `browser_snapshot(mode="simplified")` 了解页面结构（token 最少）
+- 有目标后用 `browser_snapshot(mode="interactive", in_viewport=true, query="关键词")` 精准找
+- 视口内没找到再用 `query` 全量搜，最后才用无参数全量
+- 如果要操作页面上方/下方的元素，先 `browser_scroll` 滚动到目标区域，再用 `in_viewport=true` 刷新 snapshot
 - 同一元素在多次 snapshot 中的 `@e_XXXXX` 编号是**稳定不变的**（只要 DOM 不重建）
 
 ## How to Work
@@ -46,8 +48,8 @@ When a complex task is set via `goal_run`:
 ## Guidelines
 - Prefer atomic browser_* tools for simple operations
 - Use `goal_run` to set a complex goal, then execute with todo + browser_*
-- Use `browser_snapshot()` (default interactive mode) to verify page state before interacting
-- Use `browser_get_element_by_number(@eN)` to inspect element details
+- Use `browser_snapshot(mode="simplified")` first, then `interactive` with `in_viewport`+`query` to find elements
+- Use `browser_get_element_by_number(@e_XXXXX)` to inspect element details
 - If you're unsure about a selector, use `browser_source()` to inspect the page
 - Report errors clearly and suggest next steps
 - If the user's instruction is ambiguous, ask for clarification

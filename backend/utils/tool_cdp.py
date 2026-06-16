@@ -49,10 +49,10 @@ class ToolCDPHelpers:
     async def wait(self, seconds: float = 1.0) -> None:
         await asyncio.sleep(seconds)
 
-    async def snapshot(self, mode: str = "full") -> dict:
+    async def snapshot(self, mode: str = "full", query: str = "", in_viewport: bool = False) -> dict:
         self._check_failures()
         if mode == "interactive":
-            result = await self._helpers.capture_snapshot_interactive()
+            result = await self._helpers.capture_snapshot_interactive(query=query, in_viewport=in_viewport)
         elif mode == "simplified":
             result = await self._helpers.capture_snapshot_simplified()
         else:

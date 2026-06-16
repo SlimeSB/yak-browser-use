@@ -13,16 +13,16 @@ from engine.scratchpad import _scratchpads, store, store_raw_html
 
 class TestNormalizeRef:
     def test_at_prefix(self):
-        assert _normalize_ref("@e5") == "@e5"
+        assert _normalize_ref("@e5") == "@e_5"
 
     def test_e_prefix(self):
-        assert _normalize_ref("e3") == "@e3"
+        assert _normalize_ref("e3") == "@e_3"
 
     def test_number_only(self):
-        assert _normalize_ref("7") == "@e7"
+        assert _normalize_ref("7") == "@e_7"
 
     def test_with_whitespace(self):
-        assert _normalize_ref("  @e12  ") == "@e12"
+        assert _normalize_ref("  @e12  ") == "@e_12"
 
 
 class TestScratchpadElementLookup:
@@ -30,7 +30,7 @@ class TestScratchpadElementLookup:
         _scratchpads.clear()
         store({
             "elements": [
-                {"ref": "@e1", "tag": "button", "type": "submit", "text": "Go", "selector": "button#go"},
+                {"ref": "@e_1", "tag": "button", "type": "submit", "text": "Go", "selector": "button#go"},
             ],
             "url": "https://x.com",
             "title": "X",
@@ -38,12 +38,12 @@ class TestScratchpadElementLookup:
         result = _try_scratchpad_element_lookup({"ref": "@e1"})
         assert result is not None
         assert result["ok"] is True
-        assert result["result"]["ref"] == "@e1"
+        assert result["result"]["ref"] == "@e_1"
         assert result["result"]["selector"] == "button#go"
 
     def test_miss_returns_none(self):
         _scratchpads.clear()
-        store({"elements": [{"ref": "@e1", "selector": "btn"}], "url": "", "title": ""})
+        store({"elements": [{"ref": "@e_1", "selector": "btn"}], "url": "", "title": ""})
         result = _try_scratchpad_element_lookup({"ref": "@e99"})
         assert result is None
 
@@ -54,17 +54,17 @@ class TestScratchpadElementLookup:
 
     def test_normalized_ref_lookup(self):
         _scratchpads.clear()
-        store({"elements": [{"ref": "@e3", "selector": "input[name='q']"}], "url": "", "title": ""})
+        store({"elements": [{"ref": "@e_3", "selector": "input[name='q']"}], "url": "", "title": ""})
         result = _try_scratchpad_element_lookup({"ref": "3"})
         assert result is not None
         assert result["result"]["selector"] == "input[name='q']"
 
     def test_e_prefix_end_to_end_lookup(self):
         _scratchpads.clear()
-        store({"elements": [{"ref": "@e5", "tag": "a", "text": "Link", "selector": "a.link"}], "url": "", "title": ""})
+        store({"elements": [{"ref": "@e_5", "tag": "a", "text": "Link", "selector": "a.link"}], "url": "", "title": ""})
         result = _try_scratchpad_element_lookup({"ref": "e5"})
         assert result is not None
-        assert result["result"]["ref"] == "@e5"
+        assert result["result"]["ref"] == "@e_5"
         assert result["result"]["selector"] == "a.link"
 
     def test_no_ref_returns_none(self):
