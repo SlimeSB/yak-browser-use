@@ -56,9 +56,25 @@ def _is_interactive(tag: str, attrs: dict[str, str]) -> bool:
     cedit = attrs.get("contenteditable")
     if cedit is not None and cedit.lower() in ("true", ""):
         return True
-    if tag in ("div", "span") and any(k.startswith("data-v-") or k.startswith("data-react-") for k in attrs):
+    if tag in ("div", "span", "li") and any(k.startswith("data-v-") or k.startswith("data-react-") for k in attrs):
         return True
     return False
+
+
+def _is_tentative(tag: str, attrs: dict[str, str]) -> bool:
+    """True if the element is only interactive due to heuristics (not tag/role/onclick)."""
+    if tag in _INTERACTIVE_TAGS:
+        return False
+    if attrs.get("role", "").lower() in _INTERACTIVE_ROLES:
+        return False
+    if attrs.get("tabindex") is not None:
+        return False
+    if attrs.get("onclick"):
+        return False
+    cedit = attrs.get("contenteditable")
+    if cedit is not None and cedit.lower() in ("true", ""):
+        return False
+    return True
 
 
 def _build_selector_from_node(tag: str, attrs: dict[str, str]) -> str:
@@ -235,6 +251,7 @@ class CDPHelpers:
                 "text": "",
                 "value": attrs.get("value", ""),
                 "role": attrs.get("role", ""),
+                "tentative": _is_tentative(tag, attrs),
                 "x": 0, "y": 0, "width": 0, "height": 0,
             })
 
@@ -247,63 +264,27 @@ class CDPHelpers:
         return results
 
     async def _get_element_positions(self, elements: list[dict]) -> list[dict]:
-        """Enrich elements with bounding client rects via JS injection."""
-        if not elements:
-            return elements
-        sel_refs = _json.dumps([(e.get("selector", ""), e.get("ref", "")) for e in elements])
-        js = (
-            "(function(){"
-            "var pairs=" + sel_refs + ";"
-            "var selIdx={};"
-            "var out=[];"
-            "for(var i=0;i<pairs.length;i++){"
-            "var sel=pairs[i][0];var ref=pairs[i][1];"
-            "if(!sel){out.push({x:0,y:0,w:0,h:0});continue;}"
-            "var si=selIdx[sel]||0;selIdx[sel]=si+1;"
-            "try{"
-            "var all=document.querySelectorAll(sel);"
-            "if(all.length>si){"
-            "var r=all[si].getBoundingClientRect();"
-            "out.push({x:r.left,y:r.top,w:r.width,h:r.height});"
-            "}else{out.push({x:0,y:0,w:0,h:0});}"
-            "}catch(e){out.push({x:0,y:0,w:0,h:0});}"
-            "}"
-            "return JSON.stringify(out);"
-            "})()"
-        )
-        try:
-            raw = await self.js(js)
-            if raw:
-                positions = _json.loads(raw)
-                for el, pos in zip(elements, positions):
-                    if isinstance(pos, dict):
-                        el["x"] = pos.get("x", 0)
-                        el["y"] = pos.get("y", 0)
-                        el["width"] = pos.get("w", 0)
-                        el["height"] = pos.get("h", 0)
-        except Exception:
-            logger.debug("_get_element_positions failed", exc_info=True)
-        return elements
-
-    async def _enrich_elements_with_text(self, elements: list[dict]) -> list[dict]:
-        """Batch-fetch textContent for interactive elements via JS."""
+        """Enrich elements with bounding rects, text, and clickable flag via a single JS call."""
         if not elements:
             return elements
         sels = [e["selector"] for e in elements]
         js = (
             "(function(){"
             "var sels=" + _json.dumps(sels) + ";"
+            "var selIdx={};"
             "var out=[];"
-            "var idx={};"
             "for(var i=0;i<sels.length;i++){"
-            "var si=idx[sels[i]]||0;idx[sels[i]]=si+1;"
+            "var si=selIdx[sels[i]]||0;selIdx[sels[i]]=si+1;"
             "try{"
             "var all=document.querySelectorAll(sels[i]);"
             "if(all.length>si){"
-            "var t=all[si].textContent||all[si].innerText||'';"
-            "out.push(t.trim().substring(0,100));"
-            "}else{out.push('');}"
-            "}catch(e){out.push('');}"
+            "var el=all[si];"
+            "var r=el.getBoundingClientRect();"
+            "var t=el.textContent||el.innerText||'';"
+            "var cs=getComputedStyle(el);"
+            "out.push({x:r.left,y:r.top,w:r.width,h:r.height,t:t.trim().substring(0,100),c:cs.cursor==='pointer'});"
+            "}else{out.push({x:0,y:0,w:0,h:0,t:'',c:false});}"
+            "}catch(e){out.push({x:0,y:0,w:0,h:0,t:'',c:false});}"
             "}"
             "return JSON.stringify(out);"
             "})()"
@@ -311,18 +292,25 @@ class CDPHelpers:
         try:
             raw = await self.js(js)
             if raw:
-                texts = _json.loads(raw)
-                for el, text in zip(elements, texts):
-                    el["text"] = text
+                data = _json.loads(raw)
+                for el, d in zip(elements, data):
+                    if isinstance(d, dict):
+                        el["x"] = d.get("x", 0)
+                        el["y"] = d.get("y", 0)
+                        el["width"] = d.get("w", 0)
+                        el["height"] = d.get("h", 0)
+                        el["text"] = d.get("t", "")
+                        el["clickable"] = d.get("c", False)
         except Exception:
-            logger.debug("_enrich_elements_with_text failed", exc_info=True)
+            logger.debug("_get_element_positions failed", exc_info=True)
         return elements
 
     async def capture_snapshot_interactive(self, query: str = "", in_viewport: bool = False) -> dict:
         try:
             elements = await self._discover_all_interactive()
             enriched = await self._get_element_positions(elements)
-            enriched = await self._enrich_elements_with_text(enriched)
+
+            enriched = [el for el in enriched if not el.get("tentative") or el.get("clickable")]
 
             if in_viewport:
                 vp_w = await self.js("window.innerWidth") or 1920
