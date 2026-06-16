@@ -354,6 +354,126 @@ async def pipeline_create(
     return json.dumps({"ok": True, "result": f"Pipeline '{safe_name}' created successfully"})
 
 
+async def pipeline_compile(
+    pipeline_name: str,
+    explanation: str = "",
+    **kwargs,
+) -> str:
+    try:
+        path = _resolve_pipeline_path(pipeline_name)
+    except ValueError as e:
+        return json.dumps({"ok": False, "error": str(e)})
+
+    safe_name = path.stem.removesuffix(".pipeline")
+
+    from api.state import engine_state
+
+    service = getattr(engine_state, "_service", None)
+    if service is None:
+        return json.dumps({"ok": False, "error": "No active service"})
+
+    session = getattr(service, "_active_session", None)
+    if session is None:
+        return json.dumps({"ok": False, "error": "No active session"})
+
+    messages = getattr(session, "messages", []) or []
+
+    tool_results: dict[str, dict] = {}
+    for msg in messages:
+        if msg.get("role") == "tool":
+            tc_id = msg.get("tool_call_id")
+            if tc_id:
+                tool_results[tc_id] = msg
+
+    steps: list[dict] = []
+    step_index = 1
+    for msg in messages:
+        if msg.get("role") != "assistant":
+            continue
+        tool_calls = msg.get("tool_calls", [])
+        if not tool_calls:
+            continue
+        for tc in tool_calls:
+            fn = tc.get("function", {})
+            tool_name = fn.get("name", "")
+            args = _parse_tool_args(fn.get("arguments"))
+            tc_id = tc.get("id", "")
+            tr = tool_results.get(tc_id, {}) if tc_id else {}
+            result_text = str(tr.get("content", ""))[:200]
+
+            if tool_name in ("edit_pipeline", "todo", "pipeline_compile", "pipeline_load",
+                             "pipeline_list", "pipeline_create", "pipeline_update_step",
+                             "pipeline_add_step", "pipeline_remove_step", "pipeline_finish",
+                             "record_step"):
+                continue
+
+            if tool_name.startswith("browser_"):
+                op_type = tool_name.replace("browser_", "")
+                steps.append({
+                    "name": f"step_{step_index}",
+                    "description": f"{op_type}: {_fmt_args(args)}",
+                    "browser_ops": [{op_type: _first_arg(args)}],
+                })
+            elif tool_name == "goal_run":
+                steps.append({
+                    "name": f"step_{step_index}",
+                    "description": args.get("description", "") or result_text[:80],
+                    "goal_description": args.get("description", "") or result_text[:200],
+                })
+            else:
+                steps.append({
+                    "name": f"step_{step_index}",
+                    "description": f"{tool_name}: {_fmt_args(args)}",
+                    "tool_name": tool_name,
+                })
+            step_index += 1
+
+    if not steps:
+        return json.dumps({"ok": False, "error": "No browser operations found in session"})
+
+    return json.dumps({
+        "ok": True,
+        "pipeline_name": safe_name,
+        "step_count": len(steps),
+        "steps": steps,
+        "hint": (
+            "Review the steps above. Add 'check' fields, refine descriptions, "
+            "adjust browser_ops as needed, then use pipeline_create to save "
+            "(or edit_pipeline if the pipeline already exists)."
+        ),
+    }, ensure_ascii=False)
+
+
+def _parse_tool_args(raw_args) -> dict:
+    if isinstance(raw_args, dict):
+        return raw_args
+    if isinstance(raw_args, str) and raw_args.strip():
+        try:
+            return json.loads(raw_args)
+        except (json.JSONDecodeError, TypeError):
+            pass
+    return {}
+
+
+def _fmt_args(args: dict) -> str:
+    if not args:
+        return ""
+    items = []
+    for k, v in args.items():
+        s = str(v)
+        if len(s) > 60:
+            s = s[:57] + "..."
+        items.append(f"{k}={s}")
+    return ", ".join(items)
+
+
+def _first_arg(args: dict) -> str:
+    if not args:
+        return ""
+    first = next(iter(args.values()), "")
+    return str(first)[:200]
+
+
 def _push_ws_event(pipeline_name: str, original: str, modified: str, explanation: str) -> None:
     import difflib
 

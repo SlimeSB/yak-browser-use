@@ -102,9 +102,13 @@ export default function MonacoYamlEditor({
       disposedRef.current = true;
       if (debounceRef.current) clearTimeout(debounceRef.current);
       disposable.dispose();
-      editor.dispose();
-      originalModelRef.current?.dispose();
-      modifiedModelRef.current?.dispose();
+      try {
+        const model = editor.getModel();
+        if (model) editor.setModel(null);
+        editor.dispose();
+      } catch { /* dispose may cancel pending async ops */ }
+      try { originalModelRef.current?.dispose(); } catch { /* ok */ }
+      try { modifiedModelRef.current?.dispose(); } catch { /* ok */ }
       editorRef.current = null;
       originalModelRef.current = null;
       modifiedModelRef.current = null;

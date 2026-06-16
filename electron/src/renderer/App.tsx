@@ -121,6 +121,10 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    setPendingEdits([]);
+  }, [activePreset]);
+
+  useEffect(() => {
     const preset = pipelines.find(p => p.name === activePreset);
     if (preset) {
       let pipelineContent = pipelineCache[activePreset];

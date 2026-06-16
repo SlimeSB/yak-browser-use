@@ -222,6 +222,7 @@ async def _execute_single_tool_call(
                     pipeline_add_step,
                     pipeline_remove_step,
                     pipeline_create,
+                    pipeline_compile,
                 )
 
                 dispatch = {
@@ -231,6 +232,7 @@ async def _execute_single_tool_call(
                     "pipeline_add_step": pipeline_add_step,
                     "pipeline_remove_step": pipeline_remove_step,
                     "pipeline_create": pipeline_create,
+                    "pipeline_compile": pipeline_compile,
                 }
 
                 handler = dispatch.get(fn_name)

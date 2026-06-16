@@ -85,8 +85,6 @@ declare global {
       chatCancel: () => Promise<{ ok?: boolean }>;
       getSession: () => Promise<{ session?: { session_id: string; pipeline_name: string; status: string; message_count: number } | null }>;
       listPresets: () => Promise<{ presets: Array<{ name: string; path: string; modified: number }> }>;
-      savePreset: (name: string, content: string) => Promise<{ ok?: boolean; path?: string }>;
-      compilePreset: (name: string) => Promise<{ ok?: boolean; path?: string; content?: string }>;
       listVersions: (pipelineName: string) => Promise<{ versions: VersionInfo[] }>;
       getVersion: (pipelineName: string, version: string) => Promise<{ version: string; content: string }>;
       relearn: (pipelineName: string) => Promise<{ deleted: boolean; version?: string }>;

@@ -434,6 +434,34 @@ PIPELINE_FINISH_TOOL: dict[str, Any] = {
     },
 }
 
+PIPELINE_COMPILE_TOOL: dict[str, Any] = {
+    "type": "function",
+    "function": {
+        "name": "pipeline_compile",
+        "description": (
+            "Read the current chat session's browser operations and return them as "
+            "structured step definitions. This tool is READ-ONLY — it does NOT write "
+            "any file. Review the returned steps, add 'check' fields, refine descriptions "
+            "and browser_ops, then use pipeline_create (new) or edit_pipeline (existing) "
+            "to save the pipeline."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "pipeline_name": {
+                    "type": "string",
+                    "description": "Name for the pipeline preset (used as identifier, not written).",
+                },
+                "explanation": {
+                    "type": "string",
+                    "description": "Brief explanation of what was compiled.",
+                },
+            },
+            "required": ["pipeline_name"],
+        },
+    },
+}
+
 PIPELINE_TOOLS: list[dict[str, Any]] = [
     PIPELINE_LOAD_TOOL,
     PIPELINE_LIST_TOOL,
@@ -441,6 +469,7 @@ PIPELINE_TOOLS: list[dict[str, Any]] = [
     PIPELINE_ADD_STEP_TOOL,
     PIPELINE_REMOVE_STEP_TOOL,
     PIPELINE_CREATE_TOOL,
+    PIPELINE_COMPILE_TOOL,
     PIPELINE_FINISH_TOOL,
 ]
 

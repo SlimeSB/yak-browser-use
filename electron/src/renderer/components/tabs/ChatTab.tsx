@@ -33,7 +33,6 @@ export default function ChatTab({
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
   const [sessionStatus, setSessionStatus] = useState<string>('idle');
-  const [editorSaved, setEditorSaved] = useState(false);
   const [diffError, setDiffError] = useState('');
   const scrollRef = useRef<HTMLDivElement>(null);
   const bodyRef = useRef<HTMLDivElement>(null);
@@ -139,31 +138,6 @@ export default function ChatTab({
     setMessages(prev => [...prev, { role: 'system', content: '对话已中断' }]);
   };
 
-  const handleSavePipeline = async () => {
-    try {
-      await window.electronAPI.savePreset(activePreset, pipelineEditor);
-      setEditorSaved(true);
-      setTimeout(() => setEditorSaved(false), 2000);
-    } catch (e) {
-      console.error('Save pipeline failed:', e);
-    }
-  };
-
-  const handleCompilePreset = async () => {
-    try {
-      const result = await window.electronAPI.compilePreset(activePreset);
-      if (result.ok) {
-        setMessages(prev => [...prev, {
-          role: 'system',
-          content: `Preset saved: ${activePreset}`,
-        }]);
-        onRefreshPipeline();
-      }
-    } catch (e) {
-      console.error('Compile preset failed:', e);
-    }
-  };
-
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
@@ -217,22 +191,6 @@ export default function ChatTab({
         </>
       ) : (
         <>
-          <div className="chat-pipeline-toolbar">
-            <button
-              className="btn btn-small btn-secondary"
-              onClick={handleCompilePreset}
-              disabled={!activePreset || sending}
-            >
-              {t('chat.compilePreset')}
-            </button>
-            <button
-              className={`btn btn-small ${editorSaved ? 'btn-primary' : 'btn-secondary'}`}
-              onClick={handleSavePipeline}
-              disabled={!activePreset}
-            >
-              {editorSaved ? '✓ Saved' : t('chat.save')}
-            </button>
-          </div>
           <MonacoYamlEditor
             value={pipelineEditor}
             onChange={onPipelineEditorChange}

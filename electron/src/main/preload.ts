@@ -47,8 +47,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
   chatCancel: () => ipcRenderer.invoke('api:chat-cancel'),
   getSession: () => ipcRenderer.invoke('api:session'),
   listPresets: () => ipcRenderer.invoke('api:presets-list'),
-  savePreset: (name: string, content: string) => ipcRenderer.invoke('api:preset-save', { name, content }),
-  compilePreset: (name: string) => ipcRenderer.invoke('api:preset-compile', { name }),
 
   // Provider config
   getProviderConfig: () => ipcRenderer.invoke('api:provider-config-get'),

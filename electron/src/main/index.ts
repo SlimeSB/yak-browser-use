@@ -416,22 +416,6 @@ app.whenReady().then(async () => {
     return _apiFetch('/api/presets', {}, 'api:presets-list');
   });
 
-  ipcMain.handle('api:preset-save', async (_event, { name, content }: { name: string; content: string }) => {
-    logger.debug('IPC: api:preset-save called');
-    return _apiFetch('/api/presets', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name, content }),
-    }, 'api:preset-save');
-  });
-
-  ipcMain.handle('api:preset-compile', async (_event, { name }: { name: string }) => {
-    logger.debug('IPC: api:preset-compile called');
-    return _apiFetch('/api/presets/compile', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name }),
-    }, 'api:preset-compile');
-  });
-
   ipcMain.handle('api:provider-config-get', async () => {
     return _apiFetch('/api/provider-config', { method: 'GET' }, 'api:provider-config-get');
   });

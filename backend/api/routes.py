@@ -613,6 +613,7 @@ def register_all_routes(app: FastAPI) -> None:
         try:
             from workspace.version_manager import VersionManager
             wm = _get_workspace_manager(pipeline_name)
+            wm.ensure_workspace()
             vm = VersionManager(wm.versions_dir, pipeline_name)
             versions = vm.list_versions()
             return JSONResponse({"versions": versions})
@@ -626,6 +627,7 @@ def register_all_routes(app: FastAPI) -> None:
         try:
             from workspace.version_manager import VersionManager
             wm = _get_workspace_manager(pipeline_name)
+            wm.ensure_workspace()
             vm = VersionManager(wm.versions_dir, pipeline_name)
             loaded = vm.load_version(version)
             if loaded:
@@ -645,6 +647,7 @@ def register_all_routes(app: FastAPI) -> None:
         try:
             from workspace.version_manager import VersionManager
             wm = _get_workspace_manager(pipeline_name)
+            wm.ensure_workspace()
             vm = VersionManager(wm.versions_dir, pipeline_name)
             latest = vm.get_latest()
             if not latest:
@@ -1084,23 +1087,6 @@ def register_all_routes(app: FastAPI) -> None:
         presets = service.list_presets()
         return JSONResponse({"presets": presets})
 
-    @app.post("/api/presets")
-    async def save_preset(request: dict) -> JSONResponse:
-        """Save a preset (pipeline.yaml format).
-
-        Request: {"name": "my-preset", "content": "..."}
-        """
-        name = request.get("name", "").strip()
-        content = request.get("content", "")
-        if not name:
-            raise APIError("name is required")
-        if not content:
-            raise APIError("content is required")
-
-        service = await _get_service()
-        path = service.save_preset(name, content)
-        return JSONResponse({"ok": True, "path": str(path)})
-
     @app.delete("/api/presets/{name}")
     async def delete_preset(name: str) -> JSONResponse:
         """Delete a saved preset."""
@@ -1111,25 +1097,6 @@ def register_all_routes(app: FastAPI) -> None:
             os.remove(str(path))
             return JSONResponse({"ok": True})
         raise APIError(f"Preset '{name}' not found", 404)
-
-    @app.post("/api/presets/compile")
-    async def compile_preset(request: dict) -> JSONResponse:
-        """Compile current session into pipeline.yaml and save as preset.
-
-        Request: {"name": "my-preset"}
-        """
-        name = request.get("name", "").strip()
-        if not name:
-            raise APIError("name is required")
-
-        service = await _get_service()
-        session = service.get_session()
-        if session is None:
-            raise APIError("No active session to compile")
-
-        pipeline_text = service.compile_session_to_preset(session)
-        path = service.save_preset(name, pipeline_text)
-        return JSONResponse({"ok": True, "path": str(path), "content": pipeline_text})
 
     # =================================================================
     # PIPELINES — list all workspace pipelines (fallback to presets)

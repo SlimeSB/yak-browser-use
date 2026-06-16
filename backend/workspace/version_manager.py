@@ -102,6 +102,8 @@ class VersionManager:
 
     def list_versions(self) -> list[dict]:
         """List all version metadata dicts sorted by version number."""
+        if not self.versions_dir.exists():
+            return []
         result = []
         for d in sorted(self.versions_dir.iterdir()):
             if d.is_dir() and d.name.isdigit():
@@ -119,6 +121,8 @@ class VersionManager:
 
         Returns the version meta dict or None if not found.
         """
+        if not self.versions_dir.exists():
+            return None
         for d in self.versions_dir.iterdir():
             if d.name == v and d.is_dir():
                 meta_path = d / "version.meta.json"
