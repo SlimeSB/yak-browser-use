@@ -73,9 +73,11 @@ app.whenReady().then(async () => {
 
   function _url(path: string) { return `http://127.0.0.1:${port}${path}`; }
 
-  async function _apiFetch(path: string, init: RequestInit, label: string): Promise<unknown> {
+  let chatAbortController: AbortController | null = null;
+
+  async function _apiFetch(path: string, init: RequestInit, label: string, signal?: AbortSignal): Promise<unknown> {
     try {
-      const resp = await fetch(_url(path), init);
+      const resp = await fetch(_url(path), { ...init, signal });
       if (!resp.ok) {
         const text = await resp.text().catch(() => '');
         throw new Error(`HTTP ${resp.status}: ${text.slice(0, 200)}`);
@@ -380,10 +382,16 @@ app.whenReady().then(async () => {
   // Chat endpoints
   ipcMain.handle('api:chat', async (_event, { message }: { message: string }) => {
     logger.debug('IPC: api:chat called');
-    return _apiFetch('/api/chat', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ message }),
-    }, 'api:chat');
+    const ac = new AbortController();
+    chatAbortController = ac;
+    try {
+      return await _apiFetch('/api/chat', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message }),
+      }, 'api:chat', ac.signal);
+    } finally {
+      if (chatAbortController === ac) chatAbortController = null;
+    }
   });
 
   ipcMain.handle('api:chat-reset', async () => {
@@ -393,6 +401,8 @@ app.whenReady().then(async () => {
 
   ipcMain.handle('api:chat-cancel', async () => {
     logger.debug('IPC: api:chat-cancel called');
+    chatAbortController?.abort();
+    chatAbortController = null;
     return _apiFetch('/api/chat/cancel', { method: 'POST' }, 'api:chat-cancel');
   });
 

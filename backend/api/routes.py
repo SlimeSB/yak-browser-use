@@ -885,6 +885,10 @@ def register_all_routes(app: FastAPI) -> None:
         def _on_tool_generated(name: str) -> None:
             _push({"type": "chat.tool_generated", "tool_name": name, "turn_index": turn_index})
 
+        def _interrupt_check() -> bool:
+            s = service.get_session()
+            return s is not None and s.status == "cancelled"
+
         llm_call = _create_chat_llm_call(
             persist_id=session_id,
             on_stream_start=_on_stream_start,
@@ -892,6 +896,7 @@ def register_all_routes(app: FastAPI) -> None:
             on_text_delta=_on_text_delta,
             on_reasoning_delta=_on_reasoning_delta,
             on_tool_generated=_on_tool_generated,
+            interrupt_check=_interrupt_check,
         )
 
         _original_push = service._push_event

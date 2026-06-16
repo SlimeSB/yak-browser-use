@@ -6,6 +6,7 @@ chat message processing, pipeline compilation, and event pushing.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import time
 from dataclasses import dataclass, field
@@ -46,6 +47,7 @@ class Service:
         self._engine_state = engine_state
         self._active_session: SessionState | None = None
         self._event_callbacks: list[Callable[[dict], None]] = []
+        self._chat_lock = asyncio.Lock()
 
     # ── Session management ──────────────────────────────────────────
 
@@ -104,84 +106,85 @@ class Service:
         Returns:
             Result dict with response and status.
         """
-        from engine._harness.conversation_loop import run_conversation_loop, ConversationResult
-        from engine._harness.tools import get_all_tools
-        from prompts._loader import load_prompt
-        from tools.todo_store import current_store
+        async with self._chat_lock:
+            from engine._harness.conversation_loop import run_conversation_loop, ConversationResult
+            from engine._harness.tools import get_all_tools
+            from prompts._loader import load_prompt
+            from tools.todo_store import current_store
 
-        if self._active_session is None:
-            self.create_session(pipeline_name)
-            created = self._active_session
-            if created:
-                logger.info("Session created: %s", created.session_id)
+            if self._active_session is None:
+                self.create_session(pipeline_name)
+                created = self._active_session
+                if created:
+                    logger.info("Session created: %s", created.session_id)
 
-        session = self._active_session
-        if session is None:
-            return {"ok": False, "error": "No active session"}
+            session = self._active_session
+            if session is None:
+                return {"ok": False, "error": "No active session"}
 
-        logger.info("Chat [%s] user: %s", session.session_id, message[:120])
+            logger.info("Chat [%s] user: %s", session.session_id, message[:120])
 
-        session.status = "running"
-        self._push_event({
-            "type": "session.state",
-            "status": "running",
-            "session_id": session.session_id,
-        })
-
-        session.messages.append({"role": "user", "content": message})
-
-        system_prompt = load_prompt("chat/system")
-
-        def _stream_cb(event: dict) -> None:
-            event["session_id"] = session.session_id
-            self._push_event(event)
-
-        def _interrupt_check() -> bool:
-            return session.status in ("cancelled",)
-
-        _todo_token = current_store.set(session.todo_store)
-        try:
-            result: ConversationResult = await run_conversation_loop(
-                llm_call=llm_call,
-                system_prompt=system_prompt,
-                messages=session.messages,
-                tools=get_all_tools(),
-                cdp_helpers=cdp_helpers,
-                tools_dir=tools_dir,
-                pipeline_name=pipeline_name,
-                interrupt_check=_interrupt_check,
-                stream_callback=_stream_cb,
-            )
-
-            session.status = "completed" if not result.interrupted else "cancelled"
-            session.budget_snapshot = result.budget.to_dict()
-
-            resp_preview = (result.final_response or "")[:120]
-            logger.info("Chat [%s] done: status=%s turns=%d duration=%dms response: %s",
-                        session.session_id, session.status,
-                        result.turn_count, result.duration_ms, resp_preview)
-
-            return {
-                "ok": True,
-                "response": result.final_response,
-                "status": session.status,
-                "turn_count": result.turn_count,
-                "duration_ms": result.duration_ms,
-            }
-
-        except Exception as e:
-            logger.error("Chat processing error: %s", e)
-            session.status = "cancelled"
-            session.error_info = {"message": str(e)}
-            return {"ok": False, "error": str(e)}
-
-        finally:
+            session.status = "running"
             self._push_event({
                 "type": "session.state",
-                "status": session.status,
+                "status": "running",
                 "session_id": session.session_id,
             })
-            current_store.reset(_todo_token)
+
+            session.messages.append({"role": "user", "content": message})
+
+            system_prompt = load_prompt("chat/system")
+
+            def _stream_cb(event: dict) -> None:
+                event["session_id"] = session.session_id
+                self._push_event(event)
+
+            def _interrupt_check() -> bool:
+                return session.status in ("cancelled",)
+
+            _todo_token = current_store.set(session.todo_store)
+            try:
+                result: ConversationResult = await run_conversation_loop(
+                    llm_call=llm_call,
+                    system_prompt=system_prompt,
+                    messages=session.messages,
+                    tools=get_all_tools(),
+                    cdp_helpers=cdp_helpers,
+                    tools_dir=tools_dir,
+                    pipeline_name=pipeline_name,
+                    interrupt_check=_interrupt_check,
+                    stream_callback=_stream_cb,
+                )
+
+                session.status = "completed" if not result.interrupted else "cancelled"
+                session.budget_snapshot = result.budget.to_dict()
+
+                resp_preview = (result.final_response or "")[:120]
+                logger.info("Chat [%s] done: status=%s turns=%d duration=%dms response: %s",
+                            session.session_id, session.status,
+                            result.turn_count, result.duration_ms, resp_preview)
+
+                return {
+                    "ok": True,
+                    "response": result.final_response,
+                    "status": session.status,
+                    "turn_count": result.turn_count,
+                    "duration_ms": result.duration_ms,
+                }
+
+            except Exception as e:
+                logger.error("Chat processing error: %s", e)
+                session.status = "cancelled"
+                session.error_info = {"message": str(e)}
+                return {"ok": False, "error": str(e)}
+
+            finally:
+                self._push_event({
+                    "type": "session.state",
+                    "status": session.status,
+                    "session_id": session.session_id,
+                })
+                current_store.reset(_todo_token)
 
     # ── Pipeline management ─────────────────────────────────────────
 

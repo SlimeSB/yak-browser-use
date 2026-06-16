@@ -39,6 +39,7 @@ export default function ChatTab({
   const bodyRef = useRef<HTMLDivElement>(null);
   const draggingRef = useRef(false);
   const [expandedThinks, setExpandedThinks] = useState<Set<number>>(new Set());
+  const cancelledRef = useRef(false);
 
   const [splitRatio, setSplitRatio] = useState(() => {
     try {
@@ -88,8 +89,9 @@ export default function ChatTab({
     if (!text || sending) return;
     setInput('');
     setSending(true);
+    setSessionStatus('running');
 
-    setMessages([...messages, { role: 'user', content: text }]);
+    setMessages(prev => [...prev, { role: 'user', content: text }]);
 
     try {
       const result = await window.electronAPI.chat(text);
@@ -98,15 +100,18 @@ export default function ChatTab({
         if (resp) {
           setMessages(prev => [...prev, { role: 'assistant', content: resp }]);
         }
-        setSessionStatus(result.status || 'completed');
         onRefreshPipeline();
       } else {
         setMessages(prev => [...prev, { role: 'assistant', content: `Error: ${result.error ?? 'Unknown'}` }]);
       }
     } catch (e) {
-      setMessages(prev => [...prev, { role: 'assistant', content: `Error: ${String(e)}` }]);
+      if (!cancelledRef.current) {
+        setMessages(prev => [...prev, { role: 'assistant', content: `Error: ${String(e)}` }]);
+      }
     } finally {
+      cancelledRef.current = false;
       setSending(false);
+      setSessionStatus('idle');
     }
   };
 
@@ -123,11 +128,15 @@ export default function ChatTab({
   };
 
   const handleCancel = async () => {
+    cancelledRef.current = true;
     try {
       await window.electronAPI.chatCancel();
     } catch (e) {
       console.error('Chat cancel failed:', e);
     }
+    setSending(false);
+    setSessionStatus('idle');
+    setMessages(prev => [...prev, { role: 'system', content: '对话已中断' }]);
   };
 
   const handleSavePipeline = async () => {
@@ -258,9 +267,6 @@ export default function ChatTab({
               )}
             </div>
             <div className="chat-header-actions">
-              <button className="btn btn-small btn-secondary" onClick={handleCancel} disabled={sessionStatus !== 'running'}>
-                {t('common.cancel')}
-              </button>
               <button className="btn btn-small btn-secondary" onClick={handleReset}>
                 {t('common.reset')}
               </button>
@@ -359,11 +365,11 @@ export default function ChatTab({
               rows={2}
             />
             <button
-              className="btn btn-primary chat-send-btn"
-              onClick={handleSend}
-              disabled={!input.trim() || sending || !connected}
+              className={`btn chat-send-btn ${sending ? 'btn-danger' : 'btn-primary'}`}
+              onClick={sending ? handleCancel : handleSend}
+              disabled={!sending && (!input.trim() || !connected)}
             >
-              {sending ? '...' : t('chat.send')}
+              {sending ? '■ 停止' : t('chat.send')}
             </button>
           </div>
         </div>

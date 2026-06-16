@@ -109,6 +109,7 @@ def _create_chat_llm_call(
     on_text_delta=None,
     on_reasoning_delta=None,
     on_tool_generated=None,
+    interrupt_check=None,
 ):
     """Create a callable for LLM API calls compatible with conversation_loop.
 
@@ -119,6 +120,7 @@ def _create_chat_llm_call(
         on_text_delta: Optional callback(text) for each delta.content chunk.
         on_reasoning_delta: Optional callback(text) for each reasoning_content chunk.
         on_tool_generated: Optional callback(name) when tool name first appears.
+        interrupt_check: Optional callable returning True if streaming should be interrupted.
 
     Returns an async function that takes (messages, tools) and returns
     an object with .content and .tool_calls attributes.
@@ -243,7 +245,11 @@ def _create_chat_llm_call(
         _last_chunk_usage = None
         _last_chunk_model = None
 
+        _chunk_count = 0
         async for chunk in stream:
+            _chunk_count += 1
+            if interrupt_check and _chunk_count % 10 == 0 and interrupt_check():
+                break
             if not chunk.choices:
                 continue
             delta = chunk.choices[0].delta
