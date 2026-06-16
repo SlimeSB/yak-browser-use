@@ -1,18 +1,27 @@
 ## ADDED Requirements
 
 ### Requirement: 交互元素快照
-系统 MUST 提供 `capture_snapshot_interactive()` 方法，提取页面中所有可交互元素并分配 @eN 引用。方法不写文件，返回数据 dict。
+系统 MUST 提供 `capture_snapshot_interactive()` 方法，提取页面中所有可交互元素并分配引用编号。旧模式（`use_stable_refs=False`）使用 `@eN` 顺序编号；新模式（`use_stable_refs=True`）使用 CDP `backendNodeId` 生成 `@e_XXXXX` 编号。方法不写文件，返回数据 dict。
 
 #### Scenario: 返回数据格式
 - **WHEN** `capture_snapshot_interactive()` 成功执行
 - **THEN** 返回 dict `{"elements": [...], "mode": "interactive"}`
-- **AND** 每个元素包含 `ref`（@eN 格式）、`tag`、`type`、`text`、`selector` 字段
+- **AND** 每个元素包含 `ref`、`tag`、`type`、`text`、`selector` 字段
 - **AND** 不写入任何文件
+
+#### Scenario: 新模式 ref 格式
+- **WHEN** `use_stable_refs=True` 且 `capture_snapshot_interactive()` 成功执行
+- **THEN** 每个元素的 `ref` 字段格式为 `@e_{backendNodeId}`
+- **AND** 编号在元素 DOM 生命周期内稳定不变
+
+#### Scenario: 旧模式 ref 格式
+- **WHEN** `use_stable_refs=False` 且 `capture_snapshot_interactive()` 成功执行
+- **THEN** 每个元素的 `ref` 字段格式为 `@e1..@eN`
+- **AND** 元素按 DOM 遍历顺序编号
 
 #### Scenario: 提取基本交互元素
 - **WHEN** 页面包含 button、input（非 hidden）、select、textarea、a[href] 元素
 - **THEN** 这些元素被包含在返回的 `elements` 数组中
-- **AND** 元素按 DOM 遍历顺序编号（@e1, @e2, ...）
 
 #### Scenario: 提取 ARIA 角色元素
 - **WHEN** 页面包含 `[role="button"]`、`[role="link"]`、`[role="checkbox"]` 等 ARIA 角色元素
@@ -93,3 +102,25 @@
 #### Scenario: 无 mode 字段默认 full
 - **WHEN** `execute_browser_op()` 收到 op `{"type": "snapshot", "value": true}` 或 `{"type": "snapshot", "value": "true"}`
 - **THEN** 调用 `capture_snapshot()` 作为默认 full 模式
+
+### Requirement: 新模式 resolve backend refs
+
+系统 MUST 在 `use_stable_refs=True` 时，`capture_snapshot_interactive()` 在 JS scan 完成后、highlight 注入前，调用 `_resolve_backend_refs()` 将 JS 自分配的 `@eN` ref 替换为 CDP `backendNodeId` 生成的 `@e_XXXXX` ref。
+
+#### Scenario: 新模式 ref 解析流程
+- **WHEN** `use_stable_refs=True` 且 `capture_snapshot_interactive()` 被调用
+- **THEN** 先执行 `_inject_simplify_js("interactive")` 获取元素列表
+- **AND** 调用 `_resolve_backend_refs(elements)` 替换 ref
+- **AND** 再用替换后的 elements 调用 `add_dom_highlights(elements)`
+- **AND** 返回给调用方的 elements 包含 `@e_XXXXX` ref
+
+#### Scenario: _resolve_backend_refs 异常不影响快照
+- **WHEN** `_resolve_backend_refs()` 内部抛出异常
+- **THEN** `capture_snapshot_interactive()` 捕获异常并记录 warning
+- **AND** 降级使用 JS 原始的 `@eN` ref 继续 highlight 和返回
+- **AND** 不中断快照流程
+
+#### Scenario: 旧模式不解析 backend refs
+- **WHEN** `use_stable_refs=False` 且 `capture_snapshot_interactive()` 被调用
+- **THEN** 直接使用 JS 返回的 `@eN` ref
+- **AND** 行为与变更前完全一致

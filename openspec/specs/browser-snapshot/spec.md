@@ -6,7 +6,8 @@
 #### Scenario: 默认 interactive 模式
 - **WHEN** LLM 调用 `browser_snapshot()` 不传 mode 参数
 - **THEN** 使用 `mode="interactive"`
-- **AND** 调用 `capture_snapshot_interactive()` 获取 @eN 元素列表
+- **AND** 调用 `capture_snapshot_interactive()` 获取元素列表
+- **AND** 元素 ref 格式：旧模式为 `@eN`，新模式（`use_stable_refs=True`）为 `@e_XXXXX`
 - **AND** 重数据（elements 完整列表）写入 scratchpad
 - **AND** messages 中只保留摘要（如 `"📸 快照已获取（15个可交互元素），页面标题: 淘宝网"`）
 
@@ -74,3 +75,17 @@
 - **WHEN** `browser_click`、`browser_fill`、`browser_goto` 等工具返回结果
 - **THEN** 不触发 scratchpad 写入
 - **AND** 结果原样进入 messages
+
+### Requirement: 新模式元素编号格式
+
+系统 MUST 在 `use_stable_refs=True` 时，`browser_snapshot(mode="interactive")` 返回的元素使用 `@e_XXXXX` 格式（CDP backend_node_id），而非 `@eN` 顺序索引。
+
+#### Scenario: 新模式返回 @e_XXXXX 格式
+- **WHEN** `use_stable_refs=True` 且调用 `browser_snapshot(mode="interactive")`
+- **THEN** 返回的 elements 中每个元素的 `ref` 字段格式为 `@e_{backendNodeId}`
+- **AND** 同一元素在多次 snapshot 中 ref 保持不变（只要 DOM 不重建）
+
+#### Scenario: 旧模式返回 @eN 格式
+- **WHEN** `use_stable_refs=False` 且调用 `browser_snapshot(mode="interactive")`
+- **THEN** 返回的 elements 中每个元素的 `ref` 字段格式为 `@e1..@eN`
+- **AND** 行为与变更前完全一致
