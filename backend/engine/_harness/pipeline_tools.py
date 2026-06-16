@@ -358,8 +358,11 @@ def _push_ws_event(pipeline_name: str, original: str, modified: str, explanation
     import difflib
 
     from api.state import engine_state
+    from tools.edit_pipeline import _edit_status, _edit_pipelines
 
     edit_id = f"pipe_{int(time.time() * 1000)}"
+    _edit_status[edit_id] = "pending"
+    _edit_pipelines[edit_id] = pipeline_name
 
     orig_lines = original.splitlines(keepends=True)
     mod_lines = modified.splitlines(keepends=True)

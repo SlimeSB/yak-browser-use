@@ -22,6 +22,7 @@ PRESETS_DIR = Path(__file__).resolve().parent.parent.parent / "userdata" / "pres
 _checkpoints: dict[str, Path] = {}
 _processed_edits: set[str] = set()
 _edit_status: dict[str, str] = {}  # 'pending' | 'confirmed' | 'reverted'
+_edit_pipelines: dict[str, str] = {}  # edit_id -> pipeline_name
 
 
 async def edit_pipeline(
@@ -69,6 +70,7 @@ async def edit_pipeline(
         _checkpoints[edit_id] = checkpoint_path
         _processed_edits.add(edit_id)
         _edit_status[edit_id] = "pending"
+        _edit_pipelines[edit_id] = safe_name
 
     preset_path.write_text(content, encoding="utf-8")
     logger.debug("Pipeline %s updated, edit_id=%s", safe_name, edit_id)

@@ -16,7 +16,7 @@ from api.errors import APIError, ServerError
 from api.state import engine_state
 from tools.edit_pipeline import (
     delete_checkpoint, get_checkpoint_path,
-    get_edit_status, set_edit_status,
+    get_edit_status, set_edit_status, _edit_pipelines,
 )
 from utils.logging import get_logger
 
@@ -955,7 +955,7 @@ def register_all_routes(app: FastAPI) -> None:
 
     @app.post("/api/chat/confirm")
     async def chat_confirm(request: dict) -> JSONResponse:
-        """Confirm a pipeline edit — delete the checkpoint file.
+        """Confirm a pipeline edit — delete the checkpoint file and sync preset to workspace.
 
         Request body: {"edit_id": "..."}
 
@@ -977,6 +977,19 @@ def register_all_routes(app: FastAPI) -> None:
                 delete_checkpoint(edit_id)
 
             set_edit_status(edit_id, "confirmed")
+
+            # Sync the confirmed preset to workspace so refreshPipeline() finds it
+            pipeline_name = _edit_pipelines.get(edit_id)
+            if pipeline_name:
+                base = Path(__file__).resolve().parent.parent.parent
+                preset_path = base / "userdata" / "presets" / f"{pipeline_name}.pipeline.yaml"
+                if preset_path.exists():
+                    workspace_dir = base / "userdata" / "workspaces" / pipeline_name
+                    workspace_dir.mkdir(parents=True, exist_ok=True)
+                    workspace_path = workspace_dir / "pipeline.yaml"
+                    workspace_path.write_text(preset_path.read_text(encoding="utf-8"), encoding="utf-8")
+                    logger.info("Synced preset %s to workspace after confirm", pipeline_name)
+
             logger.info("Edit %s confirmed, checkpoint deleted", edit_id)
             return JSONResponse({"status": "confirmed"})
         except Exception as exc:
@@ -1020,6 +1033,16 @@ def register_all_routes(app: FastAPI) -> None:
 
             preset_path = cp.parent / preset_name
             preset_path.write_text(original, encoding="utf-8")
+
+            # Sync the reverted preset to workspace
+            pipeline_name = _edit_pipelines.get(edit_id)
+            if pipeline_name:
+                base = Path(__file__).resolve().parent.parent.parent
+                ws_dir = base / "userdata" / "workspaces" / pipeline_name
+                ws_dir.mkdir(parents=True, exist_ok=True)
+                ws_path = ws_dir / "pipeline.yaml"
+                ws_path.write_text(original, encoding="utf-8")
+                logger.info("Synced reverted preset %s to workspace", pipeline_name)
 
             delete_checkpoint(edit_id)
             set_edit_status(edit_id, "reverted")
@@ -1104,27 +1127,42 @@ def register_all_routes(app: FastAPI) -> None:
         return JSONResponse({"ok": True, "path": str(path), "content": pipeline_text})
 
     # =================================================================
-    # PIPELINES — list all workspace pipelines
+    # PIPELINES — list all workspace pipelines (fallback to presets)
     # =================================================================
 
     @app.get("/api/pipelines")
     async def api_list_pipelines() -> JSONResponse:
-        """List all workspace pipelines."""
-        workspaces_dir = Path(__file__).resolve().parent.parent.parent / "userdata" / "workspaces"
-        pipelines = []
+        """List all pipelines from workspaces/ and presets/."""
+        base = Path(__file__).resolve().parent.parent.parent
+        seen: set[str] = set()
+        pipelines: list[dict] = []
+
+        workspaces_dir = base / "userdata" / "workspaces"
         if workspaces_dir.exists():
             for d in sorted(workspaces_dir.iterdir()):
                 if not d.is_dir() or d.name.startswith("."):
                     continue
-                pipe_yaml = d / "pipeline.yaml"
-                if pipe_yaml.exists():
+                if (d / "pipeline.yaml").exists():
                     pipelines.append({"name": d.name, "title": d.name})
+                    seen.add(d.name)
+
+        presets_dir = base / "userdata" / "presets"
+        if presets_dir.exists():
+            for f in sorted(presets_dir.glob("*.pipeline.yaml")):
+                name = f.stem.removesuffix(".pipeline")
+                if name not in seen:
+                    pipelines.append({"name": name, "title": name})
+                    seen.add(name)
+
         return JSONResponse({"pipelines": pipelines})
 
     @app.get("/api/pipelines/{name}")
     async def api_get_pipeline(name: str) -> JSONResponse:
-        """Get a specific pipeline's content."""
-        pipe_path = Path(__file__).resolve().parent.parent.parent / "userdata" / "workspaces" / name / "pipeline.yaml"
+        """Get a specific pipeline's content (workspaces/ then presets/)."""
+        base = Path(__file__).resolve().parent.parent.parent
+        pipe_path = base / "userdata" / "workspaces" / name / "pipeline.yaml"
+        if not pipe_path.exists():
+            pipe_path = base / "userdata" / "presets" / f"{name}.pipeline.yaml"
         if not pipe_path.exists():
             raise APIError("pipeline not found", status_code=404)
         content = pipe_path.read_text(encoding="utf-8")
