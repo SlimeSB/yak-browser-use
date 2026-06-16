@@ -11,7 +11,7 @@ export default function ParamsPanel({
   schema, values, onChange,
 }: ParamsPanelProps) {
   const { t } = useTranslation();
-  const keys = Object.keys(schema);
+  const keys = Object.keys(schema ?? {});
 
   return (
     <div className="panel">

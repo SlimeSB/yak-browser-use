@@ -32,13 +32,15 @@ export default function MonacoYamlEditor({
     if (!containerRef.current) return;
     disposedRef.current = false;
 
+    const safeValue = value || '\n';
+
     originalModelRef.current = monaco.editor.createModel(
-      value,
+      safeValue,
       'yaml',
       monaco.Uri.parse('file:///pipeline-original.yaml')
     );
     modifiedModelRef.current = monaco.editor.createModel(
-      value,
+      safeValue,
       'yaml',
       monaco.Uri.parse('file:///pipeline-modified.yaml')
     );

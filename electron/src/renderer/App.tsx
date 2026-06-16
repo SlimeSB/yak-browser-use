@@ -141,7 +141,7 @@ export default function App() {
     const preset = pipelines.find(p => p.name === activePreset);
     if (preset) {
       const init: Record<string, string> = {};
-      for (const key of Object.keys(preset.inputs)) {
+      for (const key of Object.keys(preset.inputs ?? {})) {
         init[key] = preset.defaults?.[key] ?? '';
       }
       setParams(init);
