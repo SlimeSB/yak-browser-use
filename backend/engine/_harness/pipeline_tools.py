@@ -97,11 +97,13 @@ async def pipeline_load(pipeline_name: str, **kwargs) -> str:
 
     return json.dumps({
         "ok": True,
-        "name": validated.name,
-        "description": validated.description,
-        "step_count": len(validated.steps),
-        "required_params": validated.required_params,
-        "steps": steps,
+        "result": json.dumps({
+            "name": validated.name,
+            "description": validated.description,
+            "step_count": len(validated.steps),
+            "required_params": validated.required_params,
+            "steps": steps,
+        }, ensure_ascii=False),
     }, ensure_ascii=False)
 
 
@@ -137,7 +139,7 @@ async def pipeline_list(**kwargs) -> str:
             "step_count": step_count,
         })
 
-    return json.dumps({"ok": True, "presets": presets}, ensure_ascii=False)
+    return json.dumps({"ok": True, "result": json.dumps(presets, ensure_ascii=False)}, ensure_ascii=False)
 
 
 async def pipeline_update_step(
@@ -433,14 +435,16 @@ async def pipeline_compile(
 
     return json.dumps({
         "ok": True,
-        "pipeline_name": safe_name,
-        "step_count": len(steps),
-        "steps": steps,
-        "hint": (
-            "Review the steps above. Add 'check' fields, refine descriptions, "
-            "adjust browser_ops as needed, then use pipeline_create to save "
-            "(or edit_pipeline if the pipeline already exists)."
-        ),
+        "result": json.dumps({
+            "pipeline_name": safe_name,
+            "step_count": len(steps),
+            "steps": steps,
+            "hint": (
+                "Review the steps above. Add 'check' fields, refine descriptions, "
+                "adjust browser_ops as needed, then use pipeline_create to save "
+                "(or edit_pipeline if the pipeline already exists)."
+            ),
+        }, ensure_ascii=False),
     }, ensure_ascii=False)
 
 

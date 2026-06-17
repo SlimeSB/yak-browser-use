@@ -1,3 +1,9 @@
+---
+name: goal-execution
+description: 指导 Agent 自主执行复杂多步目标的工作流（拆解→执行→记录→失败恢复）
+tags: [system, goal, execution, workflow]
+---
+
 ## 目标执行模式
 
 当用户设定了一个复杂目标（通过 `goal_run`）后，你需要自主管理执行过程。
