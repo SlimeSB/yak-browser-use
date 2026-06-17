@@ -69,14 +69,14 @@ async def start_chat_agent(
     """
     from engine._harness.conversation_loop import run_conversation_loop
     from engine._harness.tools import get_all_tools
-    from prompts._loader import load_prompt
+    from prompts._loader import build_system_prompt
 
     if messages is None:
         messages = []
 
     messages.append({"role": "user", "content": user_message})
 
-    system_prompt = load_prompt("chat/system")
+    system_prompt = build_system_prompt()
 
     if llm_call is None:
         llm_call = _create_chat_llm_call()

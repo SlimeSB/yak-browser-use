@@ -555,6 +555,129 @@ TODO_TOOL: dict[str, Any] = {
     },
 }
 
+SKILL_LIST_TOOL: dict[str, Any] = {
+    "type": "function",
+    "function": {
+        "name": "skill_list",
+        "description": "List all available skills with their names, descriptions, and tags.",
+        "parameters": {
+            "type": "object",
+            "properties": {},
+        },
+    },
+}
+
+SKILL_VIEW_TOOL: dict[str, Any] = {
+    "type": "function",
+    "function": {
+        "name": "skill_view",
+        "description": "View the full content of a skill (including YAML frontmatter and body).",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "name": {
+                    "type": "string",
+                    "description": "The name of the skill to view.",
+                },
+            },
+            "required": ["name"],
+        },
+    },
+}
+
+SKILL_CREATE_TOOL: dict[str, Any] = {
+    "type": "function",
+    "function": {
+        "name": "skill_create",
+        "description": (
+            "Create a new skill. The frontmatter (name, description, tags) is "
+            "generated automatically from the parameters — you do NOT need to "
+            "write YAML frontmatter in the content. The content should be the "
+            "skill body in Markdown format."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "name": {
+                    "type": "string",
+                    "description": "Skill name (kebab-case, e.g. 'web-search').",
+                },
+                "description": {
+                    "type": "string",
+                    "description": "Short description of what this skill does.",
+                },
+                "content": {
+                    "type": "string",
+                    "description": "The skill body in Markdown (no YAML frontmatter needed).",
+                },
+                "tags": {
+                    "type": "array",
+                    "description": "Optional tags for categorization.",
+                    "items": {"type": "string"},
+                },
+            },
+            "required": ["name", "description", "content"],
+        },
+    },
+}
+
+SKILL_EDIT_TOOL: dict[str, Any] = {
+    "type": "function",
+    "function": {
+        "name": "skill_edit",
+        "description": (
+            "Edit an existing skill. By default only the body is replaced "
+            "(frontmatter is preserved). Use raw=true to replace the entire file."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "name": {
+                    "type": "string",
+                    "description": "The name of the skill to edit.",
+                },
+                "content": {
+                    "type": "string",
+                    "description": (
+                        "New body content (default mode) or full file content "
+                        "including frontmatter (raw mode)."
+                    ),
+                },
+                "raw": {
+                    "type": "boolean",
+                    "description": "If true, replace the entire file (must include valid frontmatter).",
+                },
+            },
+            "required": ["name", "content"],
+        },
+    },
+}
+
+SKILL_DELETE_TOOL: dict[str, Any] = {
+    "type": "function",
+    "function": {
+        "name": "skill_delete",
+        "description": (
+            "Delete a skill. Pre-installed skills (with 'system' tag) are protected. "
+            "Use absorbed_into to record where the skill's content should be merged."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "name": {
+                    "type": "string",
+                    "description": "The name of the skill to delete.",
+                },
+                "absorbed_into": {
+                    "type": "string",
+                    "description": "Optional: name of the skill that absorbs this one's content.",
+                },
+            },
+            "required": ["name"],
+        },
+    },
+}
+
 
 def get_all_tools(include_goal_run: bool = True) -> list[dict[str, Any]]:
     """Get the full list of registered tools.
@@ -571,6 +694,13 @@ def get_all_tools(include_goal_run: bool = True) -> list[dict[str, Any]]:
     tools.extend(PIPELINE_TOOLS)
     tools.append(RECORD_STEP_TOOL)
     tools.append(TODO_TOOL)
+    tools.extend([
+        SKILL_LIST_TOOL,
+        SKILL_VIEW_TOOL,
+        SKILL_CREATE_TOOL,
+        SKILL_EDIT_TOOL,
+        SKILL_DELETE_TOOL,
+    ])
     logger.debug("get_all_tools: registered %d tools (include_goal_run=%s)", len(tools), include_goal_run)
     return tools
 

@@ -267,6 +267,29 @@ async def _execute_single_tool_call(
                 result_str = await todo(todos=todos, merge=merge, store=store)
                 return {"ok": True, "result": result_str}
 
+            elif fn_name.startswith("skill_"):
+                from engine._harness.skill_tools import (
+                    skill_list,
+                    skill_view,
+                    skill_create,
+                    skill_edit,
+                    skill_delete,
+                )
+
+                dispatch = {
+                    "skill_list": skill_list,
+                    "skill_view": skill_view,
+                    "skill_create": skill_create,
+                    "skill_edit": skill_edit,
+                    "skill_delete": skill_delete,
+                }
+
+                handler = dispatch.get(fn_name)
+                if handler is None:
+                    return {"ok": False, "error": f"Unknown skill tool: {fn_name}"}
+
+                return handler(**fn_args)
+
             else:
                 return await execute_tool(
                     tool_name=fn_name,

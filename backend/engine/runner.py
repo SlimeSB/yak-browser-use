@@ -50,13 +50,13 @@ async def run_chat_loop(
     """
     from engine._harness.conversation_loop import run_conversation_loop
     from engine._harness.tools import get_all_tools
-    from prompts._loader import load_prompt
+    from prompts._loader import build_system_prompt
 
     if messages is None:
         messages = []
 
     if not system_prompt:
-        system_prompt = load_prompt("chat/system")
+        system_prompt = build_system_prompt()
 
     if cdp_helpers is None:
         cdp_helpers = await _ensure_browser_connected()

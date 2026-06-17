@@ -109,7 +109,7 @@ class Service:
         async with self._chat_lock:
             from engine._harness.conversation_loop import run_conversation_loop, ConversationResult
             from engine._harness.tools import get_all_tools
-            from prompts._loader import load_prompt
+            from prompts._loader import build_system_prompt
             from tools.todo_store import current_store
 
             if self._active_session is None:
@@ -133,7 +133,7 @@ class Service:
 
             session.messages.append({"role": "user", "content": message})
 
-            system_prompt = load_prompt("chat/system")
+            system_prompt = build_system_prompt()
 
             def _stream_cb(event: dict) -> None:
                 event["session_id"] = session.session_id
