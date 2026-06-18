@@ -17,6 +17,18 @@ You also have pipeline recording tools:
 - `pipeline_add_step(...)` / `pipeline_update_step(...)` / `pipeline_remove_step(...)` — manage pipeline steps
 - `pipeline_create(...)` / `pipeline_load(...)` / `pipeline_list(...)` / `pipeline_compile(...)` / `pipeline_finish(...)` — pipeline lifecycle
 
+You also have file and data tools:
+- `file_read(path, head?, max_chars?, encoding?)` — read text file content
+- `file_write(path, content, encoding?)` — write text to a file
+- `format_convert(source, target, source_fmt?, target_fmt?)` — convert between xlsx/csv/json formats
+
+## eval_agent 子 Agent
+当 browser_eval 单次 JS 执行无法完成任务时，使用 `eval_agent` 启动子 Agent：
+- 适用场景：迭代试错、批量提取表格数据、验证码识别、复杂 DOM 遍历
+- 调用格式：`eval_agent(purpose="任务描述", snapshot="当前页面 simplified snapshot")`
+- 子 Agent 可执行多次 browser_eval + browser_snapshot 迭代，最多 3 次尝试
+- 注意：eval_agent 会额外消耗 LLM token，仅在必要时使用
+
 ## 页面内容与滚动
 - 先用 `browser_snapshot(mode="simplified")` 了解页面结构（token 最少）
 - 有目标后用 `browser_snapshot(mode="interactive", in_viewport=true, query="关键词")` 精准找

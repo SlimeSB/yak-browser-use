@@ -121,88 +121,9 @@ async def _execute_tool_step_with_guardian(
     ctx: RunContext,
     events: EventSink,
     pg: PathGuard,
-    pipeline_path: Path | None = None,
     cdp_helpers=None,
 ) -> dict:
-    """Execute a tool step with path validation and guardian checks.
-
-    If the tool name starts with ``_PH-``, checks whether the file exists.
-    Code generation is handled by the agent via the ph-tool-generation skill.
-    """
-    tool_name = step_def.get("tool_name", "")
-
-    # _PH- tool → gate check + execute + validate + rename
-    if tool_name.startswith("_PH-"):
-        from engine._lifecycle.tool_runner import ToolRunner
-
-        runner = ToolRunner(tools_dir, ctx.pipeline_name)
-
-        if not runner.tool_exists(tool_name):
-            return {
-                "status": "failed",
-                "error": {
-                    "code": "TOOL_NOT_GENERATED",
-                    "message": (
-                        f"Tool '{tool_name}' has not been generated yet. "
-                        f"Use the ph-tool-generation skill to generate code first."
-                    ),
-                },
-            }
-
-        input_files = _collect_input_files(step_def.get("input", {}), run_dir)
-        for path in input_files.values():
-            pg.validate_input(path)
-
-        exec_result = await runner.load_and_call(
-            tool_name,
-            input_files,
-            str(step_dir),
-            cdp_helpers=cdp_helpers,
-            func_name=runner.strip_ph_prefix(tool_name),
-            **step_def.get("params", {}),
-        )
-        if not exec_result.get("ok"):
-            return {
-                "status": "failed",
-                "error": {
-                    "code": exec_result.get("error_code", "RUNTIME_ERROR"),
-                    "message": exec_result.get("error", ""),
-                },
-            }
-
-        guard_result = runner.guardian.validate_output(
-            str(step_dir), step_def.get("output", [])
-        )
-        if not guard_result.get("ok"):
-            return {
-                "status": "failed",
-                "error": {
-                    "code": "GUARDIAN_ERROR",
-                    "message": guard_result.get("detail", "Guardian validation failed"),
-                },
-            }
-
-        rename_result = runner.rename_ph_file(tool_name)
-        if rename_result.get("ok"):
-            runner.update_pipeline_refs(
-                tool_name, runner.strip_ph_prefix(tool_name), pipeline_path,
-            )
-            ctx.upgraded_tools.append(rename_result.get("new", ""))
-            return {
-                "status": "completed",
-                "upgraded": True,
-                "upgraded_name": rename_result.get("new"),
-            }
-
-        return {
-            "status": "failed",
-            "error": {
-                "code": "RENAME_ERROR",
-                "message": rename_result.get("error", ""),
-            },
-        }
-
-    # Regular tool → direct execution
+    """Execute a tool step with path validation and guardian checks."""
     input_files = _collect_input_files(step_def.get("input", {}), run_dir)
     for path in input_files.values():
         pg.validate_input(path)
@@ -566,9 +487,16 @@ async def run_pipeline(
 
             # ── Dispatch to executor ──
             if step_type == "browser":
-                step_result = await execute_browser_step(
-                    step_def, cdp_helpers.bridge, step_dir, run_dir,
-                )
+                bridge = getattr(cdp_helpers, "bridge", None) if cdp_helpers else None
+                if bridge is None:
+                    step_result = {
+                        "status": "failed",
+                        "error": {"code": "NO_BROWSER", "message": "浏览器不可用 — CDP 连接未建立"},
+                    }
+                else:
+                    step_result = await execute_browser_step(
+                        step_def, bridge, step_dir, run_dir,
+                    )
             elif step_type == "goal":
                 step_result = await execute_goal_step(
                     step_def=step_def,
@@ -589,20 +517,27 @@ async def run_pipeline(
                     ctx,
                     events,
                     pg,
-                    pipeline_path=pipeline_path,
                     cdp_helpers=cdp_helpers,
                 )
 
             # ── Programmatic check (non-goal steps only) ──
             check_def = step_def.get("check")
             if check_def is not None and step_type != "goal" and step_result["status"] == "completed":
-                check_result = await run_check(check_def, cdp_helpers.bridge)
-                if not check_result["ok"]:
+                bridge = getattr(cdp_helpers, "bridge", None) if cdp_helpers else None
+                if bridge is None:
                     step_result["status"] = "failed"
                     step_result["error"] = {
                         "code": "CHECK_FAILED",
-                        "message": check_result.get("error", "验收未通过"),
+                        "message": "浏览器不可用，无法执行验收检查",
                     }
+                else:
+                    check_result = await run_check(check_def, bridge)
+                    if not check_result["ok"]:
+                        step_result["status"] = "failed"
+                        step_result["error"] = {
+                            "code": "CHECK_FAILED",
+                            "message": check_result.get("error", "验收未通过"),
+                        }
 
             write_step_json(step_dir, sanitize_result(step_result))
 

@@ -34,6 +34,18 @@ step_type 判断规则：
 4. goal 类型的步骤不需要 input/output，设为空对象 {{}}
 5. browser 和 tool 类型如有明确输入参数或输出数据，填写 input/output
 
+eval_agent 使用指导：
+- 当 browser_eval 单次 JS 执行无法完成时（如需要迭代试错、批量提取表格数据、验证码识别），应使用 eval_agent 工具
+- eval_agent 会启动子 Agent，子 Agent 可执行多次 browser_eval + browser_snapshot 迭代
+- 调用格式：eval_agent(purpose="任务描述", snapshot="当前页面快照")
+- 在 pipeline 中输出为 tool 类型步骤，tool_name 为 "eval_agent"：
+  ```json
+  {"name": "提取表格数据", "step_type": "tool", "tool_name": "eval_agent",
+   "params": {"purpose": "提取页面中的表格", "snapshot": "{{prev_snapshot}}", "max_attempts": 3},
+   "input": {}, "output": {"result": "eval_result"}}
+  ```
+- eval_agent 会额外消耗 LLM token，仅在必要时使用
+
 必填参数识别：
 - 如果文档中明确提到需要用户提供的关键输入（如关键词、站点、价格范围等），在最外层 JSON 对象中增加 required_params 字段
 - 例如文档说"输入关键词"，则 required_params 应包含 "keyword"

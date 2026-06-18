@@ -246,6 +246,16 @@ async def execute_browser_op(
                     await bridge.keyboard_type(text)
                 result["result"] = {"mode": mode}
 
+            elif op_type == "press_key":
+                key = params.get("key", "")
+                await bridge.keyboard_press(key)
+                result["result"] = {"key": key}
+
+            elif op_type == "type_text":
+                text = params.get("text", "")
+                await bridge.keyboard_type(text)
+                result["result"] = {"text": text}
+
             elif op_type == "navigate":
                 action = params.get("action", "back")
                 await bridge.navigate(action)
@@ -401,25 +411,21 @@ async def execute_tool(
         return result
 
     capabilities = getattr(module, "CAPABILITIES", [])
-    tool_cdp_instance = None
 
-    if capabilities and "browser" in capabilities:
-        if cdp_helpers is None:
-            result["ok"] = False
-            result["error"] = f"Tool '{tool_name}' requires browser"
-            result["duration_ms"] = int((time.time() - start) * 1000)
-            return result
-        from utils.tool_cdp import ToolCDPHelpers
-        bridge_obj = cdp_helpers._bridge if hasattr(cdp_helpers, "_bridge") else cdp_helpers
-        tool_cdp_instance = ToolCDPHelpers(bridge_obj)
+    if capabilities and "browser" in capabilities and cdp_helpers is None:
+        result["ok"] = False
+        result["error"] = f"Tool '{tool_name}' requires browser"
+        result["duration_ms"] = int((time.time() - start) * 1000)
+        return result
 
     try:
-        kwargs: dict = {"input_files": params.get("input_files", {}),
-                        "output_dir": params.get("output_dir", ""),
-                        **{k: v for k, v in params.items()
-                           if k not in ("input_files", "output_dir")}}
-        if tool_cdp_instance is not None:
-            kwargs["cdp_helpers"] = tool_cdp_instance
+        from engine.ops import build_tool_kwargs
+
+        kwargs = build_tool_kwargs(tool_func, cdp_helpers=cdp_helpers)
+        kwargs["input_files"] = params.get("input_files", {})
+        kwargs["output_dir"] = params.get("output_dir", "")
+        kwargs.update({k: v for k, v in params.items()
+                       if k not in ("input_files", "output_dir")})
 
         if asyncio.iscoroutinefunction(tool_func):
             ret = await tool_func(**kwargs)
@@ -614,6 +620,7 @@ async def execute_browser_step(
 
         if op_type in ("goto", "click", "fill", "snapshot", "scroll", "source", "eval",
                         "hover", "unhover", "focus", "select", "clear", "keyboard",
+                        "press_key", "type_text",
                         "navigate", "wait", "tab", "copy", "paste"):
             if op_type == "goto":
                 core_params = {"url": value}
@@ -908,7 +915,7 @@ def _resolve_path(ref: str, run_dir: Path) -> Path:
         logger.error("Absolute path ref rejected: %s — would bypass workspace isolation", ref)
         raise ValueError(f"Absolute path reference rejected (violates workspace isolation): {ref}")
 
-    if ".." in ref.split("/"):
+    if ".." in ref.replace("\\", "/").split("/"):
         raise ValueError(f"Path traversal rejected: {ref}")
 
     # data/ prefix → workspace root

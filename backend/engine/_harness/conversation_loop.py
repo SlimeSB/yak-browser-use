@@ -196,6 +196,7 @@ async def run_conversation_loop(
                     budget=budget,
                     interrupt_check=interrupt_check,
                     stream_callback=stream_callback,
+                    llm_call=llm_call,
                 )
             except UnrecoverableError as e:
                 logger.error("conversation_loop: unrecoverable error, stopping: %s", e)

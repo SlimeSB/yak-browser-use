@@ -58,6 +58,7 @@ async def execute_tool_calls_sequential(
     budget: IterationBudget | None = None,
     interrupt_check: Callable[[], bool] | None = None,
     stream_callback: Callable[[dict], None] | None = None,
+    llm_call: Callable | None = None,
 ) -> None:
     """Execute tool calls one at a time, sequentially.
 
@@ -111,6 +112,8 @@ async def execute_tool_calls_sequential(
                 pipeline_name=pipeline_name,
                 budget=budget,
                 stream_callback=stream_callback,
+                llm_call=llm_call,
+                interrupt_check=interrupt_check,
             )
         except UnrecoverableError:
             raise
@@ -176,6 +179,8 @@ async def _execute_single_tool_call(
     pipeline_name: str,
     budget: IterationBudget | None = None,
     stream_callback: Callable[[dict], None] | None = None,
+    llm_call: Callable | None = None,
+    interrupt_check: Callable[[], bool] | None = None,
 ) -> dict:
     """Route a single tool call to the correct executor core function.
 
@@ -187,6 +192,7 @@ async def _execute_single_tool_call(
     from engine.executor import execute_browser_op, execute_tool
 
     reconnect_attempts = 0
+    timeout_retried = False
 
     while True:
         try:
@@ -203,7 +209,10 @@ async def _execute_single_tool_call(
                     if cached_result is not None:
                         return cached_result
 
-                return await execute_browser_op(op_type, fn_args, cdp_helpers.bridge if hasattr(cdp_helpers, "bridge") else cdp_helpers)
+                if cdp_helpers is None:
+                    return {"ok": False, "error": "浏览器不可用 — 请确保 CDP 连接已建立"}
+                bridge = cdp_helpers.bridge if hasattr(cdp_helpers, "bridge") else cdp_helpers
+                return await execute_browser_op(op_type, fn_args, bridge)
 
             elif fn_name == "pipeline_finish":
                 status = fn_args.get("status", "")
@@ -240,7 +249,6 @@ async def _execute_single_tool_call(
                     return {"ok": False, "error": f"Unknown pipeline tool: {fn_name}"}
 
                 result_str = await handler(**fn_args)
-                import json
                 try:
                     return json.loads(result_str)
                 except (json.JSONDecodeError, TypeError):
@@ -266,6 +274,35 @@ async def _execute_single_tool_call(
                 merge = fn_args.get("merge", False)
                 result_str = await todo(todos=todos, merge=merge, store=store)
                 return {"ok": True, "result": result_str}
+
+            elif fn_name == "file_read":
+                from tools.file_read import file_read
+
+                result_dict = await file_read(**fn_args)
+                return result_dict
+
+            elif fn_name == "file_write":
+                from tools.file_write import file_write
+
+                result_dict = await file_write(**fn_args)
+                return result_dict
+
+            elif fn_name == "format_convert":
+                from tools.format_convert import format_convert
+
+                result = await format_convert(**fn_args)
+                return result
+
+            elif fn_name == "eval_agent":
+                return await _handle_eval_agent(
+                    fn_args=fn_args,
+                    cdp_helpers=cdp_helpers,
+                    llm_call=llm_call,
+                    budget=budget,
+                    interrupt_check=interrupt_check,
+                    stream_callback=stream_callback,
+                    pipeline_name=pipeline_name,
+                )
 
             elif fn_name.startswith("skill_"):
                 from engine._harness.skill_tools import (
@@ -299,11 +336,14 @@ async def _execute_single_tool_call(
                 )
 
         except TimeoutError as e:
-            if reconnect_attempts == 0:
-                reconnect_attempts += 1
+            if not timeout_retried:
+                timeout_retried = True
                 logger.info("tool_executor: timeout, retrying (1/1)")
                 await asyncio.sleep(0.5)
                 continue
+            raise
+
+        except asyncio.CancelledError:
             raise
 
         except Exception as e:
@@ -320,6 +360,7 @@ async def _execute_single_tool_call(
                 if budget is not None and not budget.is_paused:
                     budget.pause()
                 await asyncio.sleep(delay)
+                bridge_restarted = False
                 if cdp_helpers and hasattr(cdp_helpers, "bridge"):
                     try:
                         await cdp_helpers.bridge.stop()
@@ -327,30 +368,195 @@ async def _execute_single_tool_call(
                         logger.debug("PlaywrightBridge stop before restart failed", exc_info=True)
                     try:
                         await cdp_helpers.bridge.start()
+                        bridge_restarted = True
                     except Exception as e:
-                        logger.debug("PlaywrightBridge restart failed: %s", e)
+                        logger.warning("PlaywrightBridge restart failed: %s", e)
                 if budget is not None and budget.is_paused:
-                    budget.resume()
+                    if bridge_restarted:
+                        budget.resume()
                 if reconnect_attempts >= _CDP_RECONNECT_MAX and stream_callback:
                     stream_callback({
                         "type": "chat.error",
                         "message": "浏览器连接丢失，请检查 Chrome 是否运行",
                     })
+                timeout_retried = False
                 continue
             raise
+
+
+async def _handle_eval_agent(
+    fn_args: dict,
+    cdp_helpers: object | None,
+    llm_call: Callable | None,
+    budget: IterationBudget | None,
+    interrupt_check: Callable[[], bool] | None,
+    stream_callback: Callable[[dict], None] | None,
+    pipeline_name: str = "",
+) -> dict:
+    """Handle eval_agent tool call: launch subagent with restricted tools."""
+    if llm_call is None:
+        return {"ok": False, "error": "eval_agent requires LLM access"}
+
+    purpose = fn_args.get("purpose", "")
+    snapshot = fn_args.get("snapshot", "")
+    try:
+        max_attempts = max(1, min(10, int(fn_args.get("max_attempts", 3))))
+    except (TypeError, ValueError):
+        max_attempts = 3
+    # output_dir is reserved for future pipeline-mode eval_agent invocations
+    # (LLM tool schema does not expose this parameter — chat mode always skips CSV write)
+    output_dir = fn_args.get("output_dir", "")
+
+    from engine.eval_agent import EvalAgent
+    from engine._harness.conversation_loop import run_conversation_loop
+
+    agent = EvalAgent(max_attempts=max_attempts)
+    system_prompt = agent.build_system_prompt(purpose=purpose, snapshot=snapshot)
+    tools = agent.get_restricted_tools()
+
+    eval_budget = IterationBudget(max_total=10)
+    messages: list[dict] = [{"role": "user", "content": f"任务: {purpose}"}]
+
+    try:
+        result = await asyncio.wait_for(
+            run_conversation_loop(
+                llm_call=llm_call,
+                system_prompt=system_prompt,
+                messages=messages,
+                tools=tools,
+                cdp_helpers=cdp_helpers,
+                budget=eval_budget,
+                interrupt_check=interrupt_check,
+                stream_callback=stream_callback,
+            ),
+            timeout=120,
+        )
+    except asyncio.TimeoutError:
+        partial = _extract_eval_summary(messages)
+        _write_eval_csv(output_dir, purpose, success=False, result=partial)
+        return {"ok": False, "error": "eval agent 超时（120s）", "partial_result": partial}
+
+    if result.interrupted:
+        partial = _extract_eval_summary(messages)
+        _write_eval_csv(output_dir, purpose, success=False, result=partial)
+        return {"ok": False, "error": "eval agent 被中断", "partial_result": partial}
+
+    final_text = result.final_response or _extract_eval_summary(messages)
+    _write_eval_csv(output_dir, purpose, success=True, result=final_text)
+    _append_eval_to_pipeline(pipeline_name, purpose, final_text)
+
+    return {"ok": True, "result": final_text}
+
+
+def _extract_eval_summary(messages: list[dict]) -> str:
+    """Extract the last meaningful response from eval agent messages."""
+    for msg in reversed(messages):
+        if msg.get("role") == "assistant" and msg.get("content"):
+            return str(msg["content"])[:2000]
+    return "eval agent 完成，无文本输出"
+
+
+def _write_eval_csv(
+    output_dir: str,
+    purpose: str,
+    success: bool,
+    result: str,
+) -> None:
+    """Write eval agent result to CSV if output_dir is available."""
+    if not output_dir:
+        return
+    import csv
+    from pathlib import Path
+
+    p = Path(output_dir) / "eval_result.csv"
+    file_exists = p.exists()
+    try:
+        p.parent.mkdir(parents=True, exist_ok=True)
+        with open(p, "a", encoding="utf-8-sig", newline="") as f:
+            writer = csv.writer(f)
+            if not file_exists:
+                writer.writerow(["purpose", "success", "result"])
+            writer.writerow([purpose, str(success), result[:1000]])
+    except Exception as e:
+        logger.debug("_write_eval_csv: failed for '%s': %s", purpose, e)
+
+
+def _append_eval_to_pipeline(
+    pipeline_name: str,
+    purpose: str,
+    result: str,
+) -> None:
+    """Append eval agent result as a step to pipeline yaml.
+
+    Read-modify-write is safe in practice: eval_agent tool calls execute
+    sequentially inside ``execute_tool_calls_sequential``, so concurrent
+    writes to the same pipeline yaml cannot occur.
+    """
+    if not pipeline_name:
+        return
+    import yaml
+    from pathlib import Path
+    from engine._harness.pipeline_tools import _resolve_pipeline_path
+
+    tmp = None
+    try:
+        yaml_path = _resolve_pipeline_path(pipeline_name)
+        if yaml_path is None or not yaml_path.exists():
+            return
+        data = yaml.safe_load(yaml_path.read_text(encoding="utf-8")) or {}
+        steps = data.get("steps", [])
+        import time
+        step_name = f"eval_{int(time.time())}"
+        steps.append({
+            "name": step_name,
+            "description": f"eval_agent: {purpose[:100]}",
+            "step_type": "tool",
+            "tool_name": "eval_agent",
+            "params": {
+                "purpose": purpose,
+                "result": result[:500],
+            },
+        })
+        data["steps"] = steps
+        tmp = yaml_path.with_suffix(yaml_path.suffix + ".tmp")
+        try:
+            tmp.write_text(
+                yaml.dump(data, default_flow_style=False, allow_unicode=True),
+                encoding="utf-8",
+            )
+            import shutil
+            shutil.move(str(tmp), str(yaml_path))
+        finally:
+            if tmp.exists():
+                try:
+                    tmp.unlink()
+                except Exception:
+                    pass
+    except Exception as e:
+        logger.debug("_append_eval_to_pipeline: failed for '%s': %s", pipeline_name, e)
+        if tmp is not None and tmp.exists():
+            try:
+                tmp.unlink()
+            except Exception:
+                pass
 
 
 def _is_cdp_disconnect(error: Exception) -> bool:
     """Check if an exception is a CDP connection error."""
     msg = str(error).lower()
     cls_name = type(error).__name__.lower()
-    return (
-        "connection" in cls_name
-        or "websocket" in cls_name
-        or "connection" in msg
-        or "closed" in msg
-        or "eof" in msg
-    )
+    if "targetclosed" in cls_name or "browserclosed" in cls_name:
+        return True
+    if "websocket" in cls_name:
+        return True
+    cdp_patterns = [
+        "target closed",
+        "browser has been closed",
+        "browser closed",
+        "connection closed while reading from",
+        "protocol error",
+    ]
+    return any(p in msg for p in cdp_patterns)
 
 
 def _extract_function_name(tool_call: dict) -> str:
@@ -535,7 +741,7 @@ def _normalize_ref(ref: str) -> str:
     """Normalize an element reference to @e_XXXXX format."""
     ref = ref.strip()
     if ref.startswith("@"):
-        if ref.startswith("@e") and not ref.startswith("@e_") and ref[2:].isdigit():
+        if ref.lower().startswith("@e") and not ref.startswith("@e_") and ref[2:].isdigit():
             return "@e_" + ref[2:]
         return ref
     if ref.startswith("e_"):

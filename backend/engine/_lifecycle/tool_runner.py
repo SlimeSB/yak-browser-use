@@ -1,53 +1,32 @@
-"""ToolRunner — manages tool execution, loading, and rename operations."""
+"""ToolRunner — manages tool execution and loading."""
+
 from __future__ import annotations
 
 import asyncio
 import importlib.util
-import shutil
 import sys
 import traceback
 from pathlib import Path
 
-import yaml
-
-from engine._lifecycle.guardian import Guardian
 from utils.logging import get_logger
 
 logger = get_logger(__name__)
 
-_PH_PREFIX = "_PH-"
-
 
 class ToolRunner:
-    """Manages per-pipeline tool execution, loading, and rename operations.
-
-    The _PH- lifecycle:
-    1. Agent generates tool code via ph-tool-generation skill
-    2. Execute and validate (``load_and_call`` + guardian)
-    3. Rename ``_PH-foo.py`` → ``foo.py`` (``rename_ph_file`` + ``update_pipeline_refs``)
-    """
+    """Manages per-pipeline tool execution and loading."""
 
     def __init__(
         self,
         tools_dir: Path,
         pipeline_name: str,
-        guardian: Guardian | None = None,
     ) -> None:
         self.tools_dir = tools_dir
         self.pipeline_name = pipeline_name
-        self.guardian = guardian or Guardian()
 
     def tool_exists(self, tool_name: str) -> bool:
         """Check if a tool file exists in the tools directory."""
         return (self.tools_dir / f"{tool_name}.py").exists()
-
-    def is_ph_tool(self, tool_name: str) -> bool:
-        """Check if a tool name has the _PH- prefix."""
-        return tool_name.startswith(_PH_PREFIX)
-
-    def strip_ph_prefix(self, ph_name: str) -> str:
-        """Remove the _PH- prefix from a tool name."""
-        return ph_name[len(_PH_PREFIX):] if ph_name.startswith(_PH_PREFIX) else ph_name
 
     async def load_and_call(
         self,
@@ -71,6 +50,8 @@ class ToolRunner:
         Returns:
             Dict with ``ok`` (bool) and optional ``error``, ``error_code``, ``stack``.
         """
+        from engine.ops import build_tool_kwargs
+
         tool_path = self.tools_dir / f"{tool_name}.py"
         if not tool_path.exists():
             return {"ok": False, "error": f"Tool file not found: {tool_path}"}
@@ -118,14 +99,15 @@ class ToolRunner:
             tool_name, func_name, list(input_files.keys()), output_dir,
         )
         try:
-            kwargs: dict = {"input_files": input_files, "output_dir": output_dir, **params}
-            if cdp_helpers is not None:
-                kwargs["cdp_helpers"] = cdp_helpers
+            kwargs = build_tool_kwargs(func, cdp_helpers=cdp_helpers)
+            kwargs["input_files"] = input_files
+            kwargs["output_dir"] = output_dir
+            kwargs.update(params)
 
             if asyncio.iscoroutinefunction(func):
-                await func(**kwargs)
+                ret = await func(**kwargs)
             else:
-                func(**kwargs)
+                ret = func(**kwargs)
         except Exception as e:
             logger.warning("tool_runner: %s runtime error: %s", tool_name, e)
             is_timeout = "timeout" in str(e).lower() or "timed out" in str(e).lower()
@@ -137,91 +119,10 @@ class ToolRunner:
             }
 
         logger.debug("tool_runner: %s completed ok", tool_name)
-        return {"ok": True}
-
-    def rename_ph_file(self, ph_name: str) -> dict:
-        """Rename _PH-tool file → normal tool file (file move only, no YAML update).
-
-        Args:
-            ph_name: Tool name with _PH- prefix (e.g. ``_PH-my_tool``).
-
-        Returns:
-            Dict with ``ok`` (bool) and optional ``error``, ``old``, ``new``.
-        """
-        real_name = self.strip_ph_prefix(ph_name)
-
-        ph_path = self.tools_dir / f"{ph_name}.py"
-        real_path = self.tools_dir / f"{real_name}.py"
-
-        if not ph_path.exists():
-            return {"ok": False, "error": f"{ph_path} not found"}
-
-        shutil.move(str(ph_path), str(real_path))
-        self._clear_module_cache(f"pipeline_tool_{self.pipeline_name}_{ph_name}")
-
-        logger.info("tool_runner: renamed %s → %s", ph_name, real_name)
-        return {"ok": True, "old": ph_name, "new": real_name}
-
-    def update_pipeline_refs(
-        self, ph_name: str, real_name: str, pipeline_path: Path | None
-    ) -> dict:
-        """Update pipeline YAML references from _PH- name to real name.
-
-        Args:
-            ph_name: _PH- prefixed name to replace.
-            real_name: Unprefixed replacement name.
-            pipeline_path: Path to pipeline.yaml to update references.
-
-        Returns:
-            Dict with ``ok`` (bool) and optional ``error``.
-        """
-        if pipeline_path is None:
-            return {"ok": False, "error": "No pipeline path"}
-
-        if not pipeline_path.exists():
-            return {"ok": False, "error": f"Pipeline not found: {pipeline_path}"}
-
-        try:
-            data = yaml.safe_load(pipeline_path.read_text(encoding="utf-8"))
-            data = _replace_ph_refs(data, ph_name, real_name)
-            tmp_path = pipeline_path.with_suffix(pipeline_path.suffix + ".tmp")
-            tmp_path.write_text(
-                yaml.dump(data, default_flow_style=False, allow_unicode=True),
-                encoding="utf-8",
-            )
-            shutil.move(str(tmp_path), str(pipeline_path))
-        except Exception as e:
-            logger.warning("tool_runner: failed to update pipeline.yaml references: %s", e)
-            return {"ok": False, "error": str(e)}
-
-        logger.info("tool_runner: updated pipeline refs %s → %s", ph_name, real_name)
-        return {"ok": True}
+        return {"ok": True, "result": ret}
 
     @staticmethod
     def _clear_module_cache(module_name: str) -> None:
         """Remove a module from sys.modules cache if present."""
         if module_name in sys.modules:
             del sys.modules[module_name]
-
-
-# ── module-level helpers ──
-
-
-def _replace_ph_refs(data, ph_name: str, real_name: str):
-    """Recursively replace placeholder name references in a YAML data structure.
-
-    Args:
-        data: Parsed YAML structure (dict, list, str, etc.).
-        ph_name: _PH- prefixed name to replace.
-        real_name: Unprefixed replacement name.
-
-    Returns:
-        The data structure with all string references updated.
-    """
-    if isinstance(data, dict):
-        return {k: _replace_ph_refs(v, ph_name, real_name) for k, v in data.items()}
-    if isinstance(data, list):
-        return [_replace_ph_refs(item, ph_name, real_name) for item in data]
-    if isinstance(data, str):
-        return data.replace(ph_name, real_name)
-    return data

@@ -692,7 +692,7 @@ PIPELINE_COMPILE_TOOL: dict[str, Any] = {
             "Read the current chat session's browser operations and return them as "
             "structured step definitions. This tool is READ-ONLY — it does NOT write "
             "any file. Review the returned steps, add 'check' fields, refine descriptions "
-            "and browser_ops, then use pipeline_create (new) or edit_pipeline (existing) "
+            "and browser_ops, then use pipeline_create (new) or pipeline_update_step (existing) "
             "to save the pipeline."
         ),
         "parameters": {
@@ -928,6 +928,122 @@ SKILL_DELETE_TOOL: dict[str, Any] = {
     },
 }
 
+FILE_READ_TOOL: dict[str, Any] = {
+    "type": "function",
+    "function": {
+        "name": "file_read",
+        "description": "读取文本文件内容，返回原始文本（不做格式解析）。二进制文件会提示使用 format_convert。",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "path": {
+                    "type": "string",
+                    "description": "文件路径",
+                },
+                "head": {
+                    "type": "integer",
+                    "description": "返回前 N 行，0 表示全部（默认 20）",
+                },
+                "max_chars": {
+                    "type": "integer",
+                    "description": "最大返回字符数（默认 3000）",
+                },
+                "encoding": {
+                    "type": "string",
+                    "description": "文件编码，为空时自动检测（UTF-8 → GBK fallback）",
+                },
+            },
+            "required": ["path"],
+        },
+    },
+}
+
+FILE_WRITE_TOOL: dict[str, Any] = {
+    "type": "function",
+    "function": {
+        "name": "file_write",
+        "description": "将文本内容写入文件，自动创建父目录。",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "path": {
+                    "type": "string",
+                    "description": "文件路径",
+                },
+                "content": {
+                    "type": "string",
+                    "description": "要写入的文本内容",
+                },
+                "encoding": {
+                    "type": "string",
+                    "description": "文件编码（默认 utf-8）",
+                },
+            },
+            "required": ["path", "content"],
+        },
+    },
+}
+
+FORMAT_CONVERT_TOOL: dict[str, Any] = {
+    "type": "function",
+    "function": {
+        "name": "format_convert",
+        "description": "在 xlsx/csv/json 之间转换文件格式。支持 6 种转换方向，格式可从文件扩展名自动推断。",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "source": {
+                    "type": "string",
+                    "description": "源文件路径",
+                },
+                "target": {
+                    "type": "string",
+                    "description": "目标文件路径",
+                },
+                "source_fmt": {
+                    "type": "string",
+                    "description": "源格式（xlsx/csv/json），为空时从扩展名推断",
+                },
+                "target_fmt": {
+                    "type": "string",
+                    "description": "目标格式（xlsx/csv/json），为空时从扩展名推断",
+                },
+            },
+            "required": ["source", "target"],
+        },
+    },
+}
+
+EVAL_AGENT_TOOL: dict[str, Any] = {
+    "type": "function",
+    "function": {
+        "name": "eval_agent",
+        "description": (
+            "启动子 Agent 处理复杂 DOM 操作或验证码识别。"
+            "会额外消耗 LLM token，仅在 browser_eval 无法直接完成时使用。"
+            "子 Agent 可执行多次 browser_eval + browser_snapshot 迭代试错。"
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "purpose": {
+                    "type": "string",
+                    "description": "eval agent 的任务目标描述",
+                },
+                "snapshot": {
+                    "type": "string",
+                    "description": "当前页面的 simplified snapshot 文本",
+                },
+                "max_attempts": {
+                    "type": "integer",
+                    "description": "最大 eval 尝试次数（默认 3）",
+                },
+            },
+            "required": ["purpose", "snapshot"],
+        },
+    },
+}
+
 
 def get_all_tools(include_goal_run: bool = True) -> list[dict[str, Any]]:
     """Get the full list of registered tools.
@@ -951,6 +1067,10 @@ def get_all_tools(include_goal_run: bool = True) -> list[dict[str, Any]]:
         SKILL_EDIT_TOOL,
         SKILL_DELETE_TOOL,
     ])
+    tools.append(FILE_READ_TOOL)
+    tools.append(FILE_WRITE_TOOL)
+    tools.append(FORMAT_CONVERT_TOOL)
+    tools.append(EVAL_AGENT_TOOL)
     logger.debug("get_all_tools: registered %d tools (include_goal_run=%s)", len(tools), include_goal_run)
     return tools
 
