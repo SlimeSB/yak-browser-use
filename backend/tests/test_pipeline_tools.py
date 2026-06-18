@@ -85,8 +85,9 @@ def _mock_write_via_edit():
 @pytest.mark.asyncio
 async def test_pipeline_load_exists(sample_pipeline_file):
     result = await pipeline_load(pipeline_name="test_pipeline")
-    data = json.loads(result)
-    assert data["ok"] is True
+    outer = json.loads(result)
+    assert outer["ok"] is True
+    data = json.loads(outer["result"])
     assert data["name"] == "test_pipeline"
     assert data["description"] == "A test pipeline"
     assert data["step_count"] == 4
@@ -130,20 +131,22 @@ async def test_pipeline_load_corrupted(temp_presets_dir):
 @pytest.mark.asyncio
 async def test_pipeline_list_empty(temp_presets_dir):
     result = await pipeline_list()
-    data = json.loads(result)
-    assert data["ok"] is True
-    assert data["presets"] == []
+    outer = json.loads(result)
+    assert outer["ok"] is True
+    data = json.loads(outer["result"])
+    assert data == []
 
 
 @pytest.mark.asyncio
 async def test_pipeline_list_with_files(sample_pipeline_file):
     result = await pipeline_list()
-    data = json.loads(result)
-    assert data["ok"] is True
-    assert len(data["presets"]) == 1
-    assert data["presets"][0]["name"] == "test_pipeline"
-    assert data["presets"][0]["description"] == "A test pipeline"
-    assert data["presets"][0]["step_count"] == 4
+    outer = json.loads(result)
+    assert outer["ok"] is True
+    data = json.loads(outer["result"])
+    assert len(data) == 1
+    assert data[0]["name"] == "test_pipeline"
+    assert data[0]["description"] == "A test pipeline"
+    assert data[0]["step_count"] == 4
 
 
 @pytest.mark.asyncio
@@ -151,10 +154,11 @@ async def test_pipeline_list_partial_corrupt(temp_presets_dir, sample_pipeline_f
     corrupt = temp_presets_dir / "corrupt.pipeline.yaml"
     corrupt.write_text(": bad yaml", encoding="utf-8")
     result = await pipeline_list()
-    data = json.loads(result)
-    assert data["ok"] is True
-    assert len(data["presets"]) == 2
-    corrupt_entry = next(p for p in data["presets"] if p["name"] == "corrupt")
+    outer = json.loads(result)
+    assert outer["ok"] is True
+    data = json.loads(outer["result"])
+    assert len(data) == 2
+    corrupt_entry = next(p for p in data if p["name"] == "corrupt")
     assert corrupt_entry["description"] == "(parse error)"
     assert corrupt_entry["step_count"] == 0
 

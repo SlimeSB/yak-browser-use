@@ -1,25 +1,17 @@
 """Page extraction tools for browser-use pipelines.
 
 These tools require browser/CDP access to extract data from web pages.
-
-CAPABILITIES = ["browser"]
-
-Functions follow the convention:
-    async def my_tool(input_files: dict[str, str], output_dir: str,
-                      cdp_helpers: ToolCDPHelpers | None = None, **params) -> None:
-        ...
+Migrated to ToolContext — functions receive ``ctx: ToolContext`` instead
+of raw ``cdp_helpers``.
 """
 from __future__ import annotations
 
-import json
-from pathlib import Path
 from typing import Any
 
+from engine.ops import ToolContext
 from utils.logging import get_logger
 
 logger = get_logger(__name__)
-
-CAPABILITIES: list[str] = ["browser"]
 
 # ── Client-side JS for table extraction ──
 
@@ -191,22 +183,7 @@ EXTRACT_DETAILS_JS = """() => {
 }"""
 
 
-def _save_output(data: Any, output_dir: str, name: str) -> Path:
-    """Save extraction results as JSON."""
-    out_dir = Path(output_dir)
-    out_dir.mkdir(parents=True, exist_ok=True)
-    out_path = out_dir / name
-    with open(out_path, "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)
-    return out_path
-
-
-async def extract_table(
-    input_files: dict[str, str],
-    output_dir: str,
-    cdp_helpers: Any = None,
-    **params: Any,
-) -> None:
+async def extract_table(ctx: ToolContext, params: dict) -> dict:
     """Extract a table (headers + rows) from the current page.
 
     Uses client-side JS to locate visible tables rendered by common
@@ -216,30 +193,22 @@ async def extract_table(
         poll_seconds (float): Seconds to wait before extracting (default: 2).
         selector (str): Optional CSS selector to target a specific table.
     """
-    if cdp_helpers is None:
-        raise RuntimeError("extract_table requires cdp_helpers (browser access)")
-
-    poll_seconds = params.get("poll_seconds", 2.0)
+    poll_seconds = float(params.get("poll_seconds", 2.0))
     if poll_seconds > 0:
-        await cdp_helpers.wait(poll_seconds)
+        await ctx.wait(poll_seconds)
 
     logger.debug("extract_table: target=%s, poll_seconds=%s", params.get("selector", "auto"), poll_seconds)
 
-    result = await cdp_helpers.evaluate(EXTRACT_TABLE_JS)
+    result = await ctx.evaluate(EXTRACT_TABLE_JS)
     if result and result.get("rows"):
-        out_path = _save_output(result, output_dir, "table.json")
-        print(f"extract_table: {len(result['rows'])} rows x {len(result.get('headers', []))} cols -> {out_path}")
+        await ctx.save_json(result, "table.json")
+        return {"ok": True, "rows": len(result["rows"]), "cols": len(result.get("headers", []))}
     else:
-        out_path = _save_output({"headers": [], "rows": []}, output_dir, "table.json")
-        print("extract_table: no table found on page")
+        await ctx.save_json({"headers": [], "rows": []}, "table.json")
+        return {"ok": True, "rows": 0, "message": "no table found on page"}
 
 
-async def extract_list(
-    input_files: dict[str, str],
-    output_dir: str,
-    cdp_helpers: Any = None,
-    **params: Any,
-) -> None:
+async def extract_list(ctx: ToolContext, params: dict) -> dict:
     """Extract a list of items from the current page.
 
     Looks for common list structures (li, role="listitem", result items).
@@ -249,16 +218,12 @@ async def extract_list(
         selector (str): Optional custom CSS selector for list items.
         attribute (str): Optional data attribute to extract from each item.
     """
-    if cdp_helpers is None:
-        raise RuntimeError("extract_list requires cdp_helpers (browser access)")
-
-    poll_seconds = params.get("poll_seconds", 1.0)
+    poll_seconds = float(params.get("poll_seconds", 1.0))
     if poll_seconds > 0:
-        await cdp_helpers.wait(poll_seconds)
+        await ctx.wait(poll_seconds)
 
     logger.debug("extract_list: target=%s, poll_seconds=%s", params.get("selector", "auto"), poll_seconds)
 
-    # Use custom JS or the generic extract
     if params.get("selector"):
         custom_js = f"""() => {{
             const clean = (v) => (v || '').replace(/\\s+/g, ' ').trim();
@@ -273,21 +238,16 @@ async def extract_list(
                 attr: attr ? el.getAttribute(attr) || '' : ''
             }}));
         }}"""
-        result = await cdp_helpers.evaluate(custom_js)
+        result = await ctx.evaluate(custom_js)
     else:
-        result = await cdp_helpers.evaluate(EXTRACT_LIST_JS)
+        result = await ctx.evaluate(EXTRACT_LIST_JS)
 
-    out_path = _save_output(result or [], output_dir, "list.json")
+    await ctx.save_json(result or [], "list.json")
     count = len(result) if result else 0
-    print(f"extract_list: {count} items -> {out_path}")
+    return {"ok": True, "count": count}
 
 
-async def extract_details(
-    input_files: dict[str, str],
-    output_dir: str,
-    cdp_helpers: Any = None,
-    **params: Any,
-) -> None:
+async def extract_details(ctx: ToolContext, params: dict) -> dict:
     """Extract structured details (key-value pairs) from the current page.
 
     Scans for detail sections, attribute lists, spec tables, and definition lists.
@@ -296,12 +256,9 @@ async def extract_details(
         poll_seconds (float): Seconds to wait before extracting (default: 1).
         selector (str): Optional custom CSS selector for the detail container.
     """
-    if cdp_helpers is None:
-        raise RuntimeError("extract_details requires cdp_helpers (browser access)")
-
-    poll_seconds = params.get("poll_seconds", 1.0)
+    poll_seconds = float(params.get("poll_seconds", 1.0))
     if poll_seconds > 0:
-        await cdp_helpers.wait(poll_seconds)
+        await ctx.wait(poll_seconds)
 
     logger.debug("extract_details: target=%s, poll_seconds=%s", params.get("selector", "auto"), poll_seconds)
 
@@ -322,10 +279,10 @@ async def extract_details(
             }}
             return {{ text: clean(container.textContent || ''), details: pairs }};
         }}"""
-        result = await cdp_helpers.evaluate(custom_js)
+        result = await ctx.evaluate(custom_js)
     else:
-        result = await cdp_helpers.evaluate(EXTRACT_DETAILS_JS)
+        result = await ctx.evaluate(EXTRACT_DETAILS_JS)
 
-    out_path = _save_output(result, output_dir, "details.json")
+    await ctx.save_json(result, "details.json")
     detail_count = len(result.get("details", [])) if result else 0
-    print(f"extract_details: {detail_count} detail pairs -> {out_path}")
+    return {"ok": True, "count": detail_count}

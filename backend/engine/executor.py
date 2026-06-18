@@ -25,6 +25,7 @@ logger = get_logger(__name__)
 
 ERROR_CODES: dict[str, str] = {
     "SYNTAX_ERROR": "Tool code compile/syntax failure",
+    "IMPORT_ERROR": "Tool module import failure",
     "RUNTIME_ERROR": "Tool execution runtime exception",
     "TIMEOUT_ERROR": "Tool execution timeout",
     "OUTPUT_ERROR": "Output file missing or empty",
@@ -348,6 +349,13 @@ async def execute_tool(
 
     No file I/O — returns result dict directly. Suitable for chat mode.
 
+    Supports two injection patterns:
+    - **New** (ToolContext): if the function signature includes ``ctx``,
+      creates a ``ToolContext`` and injects it.
+    - **Legacy** (CAPABILITIES): if the module has ``CAPABILITIES`` with
+      ``"browser"``, creates a ``ToolCDPHelpers`` and injects as
+      ``cdp_helpers``.
+
     Returns: {ok, result, error, duration_ms, output_files?}
     """
     import importlib.util
@@ -401,7 +409,6 @@ async def execute_tool(
         return result
 
     capabilities = getattr(module, "CAPABILITIES", [])
-    tool_cdp_instance = None
 
     if capabilities and "browser" in capabilities:
         if cdp_helpers is None:
@@ -409,17 +416,17 @@ async def execute_tool(
             result["error"] = f"Tool '{tool_name}' requires browser"
             result["duration_ms"] = int((time.time() - start) * 1000)
             return result
-        from utils.tool_cdp import ToolCDPHelpers
-        bridge_obj = cdp_helpers._bridge if hasattr(cdp_helpers, "_bridge") else cdp_helpers
-        tool_cdp_instance = ToolCDPHelpers(bridge_obj)
 
     try:
-        kwargs: dict = {"input_files": params.get("input_files", {}),
-                        "output_dir": params.get("output_dir", ""),
-                        **{k: v for k, v in params.items()
-                           if k not in ("input_files", "output_dir")}}
-        if tool_cdp_instance is not None:
-            kwargs["cdp_helpers"] = tool_cdp_instance
+        from engine.ops import build_tool_kwargs
+
+        kwargs = build_tool_kwargs(
+            tool_func,
+            cdp_helpers,
+            params.get("input_files", {}),
+            params.get("output_dir", ""),
+            {k: v for k, v in params.items() if k not in ("input_files", "output_dir")},
+        )
 
         if asyncio.iscoroutinefunction(tool_func):
             ret = await tool_func(**kwargs)

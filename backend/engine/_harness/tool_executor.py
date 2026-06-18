@@ -17,6 +17,7 @@ from utils.logging import get_logger
 
 from engine._harness.tool_guardrails import ToolCallGuardrailState
 from engine._harness.iteration_budget import IterationBudget
+from engine._lifecycle.tool_runner import _PH_PREFIX
 from engine.scratchpad import get as get_scratchpad
 from engine.scratchpad import store as store_scratchpad
 from engine.scratchpad import store_raw_html as scratchpad_store_raw_html
@@ -58,6 +59,7 @@ async def execute_tool_calls_sequential(
     budget: IterationBudget | None = None,
     interrupt_check: Callable[[], bool] | None = None,
     stream_callback: Callable[[dict], None] | None = None,
+    llm_call=None,
 ) -> None:
     """Execute tool calls one at a time, sequentially.
 
@@ -71,6 +73,8 @@ async def execute_tool_calls_sequential(
         budget: Iteration budget (paused during goal_run, not consumed here).
         interrupt_check: Callable returning True if conversation is interrupted.
         stream_callback: Optional callback for streaming events.
+        llm_call: Optional async callable(messages, tools) -> LLMResponse for
+            inline _PH- tool generation.
 
     No return value — results are appended directly to *messages*.
     Raises UnrecoverableError on unrecoverable failures.
@@ -111,6 +115,7 @@ async def execute_tool_calls_sequential(
                 pipeline_name=pipeline_name,
                 budget=budget,
                 stream_callback=stream_callback,
+                llm_call=llm_call,
             )
         except UnrecoverableError:
             raise
@@ -176,6 +181,7 @@ async def _execute_single_tool_call(
     pipeline_name: str,
     budget: IterationBudget | None = None,
     stream_callback: Callable[[dict], None] | None = None,
+    llm_call=None,
 ) -> dict:
     """Route a single tool call to the correct executor core function.
 
@@ -291,6 +297,22 @@ async def _execute_single_tool_call(
                 return handler(**fn_args)
 
             else:
+                if fn_name.startswith(_PH_PREFIX) and llm_call is not None and cdp_helpers is not None:
+                    from engine.runner_preset import _inline_generate_and_execute
+                    step_dir = tools_dir.parent / "steps" / fn_name if tools_dir else Path(".") / fn_name
+                    step_dir.mkdir(parents=True, exist_ok=True)
+                    gen_result = await _inline_generate_and_execute(
+                        tool_name=fn_name,
+                        pipeline_name=pipeline_name,
+                        tools_dir=tools_dir or Path("."),
+                        cdp_helpers=cdp_helpers,
+                        llm_call=llm_call,
+                        step_dir=step_dir,
+                    )
+                    if gen_result.get("status") == "completed":
+                        return {"ok": True, "result": gen_result}
+                    return {"ok": False, "error": gen_result.get("error", {}).get("message", "Inline generation failed")}
+
                 return await execute_tool(
                     tool_name=fn_name,
                     params=fn_args,

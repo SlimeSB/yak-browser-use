@@ -3,10 +3,12 @@ from __future__ import annotations
 
 import asyncio
 import importlib.util
+import re
 import shutil
 import sys
 import traceback
 from pathlib import Path
+from typing import Any
 
 import yaml
 
@@ -16,6 +18,124 @@ from utils.logging import get_logger
 logger = get_logger(__name__)
 
 _PH_PREFIX = "_PH-"
+
+_dynamic_tool_registry: dict[str, dict[str, Any]] = {}
+
+
+def get_dynamic_tools(pipeline_name: str | None = None) -> list[dict[str, Any]]:
+    """Return registered dynamic tool schemas, optionally filtered by pipeline."""
+    if pipeline_name is None:
+        return list(_dynamic_tool_registry.values())
+    prefix = f"{pipeline_name}/"
+    return [schema for key, schema in _dynamic_tool_registry.items() if key.startswith(prefix)]
+
+
+def _parse_docstring_params(docstring: str) -> tuple[str, dict[str, Any], list[str]]:
+    """Parse a docstring in ``Parameters in **params:`` format.
+
+    Returns (description, properties_dict, required_list).
+    """
+    description = ""
+    properties: dict[str, Any] = {}
+    required: list[str] = []
+
+    parts = docstring.split("Parameters in **params:", 1)
+    description = parts[0].strip()
+
+    if len(parts) < 2:
+        return description, properties, required
+
+    param_text = parts[1]
+    param_pattern = re.compile(r"^\s*(\w+)\s*\(([\w\[\], |]+)\)\s*:\s*(.+)$", re.MULTILINE)
+    type_map = {
+        "str": "string",
+        "int": "integer",
+        "float": "number",
+        "bool": "boolean",
+        "list": "array",
+    }
+
+    for match in param_pattern.finditer(param_text):
+        name = match.group(1)
+        raw_type = match.group(2)
+        desc = match.group(3).strip()
+        json_type = type_map.get(raw_type, "string")
+        prop: dict[str, Any] = {"type": json_type, "description": desc}
+        if json_type == "array":
+            prop["items"] = {"type": "string"}
+        properties[name] = prop
+        required.append(name)
+
+    return description, properties, required
+
+
+def register_tool_schema(pipeline_name: str, tool_name: str, tool_path: Path) -> dict[str, Any] | None:
+    """Parse a tool file and register its OpenAI function schema.
+
+    Returns the schema dict if successful, None otherwise.
+    """
+    import importlib.util
+    import inspect
+    import sys
+
+    try:
+        source = tool_path.read_text(encoding="utf-8")
+    except Exception:
+        logger.warning("register_tool_schema: cannot read %s", tool_path)
+        return None
+
+    module_name = f"_schema_scan_{pipeline_name}_{tool_name}"
+    if module_name in sys.modules:
+        del sys.modules[module_name]
+
+    try:
+        spec = importlib.util.spec_from_file_location(module_name, str(tool_path))
+        if spec is None or spec.loader is None:
+            logger.warning("register_tool_schema: cannot load %s", tool_path)
+            return None
+        module = importlib.util.module_from_spec(spec)
+        sys.modules[module_name] = module
+        spec.loader.exec_module(module)
+    except Exception:
+        logger.warning("register_tool_schema: import failed for %s", tool_path)
+        return None
+
+    func_name = None
+    for name, obj in inspect.getmembers(module, inspect.isfunction):
+        sig = inspect.signature(obj)
+        param_names = list(sig.parameters.keys())
+        if param_names[:2] == ["ctx", "params"]:
+            func_name = name
+            break
+
+    if func_name is None:
+        logger.warning("register_tool_schema: no ctx/params function in %s", tool_path)
+        return None
+
+    doc_match = re.search(r'"""(.+?)"""', source, re.DOTALL)
+    docstring = doc_match.group(1).strip() if doc_match else ""
+    description, properties, required = _parse_docstring_params(docstring)
+
+    if not description:
+        description = f"Auto-generated tool: {func_name}"
+
+    schema: dict[str, Any] = {
+        "type": "function",
+        "function": {
+            "name": func_name,
+            "description": description,
+            "parameters": {
+                "type": "object",
+                "properties": properties,
+                "required": required,
+            },
+        },
+    }
+
+    key = f"{pipeline_name}/{tool_name}"
+    _dynamic_tool_registry[key] = schema
+    logger.info("register_tool_schema: registered %s → %s", key, func_name)
+    return schema
 
 
 class ToolRunner:
@@ -64,12 +184,13 @@ class ToolRunner:
             tool_name: Name of the tool (without .py).
             input_files: Dict of input file key → path.
             output_dir: Output directory path.
-            cdp_helpers: Optional CDP helpers for browser-enabled tools.
+            cdp_helpers: Optional CDP helpers for creating ToolContext.
             func_name: Function name to call (defaults to tool_name).
             **params: Additional keyword arguments forwarded to the tool function.
 
         Returns:
-            Dict with ``ok`` (bool) and optional ``error``, ``error_code``, ``stack``.
+            Dict with ``ok`` (bool) and optional ``error``, ``error_code``, ``stack``,
+            and the tool function's return value under ``result``.
         """
         tool_path = self.tools_dir / f"{tool_name}.py"
         if not tool_path.exists():
@@ -96,11 +217,19 @@ class ToolRunner:
             module = importlib.util.module_from_spec(spec)
             sys.modules[module_name] = module
             spec.loader.exec_module(module)
-        except Exception as e:
+        except SyntaxError as e:
             logger.warning("tool_runner: %s syntax error: %s", tool_name, e)
             return {
                 "ok": False,
                 "error_code": "SYNTAX_ERROR",
+                "error": str(e),
+                "stack": traceback.format_exc(),
+            }
+        except Exception as e:
+            logger.warning("tool_runner: %s import error: %s", tool_name, e)
+            return {
+                "ok": False,
+                "error_code": "IMPORT_ERROR",
                 "error": str(e),
                 "stack": traceback.format_exc(),
             }
@@ -118,14 +247,18 @@ class ToolRunner:
             tool_name, func_name, list(input_files.keys()), output_dir,
         )
         try:
-            kwargs: dict = {"input_files": input_files, "output_dir": output_dir, **params}
-            if cdp_helpers is not None:
-                kwargs["cdp_helpers"] = cdp_helpers
+            from engine.ops import build_tool_kwargs
+
+            kwargs = build_tool_kwargs(func, cdp_helpers, input_files, output_dir, dict(params))
 
             if asyncio.iscoroutinefunction(func):
-                await func(**kwargs)
+                result = await func(**kwargs)
             else:
-                func(**kwargs)
+                result = func(**kwargs)
+
+            if isinstance(result, dict):
+                return {"ok": True, "result": result}
+            return {"ok": True}
         except Exception as e:
             logger.warning("tool_runner: %s runtime error: %s", tool_name, e)
             is_timeout = "timeout" in str(e).lower() or "timed out" in str(e).lower()
@@ -135,9 +268,6 @@ class ToolRunner:
                 "error": str(e),
                 "stack": traceback.format_exc(),
             }
-
-        logger.debug("tool_runner: %s completed ok", tool_name)
-        return {"ok": True}
 
     def rename_ph_file(self, ph_name: str) -> dict:
         """Rename _PH-tool file → normal tool file (file move only, no YAML update).
@@ -158,6 +288,8 @@ class ToolRunner:
 
         shutil.move(str(ph_path), str(real_path))
         self._clear_module_cache(f"pipeline_tool_{self.pipeline_name}_{ph_name}")
+
+        register_tool_schema(self.pipeline_name, real_name, real_path)
 
         logger.info("tool_runner: renamed %s → %s", ph_name, real_name)
         return {"ok": True, "old": ph_name, "new": real_name}
@@ -210,18 +342,25 @@ class ToolRunner:
 def _replace_ph_refs(data, ph_name: str, real_name: str):
     """Recursively replace placeholder name references in a YAML data structure.
 
+    Only replaces in ``tool_name`` dict keys to avoid corrupting
+    descriptions and comments.
+
     Args:
         data: Parsed YAML structure (dict, list, str, etc.).
         ph_name: _PH- prefixed name to replace.
         real_name: Unprefixed replacement name.
 
     Returns:
-        The data structure with all string references updated.
+        The data structure with tool_name references updated.
     """
     if isinstance(data, dict):
-        return {k: _replace_ph_refs(v, ph_name, real_name) for k, v in data.items()}
+        result = {}
+        for k, v in data.items():
+            if k == "tool_name" and isinstance(v, str):
+                result[k] = v.replace(ph_name, real_name)
+            else:
+                result[k] = _replace_ph_refs(v, ph_name, real_name)
+        return result
     if isinstance(data, list):
         return [_replace_ph_refs(item, ph_name, real_name) for item in data]
-    if isinstance(data, str):
-        return data.replace(ph_name, real_name)
     return data

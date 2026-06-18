@@ -929,15 +929,19 @@ SKILL_DELETE_TOOL: dict[str, Any] = {
 }
 
 
-def get_all_tools(include_goal_run: bool = True) -> list[dict[str, Any]]:
+def get_all_tools(include_goal_run: bool = True, pipeline_name: str | None = None) -> list[dict[str, Any]]:
     """Get the full list of registered tools.
 
     Args:
         include_goal_run: If True, include the goal_run tool.
+        pipeline_name: If set, include only dynamic tools for this pipeline.
+            If None, include all dynamic tools.
 
     Returns:
         List of OpenAI-compatible tool definitions.
     """
+    from engine._lifecycle.tool_runner import get_dynamic_tools
+
     tools = list(BROWSER_TOOLS)
     if include_goal_run:
         tools.append(GOAL_RUN_TOOL)
@@ -951,7 +955,8 @@ def get_all_tools(include_goal_run: bool = True) -> list[dict[str, Any]]:
         SKILL_EDIT_TOOL,
         SKILL_DELETE_TOOL,
     ])
-    logger.debug("get_all_tools: registered %d tools (include_goal_run=%s)", len(tools), include_goal_run)
+    tools.extend(get_dynamic_tools(pipeline_name))
+    logger.debug("get_all_tools: registered %d tools (include_goal_run=%s, pipeline_name=%s)", len(tools), include_goal_run, pipeline_name)
     return tools
 
 

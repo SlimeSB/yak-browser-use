@@ -1,5 +1,11 @@
 """Restricted CDP helpers for tool-level browser access (safe subset).
 
+.. deprecated::
+    This class is deprecated. Use ``engine.ops.ToolContext`` instead.
+    The ``allowed_domains`` and circuit breaker features have been
+    migrated to ``ToolContext``. This class is kept for backward
+    compatibility with existing code paths.
+
 Provides the same interface as CDPHelpers but with:
 - Allowed domain restrictions
 - Timeout limits

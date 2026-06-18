@@ -1,78 +1,20 @@
 """Generic data processing tools for browser-use pipelines.
 
-Functions follow the convention:
-    CAPABILITIES = []  # or ["browser"] if CDP needed
-
-    async def my_tool(input_files: dict[str, str], output_dir: str, **params) -> None:
-        ...
+Migrated to ToolContext — functions receive ``ctx: ToolContext`` instead
+of raw ``input_files`` / ``output_dir``.
 """
 from __future__ import annotations
 
-import csv
-import json
-import os
 import re
-from pathlib import Path
 from typing import Any
 
+from engine.ops import ToolContext
 from utils.logging import get_logger
 
 logger = get_logger(__name__)
 
-CAPABILITIES: list[str] = []
 
-
-def _resolve_input_files(input_files: dict[str, str]) -> list[Path]:
-    """Resolve input file paths from the file mapping."""
-    paths = []
-    for key, path_str in input_files.items():
-        p = Path(path_str)
-        if p.exists():
-            paths.append(p)
-    return paths
-
-
-def _load_records(path: Path) -> list[dict]:
-    """Load records from a JSON or CSV file."""
-    ext = path.suffix.lower()
-    if ext == ".json":
-        with open(path, "r", encoding="utf-8") as f:
-            data = json.load(f)
-        if isinstance(data, list):
-            return data
-        if isinstance(data, dict):
-            # Try common structures
-            for val in data.values():
-                if isinstance(val, list):
-                    return val
-            return [data]
-        return []
-    elif ext == ".csv":
-        with open(path, "r", encoding="utf-8-sig") as f:
-            reader = csv.DictReader(f)
-            return list(reader)
-    else:
-        raise ValueError(f"Unsupported file format: {ext}")
-
-
-def _save_records(records: list[dict], output_dir: str, name: str) -> Path:
-    """Save records as JSON to the output directory."""
-    out_dir = Path(output_dir)
-    out_dir.mkdir(parents=True, exist_ok=True)
-    out_path = out_dir / name
-    with open(out_path, "w", encoding="utf-8") as f:
-        json.dump(records, f, ensure_ascii=False, indent=2)
-    return out_path
-
-
-# ── filter_data ──
-
-
-async def filter_data(
-    input_files: dict[str, str],
-    output_dir: str,
-    **params: Any,
-) -> None:
+async def filter_data(ctx: ToolContext, params: dict) -> dict:
     """Filter records by matching criteria.
 
     Parameters in **params:
@@ -85,15 +27,11 @@ async def filter_data(
         key_field (str): Field to check for key presence (e.g., in a list).
         key_values (list): Values the key_field must be in (or not in if exclude=True).
     """
-    files = _resolve_input_files(input_files)
-    if not files:
+    all_records = await ctx.load_all_records()
+    if not all_records:
         raise FileNotFoundError("No input files found from input_files mapping")
 
-    logger.debug("filter_data: starting, %d input file(s), params=%s", len(files), str(params))
-
-    all_records: list[dict] = []
-    for f in files:
-        all_records.extend(_load_records(f))
+    logger.debug("filter_data: starting, %d input file(s), params=%s", len(ctx.input_files), str(params))
 
     field = params.get("field")
     value = params.get("value")
@@ -143,18 +81,11 @@ async def filter_data(
             if (r.get(key_field) in key_values) != exclude
         ]
 
-    out_path = _save_records(filtered, output_dir, "filtered.json")
-    print(f"filter_data: {len(all_records)} -> {len(filtered)} records written to {out_path}")
+    await ctx.save_json(filtered, "filtered.json")
+    return {"ok": True, "input_count": len(all_records), "output_count": len(filtered)}
 
 
-# ── sort_data ──
-
-
-async def sort_data(
-    input_files: dict[str, str],
-    output_dir: str,
-    **params: Any,
-) -> None:
+async def sort_data(ctx: ToolContext, params: dict) -> dict:
     """Sort records by a given field.
 
     Parameters in **params:
@@ -162,15 +93,11 @@ async def sort_data(
         reverse (bool): Sort descending if True (default: False).
         numeric (bool): Treat field values as numbers when sorting (default: True).
     """
-    files = _resolve_input_files(input_files)
-    if not files:
+    all_records = await ctx.load_all_records()
+    if not all_records:
         raise FileNotFoundError("No input files found from input_files mapping")
 
-    logger.debug("sort_data: starting, %d input file(s), params=%s", len(files), str(params))
-
-    all_records: list[dict] = []
-    for f in files:
-        all_records.extend(_load_records(f))
+    logger.debug("sort_data: starting, %d input file(s), params=%s", len(ctx.input_files), str(params))
 
     field = params.get("field", "")
     reverse = params.get("reverse", False)
@@ -190,33 +117,22 @@ async def sort_data(
 
     sorted_records = sorted(all_records, key=sort_key, reverse=reverse)
 
-    out_path = _save_records(sorted_records, output_dir, "sorted.json")
-    print(f"sort_data: {len(sorted_records)} records sorted by '{field}' -> {out_path}")
+    await ctx.save_json(sorted_records, "sorted.json")
+    return {"ok": True, "count": len(sorted_records), "field": field}
 
 
-# ── deduplicate ──
-
-
-async def deduplicate(
-    input_files: dict[str, str],
-    output_dir: str,
-    **params: Any,
-) -> None:
+async def deduplicate(ctx: ToolContext, params: dict) -> dict:
     """Remove duplicate records based on key fields.
 
     Parameters in **params:
         key (str | list[str]): Field name(s) to use for dedup (default: first field).
         keep (str): 'first' or 'last' occurrence to keep (default: 'first').
     """
-    files = _resolve_input_files(input_files)
-    if not files:
+    all_records = await ctx.load_all_records()
+    if not all_records:
         raise FileNotFoundError("No input files found from input_files mapping")
 
-    logger.debug("deduplicate: starting, %d input file(s), params=%s", len(files), str(params))
-
-    all_records: list[dict] = []
-    for f in files:
-        all_records.extend(_load_records(f))
+    logger.debug("deduplicate: starting, %d input file(s), params=%s", len(ctx.input_files), str(params))
 
     keys = params.get("key")
     keep = params.get("keep", "first")
@@ -224,7 +140,6 @@ async def deduplicate(
     if isinstance(keys, str):
         keys = [keys]
     if not keys and all_records:
-        # Default to the first available field
         keys = [list(all_records[0].keys())[0]]
 
     if not keys:
@@ -236,7 +151,6 @@ async def deduplicate(
     records_iter = all_records if keep == "first" else reversed(all_records)
 
     for record in records_iter:
-        # Build composite key
         composite = tuple(str(record.get(k, "")) for k in keys)
         if composite not in seen:
             seen.add(composite)
@@ -245,18 +159,11 @@ async def deduplicate(
     if keep == "last":
         deduped.reverse()
 
-    out_path = _save_records(deduped, output_dir, "deduped.json")
-    print(f"deduplicate: {len(all_records)} -> {len(deduped)} records -> {out_path}")
+    await ctx.save_json(deduped, "deduped.json")
+    return {"ok": True, "input_count": len(all_records), "output_count": len(deduped)}
 
 
-# ── map_fields ──
-
-
-async def map_fields(
-    input_files: dict[str, str],
-    output_dir: str,
-    **params: Any,
-) -> None:
+async def map_fields(ctx: ToolContext, params: dict) -> dict:
     """Rename or remap fields in records.
 
     Parameters in **params:
@@ -265,15 +172,11 @@ async def map_fields(
         defaults (dict[str, Any]): Default values for fields that don't exist.
         keep_original (bool): Keep original fields alongside renamed ones (default: False).
     """
-    files = _resolve_input_files(input_files)
-    if not files:
+    all_records = await ctx.load_all_records()
+    if not all_records:
         raise FileNotFoundError("No input files found from input_files mapping")
 
-    logger.debug("map_fields: starting, %d input file(s), params=%s", len(files), str(params))
-
-    all_records: list[dict] = []
-    for f in files:
-        all_records.extend(_load_records(f))
+    logger.debug("map_fields: starting, %d input file(s), params=%s", len(ctx.input_files), str(params))
 
     mapping = params.get("mapping", {})
     drop_missing = params.get("drop_missing", False)
@@ -296,5 +199,5 @@ async def map_fields(
 
         mapped_records.append(new_record)
 
-    out_path = _save_records(mapped_records, output_dir, "mapped.json")
-    print(f"map_fields: {len(all_records)} -> {len(mapped_records)} records -> {out_path}")
+    await ctx.save_json(mapped_records, "mapped.json")
+    return {"ok": True, "input_count": len(all_records), "output_count": len(mapped_records)}

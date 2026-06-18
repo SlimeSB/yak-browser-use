@@ -117,7 +117,7 @@ def _step_type(step: StepYaml) -> str:
 
 async def pipeline_list(**kwargs) -> str:
     if not PRESETS_DIR.exists():
-        return json.dumps({"ok": True, "presets": []})
+        return json.dumps({"ok": True, "result": json.dumps([])}, ensure_ascii=False)
 
     presets = []
     for f in sorted(PRESETS_DIR.glob("*.pipeline.yaml")):
