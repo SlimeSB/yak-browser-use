@@ -250,9 +250,19 @@ async def _execute_single_tool_call(
 
                 result_str = await handler(**fn_args)
                 try:
-                    return json.loads(result_str)
+                    result_dict = json.loads(result_str)
                 except (json.JSONDecodeError, TypeError):
                     return {"ok": True, "result": result_str}
+
+                # Flattened pipeline tools (pipeline_load, pipeline_list,
+                # pipeline_compile) omit the 'result' key; add it here so
+                # _format_tool_result can display a JSON snapshot to the LLM.
+                if "result" not in result_dict and result_dict.get("ok"):
+                    result_dict["result"] = json.dumps(
+                        {k: v for k, v in result_dict.items() if k not in ("ok", "result")},
+                        ensure_ascii=False,
+                    )
+                return result_dict
 
             elif fn_name == "goal_run":
                 description = fn_args.get("description", fn_args.get("goal", ""))
