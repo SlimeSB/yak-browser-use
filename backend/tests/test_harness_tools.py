@@ -10,7 +10,7 @@ from engine._harness.tools import (
 
 
 def test_browser_tools_count():
-    assert len(BROWSER_TOOLS) == 8
+    assert len(BROWSER_TOOLS) == 20
 
 
 def test_browser_tools_structure():
@@ -30,7 +30,7 @@ def test_goal_run_tool():
 
 
 def test_pipeline_tools_count():
-    assert len(PIPELINE_TOOLS) == 7
+    assert len(PIPELINE_TOOLS) == 8
 
 
 def test_pipeline_tools_names():
@@ -45,7 +45,7 @@ def test_pipeline_tools_names():
 
 def test_get_all_tools_with_goal():
     tools = get_all_tools(include_goal_run=True)
-    assert len(tools) == 18
+    assert len(tools) == 36
     names = [t["function"]["name"] for t in tools]
     assert "browser_goto" in names
     assert "goal_run" in names
@@ -63,7 +63,7 @@ def test_get_all_tools_with_goal():
 
 def test_get_all_tools_without_goal():
     tools = get_all_tools(include_goal_run=False)
-    assert len(tools) == 17
+    assert len(tools) == 35
     names = [t["function"]["name"] for t in tools]
     assert "goal_run" not in names
     assert "edit_pipeline" not in names
@@ -72,7 +72,7 @@ def test_get_all_tools_without_goal():
 
 def test_get_browser_tools():
     tools = get_browser_tools()
-    assert len(tools) == 8
+    assert len(tools) == 20
     names = [t["function"]["name"] for t in tools]
     assert "browser_goto" in names
     assert "browser_click" in names

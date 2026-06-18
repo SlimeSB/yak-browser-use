@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 from typing import Any
 
-from cdp.daemon import CDPDaemon
+from cdp.playwright_bridge import PlaywrightBridge
 from engine.state import RunContext
 from utils.logging import get_logger
 
@@ -19,8 +19,8 @@ class _EngineState:
     ----------
     current_state : str
         One of ``idle``, ``connecting``, ``connected``, ``running``.
-    chrome_daemon : CDPDaemon | None
-        The active Chrome DevTools Protocol daemon instance.
+    bridge : PlaywrightBridge | None
+        The active PlaywrightBridge instance for browser operations.
     _running_pipeline : RunContext | None
         Context for the currently executing pipeline, if any.
     ws_clients : list[asyncio.Queue]
@@ -29,17 +29,16 @@ class _EngineState:
 
     def __init__(self) -> None:
         self.current_state: str = "idle"
-        self.chrome_daemon: CDPDaemon | None = None
+        self.bridge: PlaywrightBridge | None = None
         self._running_pipeline: RunContext | None = None
         self.ws_clients: list[asyncio.Queue] = []
         self._service: object | None = None
         self._service_lock = asyncio.Lock()
-        self._highlight_guard_task: asyncio.Task | None = None
 
     # ── Chrome connection  ──────────────────────────────────────────
 
     async def connect_chrome(self, ws_url: str | None = None) -> str:
-        """Connect to Chrome via CDP WebSocket.
+        """Connect to Chrome via PlaywrightBridge (CDP).
 
         Parameters
         ----------
@@ -48,9 +47,9 @@ class _EngineState:
 
         Returns
         -------
-        The connected WebSocket URL (truncated for logging).
+        The connected CDP URL (truncated for logging).
         """
-        if self.chrome_daemon and self.chrome_daemon.is_running:
+        if self.bridge is not None:
             raise RuntimeError("Chrome is already connected")
 
         self.current_state = "connecting"
@@ -59,12 +58,14 @@ class _EngineState:
             from cdp.discover import discover_ws_url
             ws_url = await discover_ws_url()
 
-        daemon = CDPDaemon(ws_url)
-        await daemon.start()
-        await daemon.attach_first_page()
-        await daemon.enable_default_domains()
+        if ws_url is None:
+            raise RuntimeError("Cannot discover Chrome debug URL — is Chrome running with --remote-debugging-port?")
 
-        self.chrome_daemon = daemon
+        cdp_url = ws_url.replace("ws://", "http://").replace("wss://", "https://")
+        bridge = PlaywrightBridge(cdp_url)
+        await bridge.start()
+
+        self.bridge = bridge
         self.current_state = "connected"
         logger.info("Chrome connected via %s ...", ws_url[:60])
         return ws_url
@@ -74,20 +75,16 @@ class _EngineState:
         if self._running_pipeline is not None:
             raise RuntimeError("A pipeline is currently running")
 
-        if self._highlight_guard_task:
-            self._highlight_guard_task.cancel()
-            self._highlight_guard_task = None
-
-        if self.chrome_daemon:
-            await self.chrome_daemon.stop()
-        self.chrome_daemon = None
+        if self.bridge:
+            await self.bridge.stop()
+        self.bridge = None
         self.current_state = "idle"
         logger.info("Chrome disconnected")
 
     @property
     def chrome_connected(self) -> bool:
-        """Return True if Chrome daemon is active and running."""
-        return self.chrome_daemon is not None and self.chrome_daemon.is_running
+        """Return True if bridge is active."""
+        return self.bridge is not None
 
     # ── Pipeline lifecycle  ─────────────────────────────────────────
 
@@ -100,7 +97,7 @@ class _EngineState:
         self._running_pipeline = ctx
         if ctx is not None:
             self.current_state = "running"
-        elif self.chrome_daemon and self.chrome_daemon.is_running:
+        elif self.bridge is not None:
             self.current_state = "connected"
         else:
             self.current_state = "idle"
@@ -124,16 +121,12 @@ class _EngineState:
     # ── Cleanup  ────────────────────────────────────────────────────
 
     async def cleanup(self) -> None:
-        """Gracefully shut down everything: daemon, pipeline, WS clients."""
+        """Gracefully shut down everything: bridge, pipeline, WS clients."""
         logger.info("EngineState: cleaning up …")
 
-        if self._highlight_guard_task:
-            self._highlight_guard_task.cancel()
-            self._highlight_guard_task = None
-
-        if self.chrome_daemon:
-            await self.chrome_daemon.stop()
-            self.chrome_daemon = None
+        if self.bridge:
+            await self.bridge.stop()
+            self.bridge = None
 
         self._running_pipeline = None
         self.ws_clients.clear()

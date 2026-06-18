@@ -203,7 +203,7 @@ async def _execute_single_tool_call(
                     if cached_result is not None:
                         return cached_result
 
-                return await execute_browser_op(op_type, fn_args, cdp_helpers)
+                return await execute_browser_op(op_type, fn_args, cdp_helpers.bridge if hasattr(cdp_helpers, "bridge") else cdp_helpers)
 
             elif fn_name == "pipeline_finish":
                 status = fn_args.get("status", "")
@@ -320,11 +320,15 @@ async def _execute_single_tool_call(
                 if budget is not None and not budget.is_paused:
                     budget.pause()
                 await asyncio.sleep(delay)
-                if cdp_helpers and hasattr(cdp_helpers, "_daemon"):
+                if cdp_helpers and hasattr(cdp_helpers, "bridge"):
                     try:
-                        await cdp_helpers._daemon.start()  # type: ignore[union-attr]
+                        await cdp_helpers.bridge.stop()
+                    except Exception:
+                        logger.debug("PlaywrightBridge stop before restart failed", exc_info=True)
+                    try:
+                        await cdp_helpers.bridge.start()
                     except Exception as e:
-                        logger.debug("CDP daemon restart failed: %s", e)
+                        logger.debug("PlaywrightBridge restart failed: %s", e)
                 if budget is not None and budget.is_paused:
                     budget.resume()
                 if reconnect_attempts >= _CDP_RECONNECT_MAX and stream_callback:

@@ -10,6 +10,7 @@ from .launcher import (
     cleanup_isolated,
 )
 from .daemon import CDPDaemon, ensure_daemon
+from .playwright_bridge import PlaywrightBridge
 from .profiles import (
     list_user_data_dirs,
     list_chrome_profiles,
@@ -27,6 +28,7 @@ __all__ = [
     "cleanup_isolated",
     "CDPDaemon",
     "ensure_daemon",
+    "PlaywrightBridge",
     "list_user_data_dirs",
     "list_chrome_profiles",
     "get_chrome_user_data_dir",

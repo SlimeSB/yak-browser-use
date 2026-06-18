@@ -48,8 +48,8 @@ async def _cmd_run(
     _print_summary(result)
 
     browser = result.get("browser")
-    if browser and hasattr(browser, "_daemon"):
-        await browser._daemon.stop()
+    if browser and hasattr(browser, "_bridge"):
+        await browser._bridge.stop()
 
     from cdp import cleanup_isolated
     await cleanup_isolated()
@@ -152,29 +152,27 @@ async def _execute_pipeline(input_path: Path, content: str, params: dict | None 
 
     try:
         from cdp import discover_ws_url
-        from cdp.daemon import CDPDaemon
+        from cdp.playwright_bridge import PlaywrightBridge
         from cdp.helpers import CDPHelpers
 
         logger.info("\nConnecting to Chrome...")
         ws_url = await discover_ws_url()
         logger.info("  Chrome WS URL: %s...", ws_url[:60])
 
-        daemon = CDPDaemon(ws_url)
-        await daemon.start()
-        await daemon.attach_first_page()
-        await daemon.enable_default_domains()
+        cdp_url = ws_url.replace("ws://", "http://").replace("wss://", "https://")
+        bridge = PlaywrightBridge(cdp_url)
+        await bridge.start()
 
-        browser = CDPHelpers(daemon)
+        browser = CDPHelpers(bridge)
         logger.info("  Chrome connected\n")
     except Exception as e:
         logger.warning("  Cannot connect to Chrome (%s), running in headless mode\n", e)
-        # Check if any steps need browser capabilities
         for step_data in resolved_steps:
             if step_data.get("browser_ops") or step_data.get("is_goal"):
                 logger.warning("  \u26a0 Step '%s' needs a browser but Chrome is unavailable — execution will fail", step_data.get("name", "?"))
         browser = None
         ws_url = ""
-        daemon = None
+        bridge = None
 
     from engine._lifecycle.guardian import create_guardian_from_frontmatter
     guardian = create_guardian_from_frontmatter(parsed.frontmatter)
@@ -240,7 +238,7 @@ async def _execute_pipeline(input_path: Path, content: str, params: dict | None 
         "parsed": parsed,
         "ctx": ctx,
         "browser": browser,
-        "daemon": daemon,
+        "bridge": bridge,
         "elapsed": time.time() - _start_time,
     }
 

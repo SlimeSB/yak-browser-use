@@ -225,7 +225,7 @@ async def extract_table(
 
     logger.debug("extract_table: target=%s, poll_seconds=%s", params.get("selector", "auto"), poll_seconds)
 
-    result = await cdp_helpers._helpers.js(EXTRACT_TABLE_JS)
+    result = await cdp_helpers.evaluate(EXTRACT_TABLE_JS)
     if result and result.get("rows"):
         out_path = _save_output(result, output_dir, "table.json")
         print(f"extract_table: {len(result['rows'])} rows x {len(result.get('headers', []))} cols -> {out_path}")
@@ -273,9 +273,9 @@ async def extract_list(
                 attr: attr ? el.getAttribute(attr) || '' : ''
             }}));
         }}"""
-        result = await cdp_helpers._helpers.js(custom_js)
+        result = await cdp_helpers.evaluate(custom_js)
     else:
-        result = await cdp_helpers._helpers.js(EXTRACT_LIST_JS)
+        result = await cdp_helpers.evaluate(EXTRACT_LIST_JS)
 
     out_path = _save_output(result or [], output_dir, "list.json")
     count = len(result) if result else 0
@@ -322,9 +322,9 @@ async def extract_details(
             }}
             return {{ text: clean(container.textContent || ''), details: pairs }};
         }}"""
-        result = await cdp_helpers._helpers.js(custom_js)
+        result = await cdp_helpers.evaluate(custom_js)
     else:
-        result = await cdp_helpers._helpers.js(EXTRACT_DETAILS_JS)
+        result = await cdp_helpers.evaluate(EXTRACT_DETAILS_JS)
 
     out_path = _save_output(result, output_dir, "details.json")
     detail_count = len(result.get("details", [])) if result else 0

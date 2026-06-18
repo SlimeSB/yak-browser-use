@@ -1,10 +1,17 @@
-"""CDPDaemon — WebSocket connection manager for Chrome DevTools Protocol."""
+"""CDPDaemon — WebSocket connection manager for Chrome DevTools Protocol.
+
+.. deprecated::
+    Use :class:`cdp.playwright_bridge.PlaywrightBridge` instead.
+    CDPDaemon is kept for backward compatibility only and will be removed
+    in a future release.
+"""
 
 from __future__ import annotations
 
 import asyncio
 import json
 import os
+import warnings
 from typing import Any
 
 import websockets
@@ -301,6 +308,9 @@ class CDPDaemon:
 async def ensure_daemon(name: str = "yak-browser-use") -> CDPDaemon:
     """Return a running CDPDaemon, creating one if necessary.
 
+    .. deprecated::
+        Use :class:`cdp.playwright_bridge.PlaywrightBridge` instead.
+
     Checks the module-level session dict for an existing daemon with
     the same *name*; if none exists, it discovers a WS URL, starts a
     new daemon, attaches the first page, and enables default domains.
@@ -309,6 +319,11 @@ async def ensure_daemon(name: str = "yak-browser-use") -> CDPDaemon:
     daemon should hold a reference or coordinate via the session dict
     themselves.
     """
+    warnings.warn(
+        "ensure_daemon is deprecated; use PlaywrightBridge instead",
+        DeprecationWarning,
+        stacklevel=2,
+    )
     # Check if a session already exists
     existing = _sessions.get(name)
     if existing and existing.get("ws_url"):

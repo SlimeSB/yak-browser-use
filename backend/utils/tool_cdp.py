@@ -5,14 +5,18 @@ Provides the same interface as CDPHelpers but with:
 - Timeout limits
 - Circuit breaker (3 consecutive failures)
 - Only safe operations exposed
+
+Backed by PlaywrightBridge instead of raw CDP.
 """
+
 from __future__ import annotations
 
 import asyncio
 import logging
-from typing import Any
+from typing import Any, TYPE_CHECKING
 
-from cdp.helpers import CDPHelpers
+if TYPE_CHECKING:
+    from cdp.playwright_bridge import PlaywrightBridge
 
 logger = logging.getLogger(__name__)
 
@@ -20,28 +24,28 @@ logger = logging.getLogger(__name__)
 class ToolCDPHelpers:
     """Restricted browser access for tool functions."""
 
-    SAFE_OPS = frozenset({"click", "fill", "type", "wait", "snapshot"})
+    SAFE_OPS = frozenset({"click", "fill", "type", "wait", "snapshot", "evaluate"})
 
-    def __init__(self, helpers: CDPHelpers, allowed_domains: list[str] | None = None):
-        self._helpers = helpers
+    def __init__(self, bridge: PlaywrightBridge, allowed_domains: list[str] | None = None):
+        self._bridge = bridge
         self._allowed_domains = allowed_domains or []
         self._fail_count = 0
         self._max_fails = 3
 
     async def click_selector(self, selector: str) -> dict:
         self._check_failures()
-        result = await self._helpers.click_selector(selector)
+        result = await self._bridge.click(selector)
         self._fail_count = 0
         return result
 
     async def fill_input(self, selector: str, text: str) -> dict:
         self._check_failures()
-        result = await self._helpers.fill_input(selector, text, _sensitive=True)
+        logger.debug("fill_input: %s = <sensitive: %d chars>", selector, len(text))
+        result = await self._bridge.fill(selector, text)
         self._fail_count = 0
         return result
 
     async def fill_credential(self, selector: str, param_ref: object) -> None:
-        """Resolve a param reference and fill it into a form field."""
         from params.manager import resolve_param
         text = resolve_param(param_ref)
         await self.fill_input(selector, text)
@@ -52,11 +56,17 @@ class ToolCDPHelpers:
     async def snapshot(self, mode: str = "full", query: str = "", in_viewport: bool = False) -> dict:
         self._check_failures()
         if mode == "interactive":
-            result = await self._helpers.capture_snapshot_interactive(query=query, in_viewport=in_viewport)
+            result = await self._bridge.simplify_dom(query=query, in_viewport=in_viewport)
         elif mode == "simplified":
-            result = await self._helpers.capture_snapshot_simplified()
+            result = await self._bridge.simplified_snapshot()
         else:
-            result = await self._helpers.capture_snapshot()
+            result = await self._bridge.capture_snapshot()
+        self._fail_count = 0
+        return result
+
+    async def evaluate(self, js: str) -> Any:
+        self._check_failures()
+        result = await self._bridge.evaluate(js)
         self._fail_count = 0
         return result
 

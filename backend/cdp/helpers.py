@@ -1,12 +1,17 @@
 """CDPHelpers — high-level browser operation wrappers.
 
-All CDP operations go through this class (or its restricted ToolCDPHelpers variant).
+All browser operations go through this class (or its restricted ToolCDPHelpers variant).
+Backed by PlaywrightBridge instead of raw CDP WebSocket.
 """
+
 from __future__ import annotations
 
 import json as _json
 import logging
-from typing import Any
+from typing import Any, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from cdp.playwright_bridge import PlaywrightBridge
 
 logger = logging.getLogger(__name__)
 
@@ -27,314 +32,58 @@ def _build_element_info(el: dict) -> dict:
     }
 
 
-_INTERACTIVE_TAGS = frozenset({
-    "a", "button", "input", "select", "textarea", "details", "summary",
-    "option", "optgroup", "label", "datalist", "output", "fieldset",
-    "video", "audio",
-})
-_INTERACTIVE_ROLES = frozenset({
-    "button", "link", "checkbox", "radio", "switch", "tab",
-    "menuitem", "menuitemcheckbox", "menuitemradio", "option",
-    "combobox", "listbox", "textbox", "searchbox", "slider",
-    "spinbutton", "treeitem",
-})
-
-
-def _is_interactive(tag: str, attrs: dict[str, str]) -> bool:
-    if tag in _INTERACTIVE_TAGS:
-        if tag == "a" and not attrs.get("href"):
-            return False
-        if tag == "input" and attrs.get("type", "").lower() == "hidden":
-            return False
-        return True
-    if attrs.get("role", "").lower() in _INTERACTIVE_ROLES:
-        return True
-    if attrs.get("tabindex") is not None:
-        return True
-    if attrs.get("onclick"):
-        return True
-    cedit = attrs.get("contenteditable")
-    if cedit is not None and cedit.lower() in ("true", ""):
-        return True
-    if tag in ("div", "span", "li") and any(k.startswith("data-v-") or k.startswith("data-react-") for k in attrs):
-        return True
-    return False
-
-
-def _is_tentative(tag: str, attrs: dict[str, str]) -> bool:
-    """True if the element is only interactive due to heuristics (not tag/role/onclick)."""
-    if tag in _INTERACTIVE_TAGS:
-        return False
-    if attrs.get("role", "").lower() in _INTERACTIVE_ROLES:
-        return False
-    if attrs.get("tabindex") is not None:
-        return False
-    if attrs.get("onclick"):
-        return False
-    cedit = attrs.get("contenteditable")
-    if cedit is not None and cedit.lower() in ("true", ""):
-        return False
-    return True
-
-
-def _build_selector_from_node(tag: str, attrs: dict[str, str]) -> str:
-    node_id = attrs.get("id")
-    if node_id:
-        return f"#{node_id}"
-
-    parts = [tag]
-    cls = attrs.get("class", "")
-    for c in cls.split():
-        if c:
-            parts.append(f".{c}")
-
-    for attr_name in ("name", "type", "role", "aria-label", "href", "placeholder", "title", "target"):
-        val = attrs.get(attr_name)
-        if val and '"' not in val:
-            parts.append(f'[{attr_name}="{val}"]')
-
-    return "".join(parts)
-
-
 class CDPHelpers:
-    """Wraps a CDPDaemon for common browser operations."""
+    """Wraps a PlaywrightBridge for common browser operations."""
 
-    def __init__(self, daemon: object, *, session_id: str | None = None):
-        self._daemon = daemon
+    def __init__(self, bridge: PlaywrightBridge, *, session_id: str | None = None):
+        self._bridge = bridge
         self._session_id = session_id
         self._ref_map: dict[str, dict] = {}
 
-    def target_session(self, sid: str | None) -> None:
-        """Set the CDP session for subsequent calls (multi-tab targeting)."""
-        self._session_id = sid
+    @property
+    def bridge(self):
+        """Public accessor for the underlying PlaywrightBridge."""
+        return self._bridge
 
-    async def _cdp(self, method: str, params: dict | None = None, _sensitive: bool = False) -> Any:
-        if _sensitive and params:
-            masked = {k: f"<sensitive: {len(v)} chars>" if isinstance(v, str) and v else v
-                      for k, v in params.items()}
-            logger.debug("browser_op: %s %s", method, masked)
-        else:
-            logger.debug("browser_op: %s %s", method, params)
-        return await self._daemon._send(method, params, session_id=self._session_id)
+    # ------------------------------------------------------------------
+    # Existing methods — rewritten to call PlaywrightBridge
+    # ------------------------------------------------------------------
 
     async def goto_url(self, url: str) -> dict:
-        return await self._cdp("Page.navigate", {"url": url})
+        return await self._bridge.goto(url)
 
     def reset_ref_map(self) -> None:
+        self._bridge.reset_ref_map()
         self._ref_map = {}
 
-    async def click_at_xy(self, x: float, y: float) -> dict:
-        await self._cdp("Input.dispatchMouseEvent", {
-            "type": "mousePressed", "x": x, "y": y, "button": "left", "clickCount": 1,
-        })
-        return await self._cdp("Input.dispatchMouseEvent", {
-            "type": "mouseReleased", "x": x, "y": y, "button": "left", "clickCount": 1,
-        })
-
-    async def click_selector(self, selector: str) -> dict:
-        node_result = await self._cdp("DOM.getDocument")
-        root = node_result.get("root", {})
-        query_result = await self._cdp("DOM.querySelector", {
-            "nodeId": root.get("nodeId"), "selector": selector,
-        })
-        node_id = query_result.get("nodeId")
-        if not node_id or node_id == 0:
-            raise ValueError(f"Element not found: {selector}")
-        box = await self._cdp("DOM.getBoxModel", {"nodeId": node_id})
-        model = box.get("model", {})
-        content = model.get("content", [])
-        if len(content) >= 4:
-            x = (content[0] + content[2]) / 2
-            y = (content[1] + content[3]) / 2
-            return await self.click_at_xy(x, y)
-        raise ValueError(f"Cannot get box model for element: {selector}")
+    async def click_selector(self, selector: str, click_count: int = 1) -> dict:
+        return await self._bridge.click(selector, click_count)
 
     async def fill_input(self, selector: str, text: str, _sensitive: bool = False) -> dict:
-        if _sensitive:
-            logger.debug("fill_input: %s = <sensitive: %d chars>", selector, len(text))
-        else:
-            logger.debug("fill_input: %s = %s", selector, text[:30])
-        node_result = await self._cdp("DOM.getDocument")
-        root = node_result.get("root", {})
-        query_result = await self._cdp("DOM.querySelector", {
-            "nodeId": root.get("nodeId"), "selector": selector,
-        })
-        node_id = query_result.get("nodeId")
-        if not node_id or node_id == 0:
-            raise ValueError(f"Input element not found: {selector}")
-        await self._cdp("DOM.focus", {"nodeId": node_id})
-        await self._cdp("Input.insertText", {"text": text})
-        return {"nodeId": node_id}
+        logger.debug("fill_input: %s = <text: %d chars>", selector, len(text))
+        return await self._bridge.fill(selector, text)
 
     async def capture_snapshot(self) -> dict:
-        """Capture screenshot + page HTML + url + title."""
-        result = {}
-        try:
-            screenshot = await self._cdp("Page.captureScreenshot", {"format": "png", "fromSurface": True})
-            result["screenshot_base64"] = screenshot.get("data", "")
-        except Exception:
-            pass
-        try:
-            html = await self._cdp("Runtime.evaluate", {
-                "expression": "document.documentElement.outerHTML",
-            })
-            result["html"] = html.get("result", {}).get("value", "")
-        except Exception:
-            pass
-        try:
-            meta = await self._cdp("Runtime.evaluate", {
-                "expression": "JSON.stringify({url: window.location.href, title: document.title})",
-            })
-            meta_val = (meta.get("result", {}).get("value") or "{}")
-            meta_dict = _json.loads(meta_val)
-            result["url"] = meta_dict.get("url", "")
-            result["title"] = meta_dict.get("title", "")
-        except Exception:
-            pass
-        return result
+        return await self._bridge.capture_snapshot()
 
     async def get_page_html(self) -> str:
-        result = await self._cdp("Runtime.evaluate", {
-            "expression": "document.documentElement.outerHTML",
-        })
-        return result.get("result", {}).get("value", "")
+        return await self._bridge.source()
 
     async def wait_for_network_idle(self) -> None:
-        import asyncio
-        await asyncio.sleep(0.5)
+        await self._bridge.wait_for_network_idle()
+
+    async def wait_for_page_load(self) -> None:
+        await self._bridge.wait_for_page_load()
 
     async def js(self, code: str) -> Any:
-        result = await self._cdp("Runtime.evaluate", {"expression": code, "returnByValue": True})
-        return result.get("result", {}).get("value")
-
-    async def _discover_all_interactive(self) -> list[dict]:
-        """Discover ALL interactive elements from the full DOM tree.
-
-        Uses a single ``DOM.getDocument(depth=-1)`` call, then filters
-        element nodes by tag/role/attributes.  Returns a list of
-        ``{ref, selector, tag, type}`` — no position data (positions are
-        retrieved JS-side via ``getBoundingClientRect()`` in the highlight
-        injection).
-        """
-        doc = await self._cdp("DOM.getDocument", {"depth": -1, "pierce": True})
-        results: list[dict] = []
-
-        def walk(node: dict) -> None:
-            if node.get("nodeType") != 1:
-                for child in node.get("children", []):
-                    walk(child)
-                return
-
-            attrs_list = node.get("attributes", [])
-            attrs: dict[str, str] = {}
-            for i in range(0, len(attrs_list), 2):
-                if i + 1 < len(attrs_list):
-                    attrs[attrs_list[i]] = attrs_list[i + 1]
-
-            tag = node["nodeName"].lower()
-            bid = node["backendNodeId"]
-
-            if not _is_interactive(tag, attrs):
-                for child in node.get("children", []):
-                    walk(child)
-                return
-
-            selector = _build_selector_from_node(tag, attrs)
-            ref = f"@e_{bid}"
-
-            elem_type = attrs.get("type", "text") if tag == "input" else ""
-            results.append({
-                "ref": ref,
-                "selector": selector,
-                "tag": tag,
-                "type": elem_type,
-                "text": "",
-                "value": attrs.get("value", ""),
-                "role": attrs.get("role", ""),
-                "tentative": _is_tentative(tag, attrs),
-                "x": 0, "y": 0, "width": 0, "height": 0,
-            })
-
-            for child in node.get("children", []):
-                walk(child)
-
-        walk(doc.get("root", {}))
-        logger.debug("_discover_all_interactive: found %d interactive elements from full tree",
-                     len(results))
-        return results
-
-    async def _get_element_positions(self, elements: list[dict]) -> list[dict]:
-        """Enrich elements with bounding rects, text, and clickable flag via a single JS call."""
-        if not elements:
-            return elements
-        sels = [e["selector"] for e in elements]
-        js = (
-            "(function(){"
-            "var sels=" + _json.dumps(sels) + ";"
-            "var selIdx={};"
-            "var out=[];"
-            "for(var i=0;i<sels.length;i++){"
-            "var si=selIdx[sels[i]]||0;selIdx[sels[i]]=si+1;"
-            "try{"
-            "var all=document.querySelectorAll(sels[i]);"
-            "if(all.length>si){"
-            "var el=all[si];"
-            "var r=el.getBoundingClientRect();"
-            "var t=el.textContent||el.innerText||'';"
-            "var cs=getComputedStyle(el);"
-            "out.push({x:r.left,y:r.top,w:r.width,h:r.height,t:t.trim().substring(0,100),c:cs.cursor==='pointer'});"
-            "}else{out.push({x:0,y:0,w:0,h:0,t:'',c:false});}"
-            "}catch(e){out.push({x:0,y:0,w:0,h:0,t:'',c:false});}"
-            "}"
-            "return JSON.stringify(out);"
-            "})()"
-        )
-        try:
-            raw = await self.js(js)
-            if raw:
-                data = _json.loads(raw)
-                for el, d in zip(elements, data):
-                    if isinstance(d, dict):
-                        el["x"] = d.get("x", 0)
-                        el["y"] = d.get("y", 0)
-                        el["width"] = d.get("w", 0)
-                        el["height"] = d.get("h", 0)
-                        el["text"] = d.get("t", "")
-                        el["clickable"] = d.get("c", False)
-        except Exception:
-            logger.debug("_get_element_positions failed", exc_info=True)
-        return elements
+        return await self._bridge.evaluate(code)
 
     async def capture_snapshot_interactive(self, query: str = "", in_viewport: bool = False) -> dict:
         try:
-            elements = await self._discover_all_interactive()
-            enriched = await self._get_element_positions(elements)
+            result = await self._bridge.simplify_dom(query=query, in_viewport=in_viewport)
+            elements = result.get("elements", [])
 
-            enriched = [el for el in enriched if not el.get("tentative") or el.get("clickable")]
-
-            if in_viewport:
-                vp_w = await self.js("window.innerWidth") or 1920
-                vp_h = await self.js("window.innerHeight") or 1080
-                enriched = [
-                    el for el in enriched
-                    if el["y"] + el["height"] > 0 and el["y"] < vp_h
-                    and el["x"] + el["width"] > 0 and el["x"] < vp_w
-                ]
-
-            if query:
-                q = query.lower()
-                if q.startswith("#") or q.startswith("."):
-                    enriched = [el for el in enriched if q in el.get("selector", "").lower()]
-                else:
-                    enriched = [
-                        el for el in enriched
-                        if q in el.get("text", "").lower()
-                        or q in el.get("tag", "").lower()
-                        or q in el.get("type", "").lower()
-                        or q in el.get("role", "").lower()
-                    ]
-
-            for el in enriched:
+            for el in elements:
                 ref = el.get("ref", "")
                 if ref:
                     if ref in self._ref_map:
@@ -344,21 +93,12 @@ class CDPHelpers:
                         })
                     else:
                         self._ref_map[ref] = _build_element_info(el)
+
             try:
-                await self.add_dom_highlights(enriched)
+                await self.add_dom_highlights(elements)
             except Exception:
                 logger.warning("auto-highlight after interactive snapshot failed", exc_info=True)
-            result = {"elements": enriched, "mode": "interactive"}
-            try:
-                meta = await self._cdp("Runtime.evaluate", {
-                    "expression": "JSON.stringify({url: window.location.href, title: document.title})",
-                })
-                meta_val = (meta.get("result", {}).get("value") or "{}")
-                meta_dict = _json.loads(meta_val)
-                result["url"] = meta_dict.get("url", "")
-                result["title"] = meta_dict.get("title", "")
-            except Exception:
-                pass
+
             return result
         except Exception:
             logger.info("interactive snapshot degraded to full")
@@ -366,7 +106,6 @@ class CDPHelpers:
             return {"elements": [], "mode": "interactive", "degraded": True, **full}
 
     async def capture_snapshot_simplified(self) -> dict:
-        """Simplified page summary (headings, links, lists, tables) for LLM consumption."""
         try:
             raw = await self.js((
                 "(function(){"
@@ -414,7 +153,6 @@ class CDPHelpers:
             full = await self.capture_snapshot()
             return {"summary": "", "lists": [], "tables": [], "mode": "simplified", "degraded": True, **full}
 
-        # Build summary text
         lines = []
         if data.get("title"):
             lines.append(f"Title: {data['title']}")
@@ -447,19 +185,8 @@ class CDPHelpers:
         }
 
     async def add_dom_highlights(self, elements: list[dict] | None = None) -> dict:
-        """Inject interactive element highlight badges into the page.
+        highlight_elements = elements or []
 
-        Scans the full DOM tree via ``DOM.getDocument``, then injects
-        outlines + scroll-aware badge overlays.
-
-        Args:
-            elements: Optional pre-scanned element list. If None (typical),
-                      scans via ``_discover_all_interactive()``.
-
-        Returns:
-            ``{ok, count, element_map}``.
-        """
-        highlight_elements: list[dict] | None = None
         if elements:
             for el in elements:
                 ref = el.get("ref", "")
@@ -473,12 +200,6 @@ class CDPHelpers:
                         })
                     else:
                         self._ref_map[ref] = _build_element_info(el)
-
-        try:
-            highlight_elements = await self._discover_all_interactive()
-        except Exception:
-            logger.warning("_discover_all_interactive failed, using snapshot elements", exc_info=True)
-            highlight_elements = elements
 
         if not highlight_elements:
             return {"ok": True, "count": 0, "element_map": dict(self._ref_map)}
@@ -575,7 +296,6 @@ class CDPHelpers:
         return {"ok": True, "count": len(highlight_elements), "element_map": dict(self._ref_map)}
 
     async def remove_dom_highlights(self) -> None:
-        """Remove all highlight overlays and element outlines from the page."""
         js = (
             "(function(){"
             "var o=document.querySelectorAll('[data-ybu-outlined]');"
@@ -592,45 +312,53 @@ class CDPHelpers:
         await self.js(js)
 
     def get_element_by_index(self, ref: str) -> dict:
-        """Look up an element by its @e_XXXXX reference.
+        return self._bridge.get_element_by_index(ref)
 
-        Args:
-            ref: Reference string like ``"@e_12345"``, ``"e_12345"``,
-                 ``"12345"``, or the old-style ``"@e3"`` / ``"e3"``.
+    # ------------------------------------------------------------------
+    # New methods — transparent proxy to PlaywrightBridge
+    # ------------------------------------------------------------------
 
-        Returns:
-            Dict with element info or ``{ref, error}`` on failure.
-        """
-        if not self._ref_map:
-            return {"ref": ref, "error": "no highlights injected"}
+    async def hover(self, selector: str) -> dict:
+        return await self._bridge.hover(selector)
 
-        raw = ref.strip()
-        if raw.startswith("@"):
-            if raw.startswith("@e") and not raw.startswith("@e_") and raw[2:].isdigit():
-                normalized = "@e_" + raw[2:]
-            else:
-                normalized = raw
-        elif raw.startswith("e_"):
-            normalized = "@" + raw
-        elif raw.startswith("e") and raw[1:].isdigit():
-            normalized = "@e_" + raw[1:]
-        else:
-            normalized = "@e_" + raw
+    async def unhover(self, selector: str) -> dict:
+        return await self._bridge.unhover(selector)
 
-        el = self._ref_map.get(normalized)
-        if el is None:
-            return {"ref": normalized, "error": "not found"}
+    async def focus_selector(self, selector: str) -> dict:
+        return await self._bridge.focus(selector)
 
-        return {
-            "ref": el.get("ref", normalized),
-            "tag": el.get("tag", ""),
-            "type": el.get("type", ""),
-            "text": el.get("text", ""),
-            "selector": el.get("selector", ""),
-            "bounds": {
-                "x": el.get("x", 0),
-                "y": el.get("y", 0),
-                "w": el.get("width", 0),
-                "h": el.get("height", 0),
-            },
-        }
+    async def select_option(self, selector: str, value: str, mode: str = "value") -> dict:
+        return await self._bridge.select(selector, value, mode)
+
+    async def clear_input(self, selector: str, mode: str = "js") -> dict:
+        return await self._bridge.clear(selector, mode)
+
+    async def keyboard_key(self, key: str) -> dict:
+        return await self._bridge.keyboard_press(key)
+
+    async def keyboard_text(self, text: str) -> dict:
+        return await self._bridge.keyboard_type(text)
+
+    async def navigate(self, action: str, hard: bool = False) -> dict:
+        return await self._bridge.navigate(action, hard)
+
+    async def wait(self, mode: str = "time", **kwargs: Any) -> dict:
+        return await self._bridge.wait(mode, **kwargs)
+
+    async def tab_new(self, url: str = "about:blank") -> dict:
+        return await self._bridge.tab_new(url)
+
+    async def tab_switch(self, target_id: str) -> dict:
+        return await self._bridge.tab_switch(target_id)
+
+    async def tab_close(self, target_id: str) -> dict:
+        return await self._bridge.tab_close(target_id)
+
+    async def tab_list(self) -> list[dict]:
+        return await self._bridge.tab_list()
+
+    async def copy_to_clipboard(self, selector: str) -> dict:
+        return await self._bridge.copy_to_clipboard(selector)
+
+    async def paste_from_clipboard(self, selector: str, index: int = -1) -> dict:
+        return await self._bridge.paste_from_clipboard(selector, index)

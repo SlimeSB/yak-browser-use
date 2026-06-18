@@ -103,10 +103,10 @@ def sanitize_result(data, sensitive_keys: frozenset = SENSITIVE_KEYS):
 async def execute_browser_op(
     op_type: str,
     params: dict,
-    cdp_helpers: object,
+    bridge: object,
     element_map: dict | None = None,
 ) -> dict:
-    """Execute a single browser operation (goto/click/fill/snapshot/scroll/source/eval).
+    """Execute a single browser operation (goto/click/fill/snapshot/scroll/source/eval + new ops).
 
     Returns: {ok, result, error, duration_ms, screenshot_base64?, html?}
     Does NOT write files — suitable for chat mode tool_executor.
@@ -125,24 +125,27 @@ async def execute_browser_op(
         async with asyncio.timeout(DEFAULT_OP_TIMEOUT):
             if op_type == "goto":
                 url = params.get("url", "")
-                await cdp_helpers.goto_url(url)  # type: ignore[union-attr]
-                if hasattr(cdp_helpers, "reset_ref_map"):
-                    cdp_helpers.reset_ref_map()  # type: ignore[union-attr]
+                await bridge.goto(url)
+                if hasattr(bridge, "reset_ref_map"):
+                    bridge.reset_ref_map()
+                else:
+                    logger.debug("bridge has no reset_ref_map, skipping ref map reset")
                 result["result"] = {"url": url}
 
             elif op_type == "click":
                 selector = params.get("selector", "")
+                click_count = params.get("clickCount", 1)
                 if not selector:
                     raise ValueError("click op missing selector")
-                selector = await _resolve_element_ref(selector, element_map, cdp_helpers)
-                await cdp_helpers.click_selector(selector)  # type: ignore[union-attr]
+                selector = await _resolve_element_ref(selector, element_map, bridge)
+                await bridge.click(selector, click_count)
                 result["result"] = {"selector": selector}
 
             elif op_type == "fill":
                 selector = params.get("selector", "")
                 text = params.get("text", params.get("value", ""))
-                selector = await _resolve_element_ref(selector, element_map, cdp_helpers)
-                await cdp_helpers.fill_input(selector, text)  # type: ignore[union-attr]
+                selector = await _resolve_element_ref(selector, element_map, bridge)
+                await bridge.fill(selector, text)
                 result["result"] = {"selector": selector}
 
             elif op_type == "snapshot":
@@ -150,13 +153,16 @@ async def execute_browser_op(
                 query = params.get("query", "")
                 in_viewport = params.get("in_viewport", False)
                 if mode == "interactive":
-                    snapshot = await cdp_helpers.capture_snapshot_interactive(query=query, in_viewport=in_viewport)  # type: ignore[union-attr]
+                    snapshot = await bridge.simplify_dom(query=query, in_viewport=in_viewport)
                     result["result"] = snapshot
                 elif mode == "simplified":
-                    snapshot = await cdp_helpers.capture_snapshot_simplified()  # type: ignore[union-attr]
-                    result["result"] = snapshot
+                    if hasattr(bridge, "simplified_snapshot"):
+                        result["result"] = await bridge.simplified_snapshot()
+                    else:
+                        logger.warning("simplified_snapshot not available on bridge, returning empty result")
+                        result["result"] = {"summary": "", "lists": [], "tables": [], "mode": "simplified"}
                 else:
-                    snapshot = await cdp_helpers.capture_snapshot()  # type: ignore[union-attr]
+                    snapshot = await bridge.capture_snapshot()
                     result["result"] = {}
                     png_data = snapshot.get("screenshot_base64", "")
                     if png_data:
@@ -173,28 +179,108 @@ async def execute_browser_op(
                 direction = params.get("direction", "down")
                 amount = params.get("amount", 300)
                 js_code = _build_scroll_js(direction, amount)
-                await cdp_helpers.js(js_code)  # type: ignore[union-attr]
+                await bridge.evaluate(js_code)
                 result["result"] = {"direction": direction, "amount": amount}
 
             elif op_type == "source":
-                html = await cdp_helpers.get_page_html()  # type: ignore[union-attr]
+                cached = params.get("cached", False)
+                if hasattr(bridge, "get_page_html"):
+                    html = await bridge.get_page_html(cached=cached)
+                else:
+                    html = await bridge.source()
                 result["html"] = html
                 result["result"] = {"length": len(html)}
 
             elif op_type == "eval":
                 code_str = params.get("code", params.get("js", ""))
-                eval_result = await cdp_helpers.js(code_str)  # type: ignore[union-attr]
+                eval_result = await bridge.evaluate(code_str)
                 result["result"] = eval_result
 
             elif op_type == "get_element_by_number":
                 ref = params.get("ref", "")
                 if not ref:
                     raise ValueError("get_element_by_number missing ref")
-                if hasattr(cdp_helpers, "get_element_by_index"):
-                    el_info = cdp_helpers.get_element_by_index(ref)  # type: ignore[union-attr]
+                if hasattr(bridge, "get_element_by_index"):
+                    el_info = bridge.get_element_by_index(ref)
                     result["result"] = el_info
                 else:
-                    result["result"] = {"ref": ref, "error": "cdp_helpers does not support element lookup"}
+                    result["result"] = {"ref": ref, "error": "bridge does not support element lookup"}
+
+            # ── New ops ──
+
+            elif op_type == "hover":
+                selector = params.get("selector", "")
+                await bridge.hover(selector)
+                result["result"] = {"selector": selector}
+
+            elif op_type == "unhover":
+                selector = params.get("selector", "")
+                await bridge.unhover(selector)
+                result["result"] = {"selector": selector}
+
+            elif op_type == "focus":
+                selector = params.get("selector", "")
+                await bridge.focus(selector)
+                result["result"] = {"selector": selector}
+
+            elif op_type == "select":
+                selector = params.get("selector", "")
+                value = params.get("value", "")
+                mode = params.get("mode", "value")
+                await bridge.select(selector, value, mode)
+                result["result"] = {"selector": selector}
+
+            elif op_type == "clear":
+                selector = params.get("selector", "")
+                mode = params.get("mode", "js")
+                await bridge.clear(selector, mode)
+                result["result"] = {"selector": selector}
+
+            elif op_type == "keyboard":
+                mode = params.get("mode", "key")
+                if mode == "key":
+                    key = params.get("key", "")
+                    await bridge.keyboard_press(key)
+                elif mode == "text":
+                    text = params.get("text", "")
+                    await bridge.keyboard_type(text)
+                result["result"] = {"mode": mode}
+
+            elif op_type == "navigate":
+                action = params.get("action", "back")
+                await bridge.navigate(action)
+                result["result"] = {"action": action}
+
+            elif op_type == "wait":
+                mode = params.get("mode", "time")
+                await bridge.wait(mode=mode, **params)
+                result["result"] = {"mode": mode}
+
+            elif op_type == "tab":
+                action = params.get("action", "list")
+                if action == "new":
+                    url = params.get("url", "about:blank")
+                    r = await bridge.tab_new(url)
+                elif action == "switch":
+                    tid = params.get("target_id", "")
+                    r = await bridge.tab_switch(tid)
+                elif action == "close":
+                    tid = params.get("target_id", "")
+                    r = await bridge.tab_close(tid)
+                elif action == "list":
+                    r = await bridge.tab_list()
+                result["result"] = r
+
+            elif op_type == "copy":
+                selector = params.get("selector", "")
+                r = await bridge.copy_to_clipboard(selector)
+                result["result"] = r
+
+            elif op_type == "paste":
+                selector = params.get("selector", "")
+                index = params.get("index", -1)
+                r = await bridge.paste_from_clipboard(selector, index)
+                result["result"] = r
 
             else:
                 raise ValueError(f"Unknown browser op type: {op_type}")
@@ -233,10 +319,10 @@ def _write_full_artifacts(core_result: dict, step_dir: Path, _base64, _time) -> 
         html_path.write_text(html_data, encoding="utf-8")
 
 
-async def _resolve_element_ref(selector: str, element_map: dict | None, cdp_helpers: object | None = None) -> str:
+async def _resolve_element_ref(selector: str, element_map: dict | None, bridge: object | None = None) -> str:
     """Resolve @eN element references to CSS selectors using the element map.
 
-    In chat mode (element_map is None), falls back to cdp_helpers.get_element_by_index().
+    In chat mode (element_map is None), falls back to bridge.get_element_by_index().
     """
     if selector.startswith("@e"):
         if element_map:
@@ -244,8 +330,8 @@ async def _resolve_element_ref(selector: str, element_map: dict | None, cdp_help
             if resolved is None:
                 raise ValueError(f"Unknown element reference: {selector}")
             return resolved
-        if cdp_helpers is not None and hasattr(cdp_helpers, "get_element_by_index"):
-            el_info = cdp_helpers.get_element_by_index(selector)  # type: ignore[union-attr]
+        if bridge is not None and hasattr(bridge, "get_element_by_index"):
+            el_info = bridge.get_element_by_index(selector)
             if "error" in el_info:
                 raise ValueError(f"Element reference {selector}: {el_info['error']}")
             return el_info.get("selector", selector)
@@ -324,7 +410,8 @@ async def execute_tool(
             result["duration_ms"] = int((time.time() - start) * 1000)
             return result
         from utils.tool_cdp import ToolCDPHelpers
-        tool_cdp_instance = ToolCDPHelpers(cdp_helpers)
+        bridge_obj = cdp_helpers._bridge if hasattr(cdp_helpers, "_bridge") else cdp_helpers
+        tool_cdp_instance = ToolCDPHelpers(bridge_obj)
 
     try:
         kwargs: dict = {"input_files": params.get("input_files", {}),
@@ -373,7 +460,7 @@ async def execute_goal(
 # ──────────────────────────────────────────────────────────────
 
 
-async def run_check(check_def: dict | None, cdp_helpers: object) -> dict:
+async def run_check(check_def: dict | None, bridge: object) -> dict:
     """Run programmatic checks against the current page state.
 
     Supports four check conditions:
@@ -392,8 +479,11 @@ async def run_check(check_def: dict | None, cdp_helpers: object) -> dict:
     try:
         current_url = ""
         try:
-            url_result = await cdp_helpers.js("window.location.href")  # type: ignore[union-attr]
-            current_url = str(url_result) if url_result else ""
+            if hasattr(bridge, "page") and bridge.page:
+                current_url = bridge.page.url
+            else:
+                url_result = await bridge.evaluate("window.location.href")
+                current_url = str(url_result) if url_result else ""
         except Exception as e:
             logger.debug("run_check: failed to get current URL: %s", e)
 
@@ -419,7 +509,7 @@ async def run_check(check_def: dict | None, cdp_helpers: object) -> dict:
 
         if "element_exists" in check_def:
             selector = check_def["element_exists"]
-            exists = await cdp_helpers.js(  # type: ignore[union-attr]
+            exists = await bridge.evaluate(
                 f"!!document.querySelector({_json_dumps(selector)})"
             )
             if not exists:
@@ -432,7 +522,7 @@ async def run_check(check_def: dict | None, cdp_helpers: object) -> dict:
 
         if "text_contains" in check_def:
             expected = check_def["text_contains"]
-            body_text = await cdp_helpers.js("document.body.innerText || ''")  # type: ignore[union-attr]
+            body_text = await bridge.evaluate("document.body.innerText || ''")
             body_text = str(body_text) if body_text else ""
             if expected not in body_text:
                 return {
@@ -444,7 +534,7 @@ async def run_check(check_def: dict | None, cdp_helpers: object) -> dict:
 
         if "element_visible" in check_def:
             selector = check_def["element_visible"]
-            visible = await cdp_helpers.js(  # type: ignore[union-attr]
+            visible = await bridge.evaluate(
                 f"(function(){{"
                 f"var el=document.querySelector({_json_dumps(selector)});"
                 f"if(!el)return false;"
@@ -487,11 +577,11 @@ def _json_dumps(s: str) -> str:
 
 async def execute_browser_step(
     step: dict,
-    cdp_helpers: object,
+    bridge: object,
     step_dir: Path,
     run_dir: Path,
 ) -> dict:
-    """Execute a browser step: run ops via CDP, write step.json + artifacts.
+    """Execute a browser step: run ops via PlaywrightBridge, write step.json + artifacts.
 
     Delegates to execute_browser_op() for each individual operation,
     then writes screenshots and HTML to step_dir.
@@ -522,8 +612,9 @@ async def execute_browser_step(
 
         op_record: dict = {"type": op_type, "ok": True, "duration_ms": 0}
 
-        if op_type in ("goto", "click", "fill", "snapshot", "scroll", "source", "eval"):
-            # Normalize params for core function
+        if op_type in ("goto", "click", "fill", "snapshot", "scroll", "source", "eval",
+                        "hover", "unhover", "focus", "select", "clear", "keyboard",
+                        "navigate", "wait", "tab", "copy", "paste"):
             if op_type == "goto":
                 core_params = {"url": value}
                 op_record["url"] = value
@@ -537,19 +628,55 @@ async def execute_browser_step(
                 op_record["selector"] = op.get("selector", "")
                 op_record["text"] = text
             elif op_type == "snapshot":
-                core_params = {"mode": op.get("mode", "full")}
+                core_params = {"mode": op.get("mode", "interactive")}
             elif op_type == "scroll":
                 core_params = {"direction": op.get("direction", "down"),
-                               "amount": op.get("amount", 300)}
+                                "amount": op.get("amount", 300)}
             elif op_type == "source":
                 core_params = {}
             elif op_type == "eval":
                 core_params = {"code": op.get("code", op.get("js", value))}
                 op_record["code"] = core_params["code"][:200]
+            elif op_type == "hover":
+                core_params = {"selector": value or op.get("selector", "")}
+            elif op_type == "unhover":
+                core_params = {"selector": value or op.get("selector", "")}
+            elif op_type == "focus":
+                core_params = {"selector": value or op.get("selector", "")}
+            elif op_type == "clear":
+                core_params = {"selector": value or op.get("selector", ""),
+                               "mode": op.get("mode", "js")}
+            elif op_type == "copy":
+                core_params = {"selector": value or op.get("selector", "")}
+            elif op_type == "paste":
+                core_params = {"selector": value or op.get("selector", ""),
+                               "index": op.get("index", -1)}
+            elif op_type == "keyboard":
+                mode = op.get("mode", "key")
+                if mode == "key":
+                    core_params = {"mode": "key", "key": value or op.get("key", "")}
+                else:
+                    core_params = {"mode": "text", "text": value or op.get("text", "")}
+            elif op_type == "select":
+                core_params = {"selector": op.get("selector", ""),
+                               "value": op.get("value", value),
+                               "mode": op.get("mode", "value")}
+            elif op_type == "navigate":
+                core_params = {"action": value or op.get("action", "back")}
+            elif op_type == "tab":
+                core_params = {"action": value or op.get("action", "list"),
+                               "url": op.get("url", "about:blank"),
+                               "target_id": op.get("target_id", "")}
+            elif op_type == "wait":
+                mode = op.get("mode", "time")
+                if mode == "time" and value:
+                    core_params = {"mode": "time", "duration": int(float(value) * 1000)}
+                else:
+                    core_params = {k: v for k, v in op.items() if k != "type"}
             else:
-                core_params = {}
+                core_params = {k: v for k, v in op.items() if k != "type"}
 
-            core_result = await execute_browser_op(op_type, core_params, cdp_helpers, element_map)
+            core_result = await execute_browser_op(op_type, core_params, bridge, element_map)
             op_record["ok"] = core_result["ok"]
             op_record["duration_ms"] = core_result["duration_ms"]
 
@@ -582,9 +709,9 @@ async def execute_browser_step(
                         html_path.write_text(html_data, encoding="utf-8")
                 if op_type == "goto":
                     result["final_url"] = value
-                if op_type in ("goto", "click", "fill") and hasattr(cdp_helpers, "add_dom_highlights"):
+                if op_type in ("goto", "click", "fill", "navigate", "tab", "wait") and hasattr(bridge, "ensure_highlights"):
                     try:
-                        await cdp_helpers.add_dom_highlights()  # type: ignore[union-attr]
+                        await bridge.ensure_highlights()
                     except Exception:
                         pass
             else:
@@ -601,17 +728,13 @@ async def execute_browser_step(
                 result["compensation_history"] = registry.to_list()
                 result["suggest_rollback"] = registry.suggest_rollback(len(registry._ops) - 1)
                 return result
-        elif op_type == "wait":
-            op_start = time.time()
-            await asyncio.sleep(float(value) if value else 1.0)
-            op_record["duration_ms"] = int((time.time() - op_start) * 1000)
         elif op_type == "wait_for_network":
             op_start = time.time()
-            await cdp_helpers.wait_for_network_idle()  # type: ignore[union-attr]
+            await bridge.wait_for_network_idle()
             op_record["duration_ms"] = int((time.time() - op_start) * 1000)
         elif op_type == "get_html":
             op_start = time.time()
-            html = await cdp_helpers.get_page_html()  # type: ignore[union-attr]
+            html = await bridge.get_page_html()
             html_path = step_dir / "page.html"
             html_path.write_text(html, encoding="utf-8")
             op_record["duration_ms"] = int((time.time() - op_start) * 1000)

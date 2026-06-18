@@ -567,7 +567,7 @@ async def run_pipeline(
             # ── Dispatch to executor ──
             if step_type == "browser":
                 step_result = await execute_browser_step(
-                    step_def, cdp_helpers, step_dir, run_dir,
+                    step_def, cdp_helpers.bridge, step_dir, run_dir,
                 )
             elif step_type == "goal":
                 step_result = await execute_goal_step(
@@ -596,7 +596,7 @@ async def run_pipeline(
             # ── Programmatic check (non-goal steps only) ──
             check_def = step_def.get("check")
             if check_def is not None and step_type != "goal" and step_result["status"] == "completed":
-                check_result = await run_check(check_def, cdp_helpers)
+                check_result = await run_check(check_def, cdp_helpers.bridge)
                 if not check_result["ok"]:
                     step_result["status"] = "failed"
                     step_result["error"] = {

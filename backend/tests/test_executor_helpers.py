@@ -193,23 +193,23 @@ class TestResolveElementRef:
             await _resolve_element_ref("@e99", {"@e1": "#other_btn"})
 
     @pytest.mark.asyncio
-    async def test_at_e_ref_with_helpers(self):
-        """When element_map is None but cdp_helpers supports get_element_by_index."""
-        class MockHelpers:
+    async def test_at_e_ref_with_bridge(self):
+        """When element_map is None but bridge supports get_element_by_index."""
+        class MockBridge:
             def get_element_by_index(self, ref):
                 return {"selector": "#dynamic-btn", "ref": ref}
 
-        result = await _resolve_element_ref("@e5", None, MockHelpers())
+        result = await _resolve_element_ref("@e5", None, MockBridge())
         assert result == "#dynamic-btn"
 
     @pytest.mark.asyncio
-    async def test_at_e_ref_helpers_error(self):
-        class MockHelpers:
+    async def test_at_e_ref_bridge_error(self):
+        class MockBridge:
             def get_element_by_index(self, ref):
                 return {"error": "not found"}
 
         with pytest.raises(ValueError, match="Element reference @e5"):
-            await _resolve_element_ref("@e5", None, MockHelpers())
+            await _resolve_element_ref("@e5", None, MockBridge())
 
     @pytest.mark.asyncio
     async def test_empty_selector(self):

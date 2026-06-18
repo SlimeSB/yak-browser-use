@@ -8,6 +8,7 @@ For preset replay mode, see runner_preset.py.
 from __future__ import annotations
 
 import asyncio
+import re
 from pathlib import Path
 from typing import Callable
 
@@ -85,16 +86,22 @@ async def run_chat_loop(
 
 
 async def _ensure_browser_connected() -> object:
-    """Connect to Chrome browser via CDP daemon.
+    """Connect to Chrome browser via PlaywrightBridge.
 
     Returns a CDPHelpers instance for browser operations.
     """
-    from cdp.daemon import ensure_daemon, CDPDaemon
+    from cdp.playwright_bridge import PlaywrightBridge
     from cdp.helpers import CDPHelpers
+    from cdp.discover import discover_ws_url
 
     try:
-        daemon = await ensure_daemon("ybu-chat")
-        helpers = CDPHelpers(daemon)
+        ws_url = await discover_ws_url()
+        if ws_url is None:
+            raise RuntimeError("Cannot discover Chrome debug URL")
+        cdp_url = re.sub(r'^ws', 'http', ws_url)
+        bridge = PlaywrightBridge(cdp_url)
+        await bridge.start()
+        helpers = CDPHelpers(bridge)
         logger.info("Browser connected for chat mode")
         try:
             await helpers.add_dom_highlights()

@@ -6,18 +6,21 @@ import pytest
 from engine.executor import run_check
 
 
-class MockCDPHelpers:
-    """Mock CDP helpers for testing run_check without browser."""
+class MockPage:
+    def __init__(self, url: str = ""):
+        self.url = url
+
+
+class MockBridge:
+    """Mock PlaywrightBridge for testing run_check without browser."""
 
     def __init__(self, url="https://www.example.com/search?q=test", body_text="搜索结果: 10条记录", elements_present=None, elements_visible=None):
-        self._url = url
+        self.page = MockPage(url)
         self._body_text = body_text
         self._elements_present = elements_present or {}
         self._elements_visible = elements_visible or {}
 
-    async def js(self, expression):
-        if "window.location.href" in expression:
-            return self._url
+    async def evaluate(self, expression):
         if "document.querySelector" in expression:
             selector = _extract_selector(expression)
             if "getComputedStyle" in expression or "offsetWidth" in expression:
@@ -25,6 +28,8 @@ class MockCDPHelpers:
             return self._elements_present.get(selector, False)
         if "document.body.innerText" in expression:
             return self._body_text
+        if "window.location.href" in expression:
+            return self.page.url
         return None
 
 
@@ -40,22 +45,22 @@ def _extract_selector(js):
 class TestRunCheckUrlContains:
     @pytest.mark.asyncio
     async def test_pass(self):
-        cdp = MockCDPHelpers(url="https://x.com/wd=机械键盘")
-        result = await run_check({"url_contains": "wd=机械键盘"}, cdp)
+        bridge = MockBridge(url="https://x.com/wd=机械键盘")
+        result = await run_check({"url_contains": "wd=机械键盘"}, bridge)
         assert result["ok"] is True
         assert "通过" in result["result"]
 
     @pytest.mark.asyncio
     async def test_fail(self):
-        cdp = MockCDPHelpers(url="https://x.com/other")
-        result = await run_check({"url_contains": "wd=机械键盘"}, cdp)
+        bridge = MockBridge(url="https://x.com/other")
+        result = await run_check({"url_contains": "wd=机械键盘"}, bridge)
         assert result["ok"] is False
         assert "url_contains" in result["result"]
 
     @pytest.mark.asyncio
     async def test_includes_current_url(self):
-        cdp = MockCDPHelpers(url="https://x.com/path")
-        result = await run_check({"url_contains": "path"}, cdp)
+        bridge = MockBridge(url="https://x.com/path")
+        result = await run_check({"url_contains": "path"}, bridge)
         assert "current_url" in result
         assert result["current_url"] == "https://x.com/path"
 
@@ -63,14 +68,14 @@ class TestRunCheckUrlContains:
 class TestRunCheckElementExists:
     @pytest.mark.asyncio
     async def test_pass(self):
-        cdp = MockCDPHelpers(elements_present={"#search": True})
-        result = await run_check({"element_exists": "#search"}, cdp)
+        bridge = MockBridge(elements_present={"#search": True})
+        result = await run_check({"element_exists": "#search"}, bridge)
         assert result["ok"] is True
 
     @pytest.mark.asyncio
     async def test_fail(self):
-        cdp = MockCDPHelpers(elements_present={"#search": False})
-        result = await run_check({"element_exists": "#search"}, cdp)
+        bridge = MockBridge(elements_present={"#search": False})
+        result = await run_check({"element_exists": "#search"}, bridge)
         assert result["ok"] is False
         assert "element_exists" in result["result"]
 
@@ -78,28 +83,28 @@ class TestRunCheckElementExists:
 class TestRunCheckTextContains:
     @pytest.mark.asyncio
     async def test_pass(self):
-        cdp = MockCDPHelpers(body_text="页面包含搜索结果")
-        result = await run_check({"text_contains": "搜索结果"}, cdp)
+        bridge = MockBridge(body_text="页面包含搜索结果")
+        result = await run_check({"text_contains": "搜索结果"}, bridge)
         assert result["ok"] is True
 
     @pytest.mark.asyncio
     async def test_fail(self):
-        cdp = MockCDPHelpers(body_text="页面无相关内容")
-        result = await run_check({"text_contains": "搜索结果"}, cdp)
+        bridge = MockBridge(body_text="页面无相关内容")
+        result = await run_check({"text_contains": "搜索结果"}, bridge)
         assert result["ok"] is False
 
 
 class TestRunCheckElementVisible:
     @pytest.mark.asyncio
     async def test_pass(self):
-        cdp = MockCDPHelpers(elements_visible={".result-list": True})
-        result = await run_check({"element_visible": ".result-list"}, cdp)
+        bridge = MockBridge(elements_visible={".result-list": True})
+        result = await run_check({"element_visible": ".result-list"}, bridge)
         assert result["ok"] is True
 
     @pytest.mark.asyncio
     async def test_fail(self):
-        cdp = MockCDPHelpers(elements_visible={".result-list": False})
-        result = await run_check({"element_visible": ".result-list"}, cdp)
+        bridge = MockBridge(elements_visible={".result-list": False})
+        result = await run_check({"element_visible": ".result-list"}, bridge)
         assert result["ok"] is False
 
 
@@ -117,21 +122,21 @@ class TestRunCheckEdgeCases:
 
     @pytest.mark.asyncio
     async def test_empty_string_value_rejected(self):
-        cdp = MockCDPHelpers()
-        result = await run_check({"url_contains": ""}, cdp)
+        bridge = MockBridge()
+        result = await run_check({"url_contains": ""}, bridge)
         assert result["ok"] is False
         assert "无效参数" in result["result"]
 
     @pytest.mark.asyncio
     async def test_none_value_rejected(self):
-        cdp = MockCDPHelpers()
-        result = await run_check({"text_contains": None}, cdp)
+        bridge = MockBridge()
+        result = await run_check({"text_contains": None}, bridge)
         assert result["ok"] is False
         assert "无效参数" in result["result"]
 
     @pytest.mark.asyncio
     async def test_multiple_conditions_all_pass(self):
-        cdp = MockCDPHelpers(
+        bridge = MockBridge(
             url="https://x.com/search?q=test",
             body_text="搜索结果",
             elements_present={"#search": True}
@@ -140,21 +145,21 @@ class TestRunCheckEdgeCases:
             "url_contains": "search",
             "text_contains": "搜索结果",
             "element_exists": "#search",
-        }, cdp)
+        }, bridge)
         assert result["ok"] is True
 
     @pytest.mark.asyncio
     async def test_multiple_conditions_first_fails(self):
-        cdp = MockCDPHelpers(url="https://x.com/other")
+        bridge = MockBridge(url="https://x.com/other")
         result = await run_check({
             "url_contains": "search",
             "text_contains": "搜索结果",
-        }, cdp)
+        }, bridge)
         assert result["ok"] is False
 
     @pytest.mark.asyncio
     async def test_always_returns_current_url(self):
-        cdp = MockCDPHelpers(url="https://x.com")
-        result = await run_check({"element_exists": ".x"}, cdp)
+        bridge = MockBridge(url="https://x.com")
+        result = await run_check({"element_exists": ".x"}, bridge)
         assert "current_url" in result
         assert result["current_url"] == "https://x.com"

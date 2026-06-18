@@ -34,13 +34,17 @@ BROWSER_TOOLS: list[dict[str, Any]] = [
         "type": "function",
         "function": {
             "name": "browser_click",
-            "description": "Click an element on the page using a CSS selector.",
+            "description": "Click an element on the page using a CSS selector. Use clickCount=2 for double-click.",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "selector": {
                         "type": "string",
                         "description": "CSS selector for the element to click.",
+                    },
+                    "clickCount": {
+                        "type": "integer",
+                        "description": "Number of clicks. 1 = single click (default), 2 = double-click.",
                     },
                 },
                 "required": ["selector"],
@@ -51,7 +55,7 @@ BROWSER_TOOLS: list[dict[str, Any]] = [
         "type": "function",
         "function": {
             "name": "browser_fill",
-            "description": "Fill text into an input element identified by CSS selector.",
+            "description": "Fill text into an input element identified by CSS selector. NOTE: This clears existing content first. To append text without clearing, use browser_focus + browser_type_text instead.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -162,6 +166,252 @@ BROWSER_TOOLS: list[dict[str, Any]] = [
                     },
                 },
                 "required": ["ref"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "browser_hover",
+            "description": "Hover the mouse over an element identified by CSS selector. Playwright auto-waits for the element to be visible and scrolls it into view.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "selector": {
+                        "type": "string",
+                        "description": "CSS selector for the element to hover over.",
+                    },
+                },
+                "required": ["selector"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "browser_unhover",
+            "description": "Move the mouse away from the current element (to page top-left corner).",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "selector": {
+                        "type": "string",
+                        "description": "CSS selector for the element to unhover from (informational, mouse moves to 0,0).",
+                    },
+                },
+                "required": ["selector"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "browser_focus",
+            "description": "Focus an element on the page. Use before browser_type_text to append text without clearing.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "selector": {
+                        "type": "string",
+                        "description": "CSS selector for the element to focus.",
+                    },
+                },
+                "required": ["selector"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "browser_press_key",
+            "description": "Press a keyboard key or key combination (e.g. 'Enter', 'Control+A', 'Escape').",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "key": {
+                        "type": "string",
+                        "description": "Key or key combination to press (e.g. 'Enter', 'Tab', 'Control+A', 'ArrowDown').",
+                    },
+                },
+                "required": ["key"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "browser_type_text",
+            "description": "Type text character by character into the currently focused element. Does NOT clear existing content — use browser_focus first to position cursor, then type_text to append.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "text": {
+                        "type": "string",
+                        "description": "Text to type character by character.",
+                    },
+                },
+                "required": ["text"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "browser_select",
+            "description": "Select an option from a <select> dropdown element.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "selector": {
+                        "type": "string",
+                        "description": "CSS selector for the <select> element.",
+                    },
+                    "value": {
+                        "type": "string",
+                        "description": "Option value, label text, or index number to select.",
+                    },
+                    "mode": {
+                        "type": "string",
+                        "enum": ["value", "label", "index"],
+                        "description": "How to match the option: 'value' (option value attribute), 'label' (display text), 'index' (0-based position). Default: 'value'.",
+                    },
+                },
+                "required": ["selector", "value"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "browser_clear",
+            "description": "Clear the content of an input element. Default uses JS (sets value=''), mode='pw' uses Playwright native clear.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "selector": {
+                        "type": "string",
+                        "description": "CSS selector for the input element to clear.",
+                    },
+                    "mode": {
+                        "type": "string",
+                        "enum": ["js", "pw"],
+                        "description": "Clear mode: 'js' (default, sets value='' via JS), 'pw' (Playwright native clear).",
+                    },
+                },
+                "required": ["selector"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "browser_copy",
+            "description": "Copy text content from an element on the page.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "selector": {
+                        "type": "string",
+                        "description": "CSS selector for the element to copy text from.",
+                    },
+                },
+                "required": ["selector"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "browser_paste",
+            "description": "Paste clipboard content into an input element.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "selector": {
+                        "type": "string",
+                        "description": "CSS selector for the input element to paste into.",
+                    },
+                    "index": {
+                        "type": "integer",
+                        "description": "Character position to insert at. -1 (default) appends to end.",
+                    },
+                },
+                "required": ["selector"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "browser_navigate",
+            "description": "Navigate browser history: go back, forward, or reload the current page.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "action": {
+                        "type": "string",
+                        "enum": ["back", "forward", "reload"],
+                        "description": "Navigation action: 'back' (previous page), 'forward' (next page), 'reload' (refresh current page).",
+                    },
+                },
+                "required": ["action"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "browser_wait",
+            "description": "Wait for a condition: time duration, element to appear, or page load state.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "mode": {
+                        "type": "string",
+                        "enum": ["time", "selector", "load"],
+                        "description": "Wait mode: 'time' (duration in ms), 'selector' (wait for element), 'load' (page load state). Default: 'time'.",
+                    },
+                    "duration": {
+                        "type": "integer",
+                        "description": "Time in milliseconds to wait (mode='time'). Default: 1000.",
+                    },
+                    "selector": {
+                        "type": "string",
+                        "description": "CSS selector to wait for (mode='selector').",
+                    },
+                    "state": {
+                        "type": "string",
+                        "enum": ["load", "domcontentloaded", "networkidle"],
+                        "description": "Page load state to wait for (mode='load'). Default: 'load'.",
+                    },
+                },
+                "required": [],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "browser_tab",
+            "description": "Manage browser tabs: create new, switch to, close, or list all tabs.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "action": {
+                        "type": "string",
+                        "enum": ["new", "switch", "close", "list"],
+                        "description": "Tab action: 'new' (create tab), 'switch' (switch to tab), 'close' (close tab), 'list' (list all tabs).",
+                    },
+                    "url": {
+                        "type": "string",
+                        "description": "URL to open in new tab (action='new'). Default: about:blank.",
+                    },
+                    "target_id": {
+                        "type": "string",
+                        "description": "Target tab ID to switch to or close (action='switch' or 'close').",
+                    },
+                },
+                "required": ["action"],
             },
         },
     },

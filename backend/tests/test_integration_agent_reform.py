@@ -30,22 +30,27 @@ from compiler.schema import StepYaml, PipelineYaml
 from compiler.models import StepDef, PipelineDef
 
 
-class MockCDP:
-    """Mock CDP helpers returning realistic snapshot data."""
+class MockPage:
+    def __init__(self, url: str = ""):
+        self.url = url
+
+
+class MockBridge:
+    """Mock PlaywrightBridge for integration tests."""
 
     def __init__(self, *, url="https://example.com/page", title="Example Page",
                  elements=None, screenshot_base64="", html="",
                  body_text="Some page text"):
-        self._url = url
+        self.page = MockPage(url)
         self._title = title
         self._elements = elements or []
         self._screenshot = screenshot_base64
         self._html = html
         self._body_text = body_text
 
-    async def js(self, expression):
+    async def evaluate(self, expression):
         if "window.location.href" in expression:
-            return self._url
+            return self.page.url
         if "document.querySelector" in expression:
             return self._selectors_match(expression)
         if "document.body.innerText" in expression:
@@ -285,50 +290,50 @@ class TestBrowserSourceLifecycle:
 class TestRunCheckIntegration:
     @pytest.mark.asyncio
     async def test_url_contains_pass_with_fixture(self):
-        cdp = MockCDP(url="https://search.com/results?q=test")
-        result = await run_check({"url_contains": "results"}, cdp)
+        bridge = MockBridge(url="https://search.com/results?q=test")
+        result = await run_check({"url_contains": "results"}, bridge)
         assert result["ok"] is True
         assert "current_url" in result
 
     @pytest.mark.asyncio
     async def test_element_exists_pass(self):
-        cdp = MockCDP(elements=[{"selector": "#submit", "ref": "@e1"}])
-        result = await run_check({"element_exists": "#submit"}, cdp)
+        bridge = MockBridge(elements=[{"selector": "#submit", "ref": "@e1"}])
+        result = await run_check({"element_exists": "#submit"}, bridge)
         assert result["ok"] is True
 
     @pytest.mark.asyncio
     async def test_element_exists_fail_missing(self):
-        cdp = MockCDP(elements=[{"selector": "#other", "ref": "@e1"}])
-        result = await run_check({"element_exists": "#submit"}, cdp)
+        bridge = MockBridge(elements=[{"selector": "#other", "ref": "@e1"}])
+        result = await run_check({"element_exists": "#submit"}, bridge)
         assert result["ok"] is False
 
     @pytest.mark.asyncio
     async def test_text_contains_pass(self):
-        cdp = MockCDP(body_text="这里有搜索结果 10 条")
-        result = await run_check({"text_contains": "搜索结果"}, cdp)
+        bridge = MockBridge(body_text="这里有搜索结果 10 条")
+        result = await run_check({"text_contains": "搜索结果"}, bridge)
         assert result["ok"] is True
 
     @pytest.mark.asyncio
     async def test_text_contains_fail(self):
-        cdp = MockCDP(body_text="页面无内容")
-        result = await run_check({"text_contains": "搜索结果"}, cdp)
+        bridge = MockBridge(body_text="页面无内容")
+        result = await run_check({"text_contains": "搜索结果"}, bridge)
         assert result["ok"] is False
 
     @pytest.mark.asyncio
     async def test_element_visible_pass(self):
-        cdp = MockCDP(elements=[{"selector": ".modal", "ref": "@e1", "visible": True}])
-        result = await run_check({"element_visible": ".modal"}, cdp)
+        bridge = MockBridge(elements=[{"selector": ".modal", "ref": "@e1", "visible": True}])
+        result = await run_check({"element_visible": ".modal"}, bridge)
         assert result["ok"] is True
 
     @pytest.mark.asyncio
     async def test_element_visible_fail_hidden(self):
-        cdp = MockCDP(elements=[{"selector": ".modal", "ref": "@e1", "visible": False}])
-        result = await run_check({"element_visible": ".modal"}, cdp)
+        bridge = MockBridge(elements=[{"selector": ".modal", "ref": "@e1", "visible": False}])
+        result = await run_check({"element_visible": ".modal"}, bridge)
         assert result["ok"] is False
 
     @pytest.mark.asyncio
     async def test_all_conditions_pass(self):
-        cdp = MockCDP(
+        bridge = MockBridge(
             url="https://x.com/search?q=test",
             body_text="搜索完成",
             elements=[{"selector": "#results", "ref": "@e1", "visible": True}],
@@ -338,7 +343,7 @@ class TestRunCheckIntegration:
             "text_contains": "搜索",
             "element_exists": "#results",
             "element_visible": "#results",
-        }, cdp)
+        }, bridge)
         assert result["ok"] is True
         assert "current_url" in result
 
@@ -349,8 +354,8 @@ class TestRunCheckIntegration:
 
     @pytest.mark.asyncio
     async def test_bad_value_rejected(self):
-        cdp = MockCDP()
-        result = await run_check({"url_contains": None}, cdp)
+        bridge = MockBridge()
+        result = await run_check({"url_contains": None}, bridge)
         assert result["ok"] is False
         assert "无效参数" in result["result"]
 

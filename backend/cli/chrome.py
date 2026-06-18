@@ -313,10 +313,10 @@ async def _cmd_chrome_isolated() -> None:
 
 # ── CDP helper ──────────────────────────────────────────────────────────────────
 
-async def _with_cdp(fn):
-    """Obtain a WS connection, set up a daemon, execute an operation, then disconnect."""
+async def _with_bridge(fn):
+    """Obtain a PlaywrightBridge connection, execute an operation, then disconnect."""
     from cdp import discover_ws_url
-    from cdp.daemon import CDPDaemon
+    from cdp.playwright_bridge import PlaywrightBridge
     from cdp.helpers import CDPHelpers
 
     ws_url = await discover_ws_url()
@@ -324,52 +324,52 @@ async def _with_cdp(fn):
         print("Cannot discover or connect to Chrome")
         sys.exit(1)
 
-    daemon = CDPDaemon(ws_url)
-    await daemon.start()
+    cdp_url = ws_url.replace("ws://", "http://").replace("wss://", "https://")
+    bridge = PlaywrightBridge(cdp_url)
+    await bridge.start()
     try:
-        await daemon.attach_first_page()
-        helpers = CDPHelpers(daemon)
-        await fn(helpers)
+        helpers = CDPHelpers(bridge)
+        await fn(helpers, bridge)
     finally:
-        await daemon.stop()
+        await bridge.stop()
 
 
 # ── Browser operation commands ──────────────────────────────────────────────────
 
 async def _cmd_chrome_goto(url: str) -> None:
-    async def _(helpers):
+    async def _(helpers, _bridge):
         await helpers.goto_url(url)
         print(f"  \u2713 goto {url}")
-    await _with_cdp(_)
+    await _with_bridge(_)
 
 
 async def _cmd_chrome_click(selector: str) -> None:
-    async def _(helpers):
+    async def _(helpers, _bridge):
         await helpers.click_selector(selector)
         print(f"  \u2713 click {selector}")
-    await _with_cdp(_)
+    await _with_bridge(_)
 
 
 async def _cmd_chrome_fill(selector: str, text: str) -> None:
-    async def _(helpers):
+    async def _(helpers, _bridge):
         await helpers.fill_input(selector, text)
         print(f"  \u2713 fill {selector}")
-    await _with_cdp(_)
+    await _with_bridge(_)
 
 
 async def _cmd_chrome_scroll(direction: str) -> None:
-    async def _(helpers):
+    async def _(helpers, _bridge):
         amount = 500 if direction == "down" else -500
         await helpers.js(f"window.scrollBy(0, {amount})")
         print(f"  \u2713 scroll {direction}")
-    await _with_cdp(_)
+    await _with_bridge(_)
 
 
 async def _cmd_chrome_back() -> None:
-    async def _(helpers):
+    async def _(helpers, _bridge):
         await helpers.js("window.history.back()")
         print("  \u2713 back")
-    await _with_cdp(_)
+    await _with_bridge(_)
 
 
 async def _cmd_chrome_snapshot(mode: str = "full") -> None:
@@ -378,7 +378,7 @@ async def _cmd_chrome_snapshot(mode: str = "full") -> None:
     import time
     from pathlib import Path
 
-    async def _(helpers):
+    async def _(helpers, _bridge):
         if mode == "interactive":
             result = await helpers.capture_snapshot_interactive()
             elements = result.get("elements", [])
@@ -404,14 +404,14 @@ async def _cmd_chrome_snapshot(mode: str = "full") -> None:
             png_path.write_bytes(base64.b64decode(result["screenshot_base64"]))
             html_path.write_text(result["html"], encoding="utf-8")
             print(f"  \u2713 snapshot saved: {png_path.name}, {html_path.name}")
-    await _with_cdp(_)
+    await _with_bridge(_)
 
 
 async def _cmd_chrome_source() -> None:
-    async def _(helpers):
+    async def _(helpers, _bridge):
         html = await helpers.get_page_html()
         print(html)
-    await _with_cdp(_)
+    await _with_bridge(_)
 
 
 async def _cmd_chrome_wait(seconds: float) -> None:
@@ -421,45 +421,40 @@ async def _cmd_chrome_wait(seconds: float) -> None:
 
 
 async def _cmd_chrome_eval(js: str) -> None:
-    async def _(helpers):
+    async def _(helpers, _bridge):
         result = await helpers.js(js)
         if result is not None:
             print(str(result))
         else:
             print("null")
-    await _with_cdp(_)
+    await _with_bridge(_)
 
 
 async def _cmd_chrome_tab(tab_cmd: str, targetId: str | None = None, url: str | None = None) -> None:
     if tab_cmd == "list":
-        async def _(helpers):
-            targets = await helpers._daemon._send("Target.getTargets")
-            pages = targets.get("targetInfos", [])
-            if not pages:
+        async def _(helpers, bridge):
+            tabs = await bridge.tab_list()
+            if not tabs:
                 print("  No tabs")
                 return
-            for t in pages:
-                tid = t.get("targetId", "?")
-                ttype = t.get("type", "?")
-                turl = t.get("url", "")[:80]
-                print(f"  {tid}  {ttype}  {turl}")
-        await _with_cdp(_)
+            for t in tabs:
+                print(f"  {t.get('targetId', '?')}  {t.get('url', '')[:80]}")
+        await _with_bridge(_)
     elif tab_cmd == "switch":
-        async def _(helpers):
-            await helpers._daemon._send("Target.activateTarget", {"targetId": targetId})
+        async def _(helpers, bridge):
+            await bridge.tab_switch(targetId)
             print(f"  \u2713 switched to {targetId}")
-        await _with_cdp(_)
+        await _with_bridge(_)
     elif tab_cmd == "close":
-        async def _(helpers):
-            await helpers._daemon._send("Target.closeTarget", {"targetId": targetId})
+        async def _(helpers, bridge):
+            await bridge.tab_close(targetId)
             print(f"  \u2713 closed {targetId}")
-        await _with_cdp(_)
+        await _with_bridge(_)
     elif tab_cmd == "new":
-        async def _(helpers):
-            result = await helpers._daemon._send("Target.createTarget", {"url": url or "about:blank"})
-            tid = result.get("targetId", "")
-            print(f"  \u2713 new tab: {tid}")
-        await _with_cdp(_)
+        async def _(helpers, bridge):
+            result = await bridge.tab_new(url or "about:blank")
+            print(f"  \u2713 new tab: {result.get('targetId', '')}")
+        await _with_bridge(_)
 
 
 # ── Chrome Profile Management ───────────────────────────────────────────────────
