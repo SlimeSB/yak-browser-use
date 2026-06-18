@@ -19,7 +19,7 @@ export default function SuggestionsPanel({
   return (
     <div className="card" style={{ borderColor: '#f59e0b', borderWidth: 2 }}>
       <div className="card-title" style={{ color: '#f59e0b' }}>
-        Pending Review
+        {t('log.pendingReview')}
         {guardLayer && <span style={{ fontSize: 10, marginLeft: 8 }}>[{guardLayer}]</span>}
       </div>
       <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginBottom: 8 }}>
@@ -30,7 +30,7 @@ export default function SuggestionsPanel({
           <thead>
             <tr>
               <th>{t('log.type')}</th>
-              <th>Selector/Value</th>
+              <th>{t('log.selectorValue')}</th>
             </tr>
           </thead>
           <tbody>
@@ -59,7 +59,7 @@ export default function SuggestionsPanel({
             <input
               className="param-input"
               style={{ flex: 1 }}
-              placeholder={t('log.reason') + ' (required)'}
+              placeholder={t('log.reason') + t('log.required')}
               value={rejectReason}
               onChange={e => setRejectReason(e.target.value)}
             />
@@ -67,7 +67,7 @@ export default function SuggestionsPanel({
               className="btn btn-danger btn-sm"
               onClick={() => {
                 if (!rejectReason.trim()) {
-                  window.electronAPI.showAlert(t('common.missingParams', { keys: 'Rejection reason' }));
+                  window.electronAPI.showAlert(t('log.reason') + t('log.required'));
                   return;
                 }
                 onReject(rejectReason);
@@ -75,7 +75,7 @@ export default function SuggestionsPanel({
                 setRejectReason('');
               }}
             >
-              Confirm Reject
+              {t('log.confirmReject')}
             </button>
             <button
               className="btn btn-secondary btn-sm"

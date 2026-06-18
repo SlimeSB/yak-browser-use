@@ -100,7 +100,11 @@
     "noDescription": "No description",
     "run": "Run",
     "edit": "Edit",
-    "compile": "Compile"
+    "compile": "Compile",
+    "delete": "Delete",
+    "generateFromDoc": "Generate from Doc",
+    "copy": "Copy",
+    "deleteConfirm": "Delete pipeline \"{{name}}\"? This action cannot be undone."
   },
   "paramsTab": {
     "title": "Params Manager",
@@ -116,6 +120,7 @@
     "hint": "Persistent parameters — stored locally. Use for passwords, API keys, etc."
   },
   "settingsTab": {
+    "title": "Settings",
     "theme": "Theme",
     "colorMode": "Color Mode",
     "dark": "Dark",
@@ -170,7 +175,19 @@
     "searchSteps": "Search steps…",
     "rowsPerPage": "Rows per page",
     "of": "of",
-    "noMatchingSteps": "No matching steps"
+    "noMatchingSteps": "No matching steps",
+    "noStepData": "No step data",
+    "pendingReview": "Pending Review",
+    "clear": "Clear",
+    "guardian": "guardian",
+    "required": "(required)",
+    "confirmReject": "Confirm Reject",
+    "artifacts": "Artifacts",
+    "noArtifacts": "No artifacts",
+    "artifactsHint": "Results will appear here after running a pipeline",
+    "events": "Events",
+    "steps": "Steps",
+    "selectorValue": "Selector/Value"
   },
   "restartDialog": {
     "title": "Browser restart required",
@@ -196,6 +213,14 @@
     "placeholderDisconnected": "Connect to browser first...",
     "send": "Send",
     "save": "Save",
-    "compilePreset": "Compile Preset"
+    "compilePreset": "Compile Preset",
+    "confirm": "Confirm",
+    "revert": "Revert",
+    "title": "Chat",
+    "think": "Thinking",
+    "stop": "■ Stop",
+    "interrupted": "Session interrupted",
+    "noChanges": "No changes detected — content is identical",
+    "suggestedChanges": "AI suggested changes to the pipeline"
   }
 }

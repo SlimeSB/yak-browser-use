@@ -71,6 +71,15 @@ app.whenReady().then(async () => {
   }
   logger.info('Backend started on port %d', port);
 
+  // Forward Electron logs to Python backend console
+  try {
+    const { relayLog, initLogRelay } = require('../utils/logRelay');
+    const { setLogRelay } = require('../utils/logger');
+    setLogRelay(relayLog);
+    initLogRelay(port);
+    logger.debug('Log relay initialized on port %d', port);
+  } catch { /* relay optional */ }
+
   function _url(path: string) { return `http://127.0.0.1:${port}${path}`; }
 
   let chatAbortController: AbortController | null = null;
@@ -379,6 +388,11 @@ app.whenReady().then(async () => {
     return _apiFetch(`/api/pipelines/${name}`, {}, 'pipelines:get');
   });
 
+  ipcMain.handle('pipelines:delete', async (_event, name: string) => {
+    logger.info('IPC: pipelines:delete %s', name);
+    return _apiFetch(`/api/pipelines/${name}`, { method: 'DELETE' }, 'pipelines:delete');
+  });
+
   // Chat endpoints
   ipcMain.handle('api:chat', async (_event, { message }: { message: string }) => {
     logger.debug('IPC: api:chat called');
@@ -459,6 +473,7 @@ app.on('window-all-closed', () => {
 app.on('before-quit', () => {
   if (!_stopping) {
     _stopping = true;
+    try { require('../utils/logRelay').stopLogRelay(); } catch { /* ignore */ }
     py?.stop();
   }
 });
@@ -466,6 +481,7 @@ app.on('before-quit', () => {
 app.on('will-quit', () => {
   if (!_stopping) {
     _stopping = true;
+    try { require('../utils/logRelay').stopLogRelay(); } catch { /* ignore */ }
     py?.stop();
   }
 });

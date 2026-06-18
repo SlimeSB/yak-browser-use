@@ -324,8 +324,7 @@ async def _with_bridge(fn):
         print("Cannot discover or connect to Chrome")
         sys.exit(1)
 
-    cdp_url = ws_url.replace("ws://", "http://").replace("wss://", "https://")
-    bridge = PlaywrightBridge(cdp_url)
+    bridge = PlaywrightBridge(ws_url)
     await bridge.start()
     try:
         helpers = CDPHelpers(bridge)

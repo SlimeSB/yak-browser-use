@@ -140,6 +140,13 @@ def main() -> None:
     tool_runph_p.add_argument("--step", required=True, help="Step key name")
     tool_runph_p.add_argument("--llm-response", default=None, help="Path to a preset LLM response file (skips real call)")
 
+    # ── logs ──
+    logs_p = sub.add_parser("logs", help="View unified logs (backend, electron, LLM)")
+    logs_p.add_argument("--follow", "-f", action="store_true", help="Tail logs live")
+    logs_p.add_argument("--source", default="all", choices=["all", "backend", "electron", "llm"],
+                        help="Filter by source (default: all)")
+    logs_p.add_argument("--lines", "-n", type=int, default=50, help="Number of lines to show per source (default: 50)")
+
     # ── pipeline ──
     pipeline_p = sub.add_parser("pipeline", help="Pipeline management (compile, status, restart, etc.)")
     pipeline_sub = pipeline_p.add_subparsers(dest="pipeline_cmd", required=True)
@@ -243,6 +250,10 @@ def main() -> None:
         elif args.tool_cmd == "run-ph":
             extra = {"step_key": args.step, "llm_response_path": args.llm_response}
         asyncio.run(tool_dispatch(args.tool_cmd, pipeline_path=args.path, **extra))
+
+    elif args.command == "logs":
+        from cli.logs import _cmd_logs  # noqa: E402
+        asyncio.run(_cmd_logs(source=args.source, lines=args.lines, follow=args.follow))
 
     elif args.command == "pipeline":
         from cli.pipeline import dispatch as pipeline_dispatch  # noqa: E402

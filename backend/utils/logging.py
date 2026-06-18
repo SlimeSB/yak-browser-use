@@ -1,14 +1,25 @@
 """Shared logger setup for yak-browser-use."""
+
 from __future__ import annotations
 
 import logging
 import sys
+from logging.handlers import TimedRotatingFileHandler
+from pathlib import Path
 
 _initialized = False
+
+# Resolve the project root directory (two levels above this file)
+_LOG_DIR = (Path(__file__).resolve().parent.parent.parent / "logs").resolve()
 
 
 def get_logger(name: str) -> logging.Logger:
     return logging.getLogger(name)
+
+
+def _ensure_log_dir() -> Path:
+    _LOG_DIR.mkdir(parents=True, exist_ok=True)
+    return _LOG_DIR
 
 
 def setup_logging(level: str | None = None) -> None:
@@ -18,12 +29,26 @@ def setup_logging(level: str | None = None) -> None:
     _initialized = True
 
     fmt = logging.Formatter(
-        "%(asctime)s [%(levelname)-5s] %(name)s: %(message)s",
+        "%(asctime)s.%(msecs)03d [%(levelname)-5s] [%(name)s] %(message)s",
         datefmt="%H:%M:%S",
     )
-    handler = logging.StreamHandler(sys.stdout)
-    handler.setFormatter(fmt)
+
+    # Console output
+    console = logging.StreamHandler(sys.stdout)
+    console.setFormatter(fmt)
+
+    # Timed rotating file (daily, 7-day retention)
+    log_dir = _ensure_log_dir()
+    file_handler = TimedRotatingFileHandler(
+        filename=str(log_dir / "backend.log"),
+        when="midnight",
+        interval=1,
+        backupCount=7,
+        encoding="utf-8",
+    )
+    file_handler.setFormatter(fmt)
 
     root = logging.getLogger()
-    root.addHandler(handler)
+    root.addHandler(console)
+    root.addHandler(file_handler)
     root.setLevel(level or "DEBUG")

@@ -100,7 +100,11 @@
     "noDescription": "无描述",
     "run": "执行",
     "edit": "编辑",
-    "compile": "编译"
+    "compile": "编译",
+    "delete": "删除",
+    "generateFromDoc": "从文档生成",
+    "copy": "复制",
+    "deleteConfirm": "确定要删除管线「{{name}}」？此操作不可恢复。"
   },
   "paramsTab": {
     "title": "参数管理",
@@ -116,6 +120,7 @@
     "hint": "持久化参数 — 本地存储。可用于密码、API 密钥等。"
   },
   "settingsTab": {
+    "title": "设置",
     "theme": "主题",
     "colorMode": "颜色模式",
     "dark": "深色",
@@ -170,7 +175,19 @@
     "searchSteps": "搜索步骤…",
     "rowsPerPage": "每页条数",
     "of": " / ",
-    "noMatchingSteps": "无匹配的步骤"
+    "noMatchingSteps": "无匹配的步骤",
+    "noStepData": "无步骤数据",
+    "pendingReview": "待审查",
+    "clear": "清除",
+    "guardian": "守护",
+    "required": "（必填）",
+    "confirmReject": "确认拒绝",
+    "artifacts": "产物",
+    "noArtifacts": "暂无产物",
+    "artifactsHint": "执行管线后结果将显示在此处",
+    "events": "事件",
+    "steps": "步骤",
+    "selectorValue": "选择器/值"
   },
   "restartDialog": {
     "title": "需要重启浏览器",
@@ -196,6 +213,14 @@
     "placeholderDisconnected": "请先连接浏览器...",
     "send": "发送",
     "save": "保存",
-    "compilePreset": "编译为预设"
+    "compilePreset": "编译为预设",
+    "confirm": "确认",
+    "revert": "还原",
+    "title": "对话",
+    "think": "思考过程",
+    "stop": "■ 停止",
+    "interrupted": "对话已中断",
+    "noChanges": "未检测到变更 — 内容完全相同",
+    "suggestedChanges": "AI 建议了对管线的修改"
   }
 }

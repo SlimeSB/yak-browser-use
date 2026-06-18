@@ -8,7 +8,6 @@ For preset replay mode, see runner_preset.py.
 from __future__ import annotations
 
 import asyncio
-import re
 from pathlib import Path
 from typing import Callable
 
@@ -98,8 +97,7 @@ async def _ensure_browser_connected() -> object:
         ws_url = await discover_ws_url()
         if ws_url is None:
             raise RuntimeError("Cannot discover Chrome debug URL")
-        cdp_url = re.sub(r'^ws', 'http', ws_url)
-        bridge = PlaywrightBridge(cdp_url)
+        bridge = PlaywrightBridge(ws_url)
         await bridge.start()
         helpers = CDPHelpers(bridge)
         logger.info("Browser connected for chat mode")

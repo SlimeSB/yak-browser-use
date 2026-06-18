@@ -40,6 +40,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Pipeline discovery
   listPipelines: () => ipcRenderer.invoke('pipelines:list'),
   getPipeline: (name: string) => ipcRenderer.invoke('pipelines:get', name),
+  deletePipeline: (name: string) => ipcRenderer.invoke('pipelines:delete', name),
 
   // Chat
   chat: (message: string) => ipcRenderer.invoke('api:chat', { message }),

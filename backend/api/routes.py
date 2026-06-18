@@ -1056,6 +1056,28 @@ def register_all_routes(app: FastAPI) -> None:
         content = pipe_path.read_text(encoding="utf-8")
         return JSONResponse({"name": name, "content": content})
 
+    @app.delete("/api/pipelines/{name}")
+    async def api_delete_pipeline(name: str) -> JSONResponse:
+        """Delete a pipeline from both workspaces/ and presets/."""
+        import os
+        import shutil
+        base = Path(__file__).resolve().parent.parent.parent
+        deleted = False
+
+        preset_path = base / "userdata" / "presets" / f"{name}.pipeline.yaml"
+        if preset_path.exists():
+            os.remove(str(preset_path))
+            deleted = True
+
+        workspace_dir = base / "userdata" / "workspaces" / name
+        if workspace_dir.exists() and workspace_dir.is_dir():
+            shutil.rmtree(str(workspace_dir))
+            deleted = True
+
+        if not deleted:
+            raise APIError(f"Pipeline '{name}' not found", 404)
+        return JSONResponse({"ok": True, "name": name})
+
     # =================================================================
     # WEB SOCKET — real-time event stream
     # =================================================================
@@ -1084,6 +1106,50 @@ def register_all_routes(app: FastAPI) -> None:
             if q in engine_state.ws_clients:
                 engine_state.ws_clients.remove(q)
             logger.debug("WebSocket client disconnected (%d remaining)", len(engine_state.ws_clients))
+
+    @app.websocket("/ws/logs")
+    async def ws_logs(websocket: WebSocket) -> None:
+        """WebSocket endpoint for log forwarding.
+
+        Electron main process sends log lines as JSON messages here,
+        and they are echoed to the backend console stdout.
+        Expected message format: ``{"ts": "...", "level": "...", "name": "...", "msg": "..."}``
+        """
+        import sys
+        await websocket.accept()
+        logger.debug("Log relay connected")
+        try:
+            while True:
+                data = await websocket.receive_json()
+                level = data.get("level", "INFO")
+                name = data.get("name", "electron")
+                msg = data.get("msg", "")
+                ts = data.get("ts", "")
+                line = f"{ts} [{level:<5}] [{name}] {msg}"
+                print(line, file=sys.stdout, flush=True)
+        except WebSocketDisconnect:
+            pass
+        except Exception:
+            logger.debug("Log relay error", exc_info=True)
+        finally:
+            logger.debug("Log relay disconnected")
+
+    @app.post("/api/logs/forward")
+    async def api_logs_forward(request: dict) -> JSONResponse:
+        """HTTP endpoint for batched log forwarding from Electron.
+
+        Request body: ``{"entries": [{"ts": "...", "level": "...", "name": "...", "msg": "..."}, ...]}``
+        """
+        import sys
+        entries = request.get("entries", [])
+        for entry in entries:
+            level = entry.get("level", "INFO")
+            name = entry.get("name", "electron")
+            msg = entry.get("msg", "")
+            ts = entry.get("ts", "")
+            line = f"{ts} [{level:<5}] [{name}] {msg}"
+            print(line, file=sys.stdout, flush=True)
+        return JSONResponse({"ok": True, "count": len(entries)})
 
 
 # ── Internal helpers ────────────────────────────────────────────────

@@ -1,7 +1,6 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import './styles/global.css';
-import { getLogger } from '../utils/logger';
 import type { PipelineMeta, EventData, ChatMessage, PendingEdit } from './types';
 import TitleBar from './components/TitleBar';
 import ConnectionBar from './components/ConnectionBar';
@@ -12,8 +11,6 @@ import LogTab from './components/tabs/LogTab';
 import PipelinesTab from './components/tabs/PipelinesTab';
 import ParamsTab from './components/tabs/ParamsTab';
 import SettingsTab from './components/tabs/SettingsTab';
-
-const logger = getLogger('App');
 
 function interpolateTemplate(template: string, ctx: Record<string, string>): string {
   return template.replace(/{{(\w+)}}/g, (_match, key: string) => ctx[key] ?? `{{${key}}}`);
@@ -109,7 +106,7 @@ export default function App() {
         setPipelines(r.pipelines);
         if (!activePreset) setActivePreset(r.pipelines[0].name);
       }
-    }).catch((e) => { logger.error('listPipelines failed: %s', String(e)); });
+    }).catch((e) => { console.error('listPipelines failed: %s', String(e)); });
   }, []);
 
   useEffect(() => {
@@ -117,7 +114,7 @@ export default function App() {
       if (r.profiles && r.profiles.length > 0) {
         setProfiles(r.profiles);
       }
-    }).catch((e) => { logger.error('listIsolatedProfiles failed: %s', String(e)); });
+    }).catch((e) => { console.error('listIsolatedProfiles failed: %s', String(e)); });
   }, []);
 
   useEffect(() => {
@@ -136,7 +133,7 @@ export default function App() {
             setPipelineCache(prev => ({ ...prev, [activePreset]: resp.content }));
             setPipelineEditor(resp.content);
           }
-    }).catch((e) => { logger.error('getPipeline failed: %s', String(e)); });
+    }).catch((e) => { console.error('getPipeline failed: %s', String(e)); });
       }
     }
   }, [activePreset, pipelines]);
@@ -155,29 +152,7 @@ export default function App() {
     setEvents([]);
   }, [activePreset, pipelines]);
 
-  useEffect(() => {
-    if (connected) return;
-    let timer: ReturnType<typeof setTimeout>;
-    let delay = 5000;
-    const check = async () => {
-      try {
-        const s = await window.electronAPI.chromeStatus();
-        if (s.connected) {
-          setConnected(true);
-          setWsUrl(s.ws_url || '');
-          setConnectionError(null);
-          return;
-        }
-        delay = 5000;
-      } catch (e) {
-        logger.debug('chromeStatus poll failed: %s', String(e));
-        delay = Math.min(delay * 2, 60_000);
-      }
-      timer = setTimeout(check, delay);
-    };
-    timer = setTimeout(check, 1000);
-    return () => clearTimeout(timer);
-  }, [connected]);
+  // No auto-polling. User clicks "Connect" to trigger the check.
 
   useEffect(() => {
     let ws: WebSocket | null = null;
@@ -303,12 +278,12 @@ export default function App() {
               setCurrentRunId('');
               setCurrentPipeline('');
             }
-          } catch (e) { logger.debug('WebSocket message parse error: %s', String(e)); }
+          } catch (e) { console.log('WebSocket message parse error: %s', String(e)); }
         };
         ws.onclose = () => { if (!stopped) reconnectTimer = setTimeout(connect, 3000); };
         ws.onerror = () => { ws?.close(); };
       } catch (e) {
-        logger.debug('WebSocket connect failed: %s', String(e));
+        console.log('WebSocket connect failed: %s', String(e));
         if (!stopped) reconnectTimer = setTimeout(connect, 5000);
       }
     };
@@ -320,11 +295,11 @@ export default function App() {
     if (activeTab !== 'params') return;
     window.electronAPI.listCredentials().then(r => {
       if (r.params) setCredKeys(r.params);
-    }).catch((e) => { logger.error('listCredentials failed: %s', String(e)); });
+    }).catch((e) => { console.error('listCredentials failed: %s', String(e)); });
   }, [activeTab]);
 
   const addEvent = useCallback((type: string, node_name: string, data: Record<string, unknown> = {}) => {
-    logger.debug('Event: %s / %s', type, node_name);
+    console.log('Event: %s / %s', type, node_name);
     setEvents(prev => [...prev, { type, timestamp: new Date().toISOString(), node_name, data }]);
   }, []);
 
@@ -356,7 +331,7 @@ export default function App() {
           return;
         }
       } catch (e) {
-        logger.error('getPipeline failed in handleRun: %s', String(e));
+        console.error('getPipeline failed in handleRun: %s', String(e));
         window.electronAPI.showAlert(t('common.loadFailed'));
         return;
       }
@@ -420,7 +395,7 @@ export default function App() {
         setConnectionError(resp.error || t('connection.connectionFailed'));
       }
     } catch (e) {
-      logger.error('Connect failed: %s', String(e));
+      console.error('Connect failed: %s', String(e));
       setConnectionError(String(e));
     }
   }, []);
@@ -457,7 +432,7 @@ export default function App() {
         setConnectionError(resp.error || t('connection.restartFailed'));
       }
     } catch (e) {
-      logger.error('Restart failed: %s', String(e));
+      console.error('Restart failed: %s', String(e));
       setConnectionError(String(e));
     } finally {
       setRestarting(false);
@@ -481,7 +456,7 @@ export default function App() {
         setPipelineCache(prev => ({ ...prev, [activePreset]: resp.content }));
         setPipelineEditor(resp.content);
       }
-    } catch (e) { logger.error('refreshPipeline failed: %s', String(e)); }
+    } catch (e) { console.error('refreshPipeline failed: %s', String(e)); }
   }, [activePreset]);
 
   const handleChatConfirm = useCallback(async (editId: string): Promise<string | null> => {
@@ -516,7 +491,7 @@ export default function App() {
     try {
       await window.electronAPI.disconnectBrowser();
     } catch (e) {
-      logger.error('Disconnect failed: %s', String(e));
+      console.error('Disconnect failed: %s', String(e));
     }
     setConnected(false);
     setWsUrl('');
@@ -536,7 +511,7 @@ export default function App() {
       setCurrentRunId('');
       setCurrentPipeline('');
     } catch (e) {
-      logger.error('Cancel failed: %s', String(e));
+      console.error('Cancel failed: %s', String(e));
     } finally {
       setCancelling(false);
     }
@@ -549,7 +524,7 @@ export default function App() {
       try {
         await window.electronAPI.reviewPipeline(pr.threadId, 'approve', reason);
       } catch (e) {
-        logger.error('Review approve failed: %s', String(e));
+        console.error('Review approve failed: %s', String(e));
       }
     }
     addEvent('resume', 'pipeline', { action: 'approve', reason });
@@ -562,7 +537,7 @@ export default function App() {
       try {
         await window.electronAPI.reviewPipeline(pr.threadId, 'reject', reason);
       } catch (e) {
-        logger.error('Review reject failed: %s', String(e));
+        console.error('Review reject failed: %s', String(e));
       }
     }
     addEvent('resume', 'pipeline', { action: 'reject', reason });
@@ -586,6 +561,19 @@ export default function App() {
     const r = await window.electronAPI.listPipelines();
     if (r.pipelines) setPipelines(r.pipelines);
   }, []);
+
+  const handleDeletePipeline = useCallback(async (name: string) => {
+    const r = await window.electronAPI.deletePipeline(name);
+    if (r.ok) {
+      if (activePreset === name) {
+        setActivePreset('');
+        setPipelineEditor('');
+      }
+      handleRefreshPipelines();
+    } else {
+      window.electronAPI.showAlert(r.error || 'Delete failed');
+    }
+  }, [activePreset, handleRefreshPipelines]);
 
   const preset = pipelines.find(p => p.name === activePreset);
   const stages = preset?.stages ?? [];
@@ -701,6 +689,7 @@ export default function App() {
           pendingEdit={activePendingEdit}
           onConfirmEdit={handleChatConfirm}
           onRevertEdit={handleChatRevert}
+          onDeletePipeline={handleDeletePipeline}
           reversed={chatLayoutReversed}
           theme={theme}
         />
@@ -729,6 +718,7 @@ export default function App() {
           onRefresh={handleRefreshPipelines}
           onSelectPreset={setActivePreset}
           onTabChange={setActiveTab}
+          onDeletePipeline={handleDeletePipeline}
         />
       </div>
 

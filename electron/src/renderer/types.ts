@@ -80,6 +80,7 @@ declare global {
       exportCsv: (data: unknown) => Promise<{ success: boolean; filePath?: string; rows?: number; error?: string }>;
       listPipelines: () => Promise<{ pipelines: PipelineMeta[]; error?: string }>;
       getPipeline: (name: string) => Promise<{ name: string; content: string; meta: PipelineMeta; error?: string }>;
+      deletePipeline: (name: string) => Promise<{ ok: boolean; name: string; error?: string }>;
       chat: (message: string) => Promise<{ ok?: boolean; response?: string; status?: string; turn_count?: number; duration_ms?: number; error?: string }>;
       chatReset: () => Promise<{ ok?: boolean; session_id?: string; status?: string }>;
       chatCancel: () => Promise<{ ok?: boolean }>;

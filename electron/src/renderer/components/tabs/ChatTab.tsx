@@ -18,6 +18,7 @@ interface ChatTabProps {
   pendingEdit?: PendingEdit | null;
   onConfirmEdit?: (editId: string) => Promise<string | null>;
   onRevertEdit?: (editId: string) => Promise<string | null>;
+  onDeletePipeline?: (name: string) => void;
   reversed?: boolean;
   theme?: string;
 }
@@ -27,6 +28,7 @@ export default function ChatTab({
   pipelines, activePreset, onPresetChange,
   pipelineEditor, onPipelineEditorChange, onRefreshPipeline,
   pendingEdit, onConfirmEdit, onRevertEdit,
+  onDeletePipeline,
   reversed, theme,
 }: ChatTabProps) {
   const { t } = useTranslation();
@@ -135,7 +137,7 @@ export default function ChatTab({
     }
     setSending(false);
     setSessionStatus('idle');
-    setMessages(prev => [...prev, { role: 'system', content: '对话已中断' }]);
+    setMessages(prev => [...prev, { role: 'system', content: t('chat.interrupted') }]);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -152,8 +154,8 @@ export default function ChatTab({
           <div className="chat-diff-bar">
             <span className="chat-diff-explanation">
               {pendingEdit.original === pendingEdit.modified
-                ? (pendingEdit.explanation || 'No changes detected — content is identical')
-                : (pendingEdit.explanation || 'AI suggested changes to the pipeline')}
+                ? (pendingEdit.explanation || t('chat.noChanges'))
+                : (pendingEdit.explanation || t('chat.suggestedChanges'))}
             </span>
             <div className="chat-diff-actions">
               <button
@@ -164,7 +166,7 @@ export default function ChatTab({
                   if (err) setDiffError(err);
                 }}
               >
-                {t('chat.confirm') || 'Confirm'}
+                {t('chat.confirm')}
               </button>
               <button
                 className="btn btn-small btn-secondary"
@@ -174,7 +176,7 @@ export default function ChatTab({
                   if (err) setDiffError(err);
                 }}
               >
-                {t('chat.revert') || 'Revert'}
+                {t('chat.revert')}
               </button>
             </div>
           </div>
@@ -207,7 +209,7 @@ export default function ChatTab({
         <div className="chat-left" style={{ width: `${splitRatio}%`, flex: 'none' }}>
           <div className="chat-header">
             <div className="chat-header-left">
-              <span className="chat-title">Chat</span>
+              <span className="chat-title">{t('chat.title')}</span>
               <select
                 className="select"
                 value={activePreset}
@@ -225,6 +227,11 @@ export default function ChatTab({
               )}
             </div>
             <div className="chat-header-actions">
+              <button className="btn btn-small btn-danger" onClick={() => {
+                if (confirm(t('pipelineManager.deleteConfirm', { name: activePreset }))) {
+                  onDeletePipeline?.(activePreset);
+                }
+              }}>🗑 {t('pipelineManager.delete')}</button>
               <button className="btn btn-small btn-secondary" onClick={handleReset}>
                 {t('common.reset')}
               </button>
@@ -273,7 +280,7 @@ export default function ChatTab({
                           }}
                         >
                           <span className="chat-think-arrow">{expandedThinks.has(i) ? '▾' : '▸'}</span>
-                          <span className="chat-think-title">思考过程</span>
+                          <span className="chat-think-title">{t('chat.think')}</span>
                         </div>
                         {expandedThinks.has(i) && (
                           <div className="chat-think-content">{msg.reasoning}</div>
@@ -327,7 +334,7 @@ export default function ChatTab({
               onClick={sending ? handleCancel : handleSend}
               disabled={!sending && (!input.trim() || !connected)}
             >
-              {sending ? '■ 停止' : t('chat.send')}
+              {sending ? t('chat.stop') : t('chat.send')}
             </button>
           </div>
         </div>

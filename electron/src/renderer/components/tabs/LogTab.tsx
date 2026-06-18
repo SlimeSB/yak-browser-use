@@ -56,13 +56,13 @@ export default function LogTab({
     <div className="log-layout">
       <div className="log-left">
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 10px 4px', borderBottom: '1px solid var(--border)' }}>
-          <span style={{ fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px', color: 'var(--text-muted)' }}>Steps</span>
+          <span style={{ fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px', color: 'var(--text-muted)' }}>{t('log.steps')}</span>
           {currentRunId && <span style={{ fontSize: 9, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>{currentRunId.slice(0, 8)}</span>}
         </div>
         <div className="log-steps">
           {stepNames.length === 0 ? (
             <div style={{ fontSize: 10, color: 'var(--text-muted)', textAlign: 'center', padding: 12 }}>
-              No step data
+              {t('log.noStepData')}
             </div>
           ) : (
             stepNames.map((name, i) => {
@@ -74,7 +74,7 @@ export default function LogTab({
                   </span>
                   <span className="log-step-name">{name}</span>
                   <span className="log-step-time">
-                    {status === 'done' ? t('stages.done') : status === 'review' ? 'Pending Review' : status === 'current' ? t('log.running') : status === 'error' ? t('stages.failed') : '—'}
+                    {status === 'done' ? t('stages.done') : status === 'review' ? t('log.pendingReview') : status === 'current' ? t('log.running') : status === 'error' ? t('stages.failed') : '—'}
                   </span>
                 </div>
               );
@@ -86,16 +86,16 @@ export default function LogTab({
         <div className="log-toolbar">
           <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)' }}>📋 {t('exec.liveLog')}</span>
           <span style={{ flex: 1 }} />
-          <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>{events.length} events</span>
-          <button className="btn btn-secondary btn-xs" onClick={onClearEvents}>Clear</button>
+          <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>{events.length} {t('log.events')}</span>
+          <button className="btn btn-secondary btn-xs" onClick={onClearEvents}>{t('log.clear')}</button>
         </div>
         {pendingReview && (
           <div className="review-card">
             <div className="review-card-header">
               <div className="review-card-title">
-                <span>⚠</span> Pending Review
+                <span>⚠</span> {t('log.pendingReview')}
               </div>
-              <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>{pendingReview.guardLayer || 'guardian'}</span>
+              <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>{pendingReview.guardLayer || t('log.guardian')}</span>
             </div>
             <div className="review-card-body">
               <div className="review-card-reason">{pendingReview.reason}</div>
@@ -117,12 +117,12 @@ export default function LogTab({
                   <div style={{ display: 'flex', gap: 6, flex: 1 }}>
                     <input
                       className="param-input" style={{ flex: 1, fontSize: 11 }}
-                      placeholder={t('log.reason') + ' (required)'}
+                      placeholder={t('log.reason') + t('log.required')}
                       value={logRejectReason}
                       onChange={e => setLogRejectReason(e.target.value)}
                       onKeyDown={e => { if (e.key === 'Enter') handleReject(); }}
                     />
-                    <button className="btn btn-danger btn-sm" onClick={handleReject}>Confirm Reject</button>
+                    <button className="btn btn-danger btn-sm" onClick={handleReject}>{t('log.confirmReject')}</button>
                     <button className="btn btn-secondary btn-sm" onClick={() => { setShowingLogReject(false); setLogRejectReason(''); }}>{t('connection.cancel')}</button>
                   </div>
                 )}
@@ -135,18 +135,18 @@ export default function LogTab({
       <div className="log-right">
         {pendingReview && diffLines.length > 0 && (
           <div className="artifact-section">
-            <div className="artifact-title">📄 Diff</div>
+            <div className="artifact-title">📄 {t('log.viewDiff')}</div>
             <DiffView lines={diffLines} maxHeight={200} />
           </div>
         )}
         <div className="artifact-section">
-          <div className="artifact-title">📦 Artifacts</div>
+          <div className="artifact-title">📦 {t('log.artifacts')}</div>
           {result ? (
             <ResultTable data={result} errors={resultErrors} />
           ) : (
             <div className="artifact-card">
-              <div className="artifact-name">No artifacts</div>
-              <div className="artifact-meta">Results will appear here after running a pipeline</div>
+              <div className="artifact-name">{t('log.noArtifacts')}</div>
+              <div className="artifact-meta">{t('log.artifactsHint')}</div>
             </div>
           )}
         </div>
@@ -155,7 +155,7 @@ export default function LogTab({
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, fontSize: 11 }}>
             <div><span style={{ color: 'var(--text-muted)' }}>{t('log.step')}s</span> {stepEnds.length}/{stepStarts.length}</div>
             <div><span style={{ color: 'var(--text-muted)' }}>{t('preset.pipeline')}</span> {preset?.title || '—'}</div>
-            <div><span style={{ color: 'var(--text-muted)' }}>Events</span> {events.length}</div>
+            <div><span style={{ color: 'var(--text-muted)' }}>{t('log.events')}</span> {events.length}</div>
             <div><span style={{ color: 'var(--text-muted)' }}>{t('log.status')}</span>{' '}
               {loading ? <span style={{ color: 'var(--primary)' }}>{t('log.running')}</span>
                 : stepStarts.length > 0 ? <span style={{ color: 'var(--success)' }}>{t('log.completed')}</span>

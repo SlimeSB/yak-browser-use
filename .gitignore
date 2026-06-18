@@ -38,6 +38,7 @@ release/
 Thumbs.db
 
 # Project runtime data
+logs/
 userdata/sessions/
 userdata/workspaces/
 userdata/params.json

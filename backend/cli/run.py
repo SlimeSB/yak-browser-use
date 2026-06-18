@@ -159,8 +159,7 @@ async def _execute_pipeline(input_path: Path, content: str, params: dict | None 
         ws_url = await discover_ws_url()
         logger.info("  Chrome WS URL: %s...", ws_url[:60])
 
-        cdp_url = ws_url.replace("ws://", "http://").replace("wss://", "https://")
-        bridge = PlaywrightBridge(cdp_url)
+        bridge = PlaywrightBridge(ws_url)
         await bridge.start()
 
         browser = CDPHelpers(bridge)

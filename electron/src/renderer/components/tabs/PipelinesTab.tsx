@@ -8,10 +8,11 @@ interface PipelinesTabProps {
   onRefresh: () => void;
   onSelectPreset: (name: string) => void;
   onTabChange: (tab: string) => void;
+  onDeletePipeline: (name: string) => void;
 }
 
 export default function PipelinesTab({
-  pipelines, onRefresh, onSelectPreset, onTabChange,
+  pipelines, onRefresh, onSelectPreset, onTabChange, onDeletePipeline,
 }: PipelinesTabProps) {
   const { t } = useTranslation();
   return (
@@ -20,7 +21,7 @@ export default function PipelinesTab({
         <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)' }}>📦 {t('pipelineManager.title')}</span>
         <div style={{ flex: 1 }} />
         <button className="btn btn-sm btn-secondary" onClick={onRefresh}>{t('versions.refresh')}</button>
-        <button className="btn btn-sm btn-secondary" onClick={() => onTabChange('agentmd')}>📄 Generate from Doc</button>
+        <button className="btn btn-sm btn-secondary" onClick={() => onTabChange('agentmd')}>📄 {t('pipelineManager.generateFromDoc')}</button>
       </div>
       <div className="mgr-content">
         {pipelines.length === 0 && (
@@ -51,7 +52,12 @@ export default function PipelinesTab({
                     navigator.clipboard.writeText(resp.content);
                   }
                 }).catch((e) => { console.error('getPipeline failed:', e); });
-              }}>📋 Copy</button>
+              }}>📋 {t('pipelineManager.copy')}</button>
+              <button className="btn btn-danger btn-xs" onClick={() => {
+                if (confirm(t('pipelineManager.deleteConfirm', { name: p.title || p.name }))) {
+                  onDeletePipeline(p.name);
+                }
+              }}>🗑 {t('pipelineManager.delete')}</button>
               <VersionPanel pipelineName={p.name} onRefresh={onRefresh} />
             </div>
           </div>

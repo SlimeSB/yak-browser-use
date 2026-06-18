@@ -285,6 +285,7 @@ class PlaywrightBridge:
     # Lifecycle
     # ------------------------------------------------------------------
 
+    @staticmethod
     def _schedule(coro):
         task = asyncio.ensure_future(coro)
         task.add_done_callback(lambda t: t.exception() and logger.debug("_schedule: background task failed", exc_info=t.exception()))

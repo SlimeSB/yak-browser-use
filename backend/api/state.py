@@ -61,8 +61,7 @@ class _EngineState:
         if ws_url is None:
             raise RuntimeError("Cannot discover Chrome debug URL — is Chrome running with --remote-debugging-port?")
 
-        cdp_url = ws_url.replace("ws://", "http://").replace("wss://", "https://")
-        bridge = PlaywrightBridge(cdp_url)
+        bridge = PlaywrightBridge(ws_url)
         await bridge.start()
 
         self.bridge = bridge
