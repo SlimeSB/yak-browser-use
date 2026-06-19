@@ -120,7 +120,7 @@ def inject_guardian_config_to_steps(steps: list[dict], frontmatter: dict | None 
 
 
 class Guardian:
-    """Validates tool outputs, manages _PH- approval, and STALE tracking.
+    """Validates tool outputs, approval gating, and circuit breaker / STALE tracking.
 
     Features:
     - Content validation for CSV / JSON output files
@@ -200,32 +200,6 @@ class Guardian:
         except Exception as e:
             return {"ok": False, "detail": f"JSON parse failed: {e}"}
         return {"ok": True, "detail": f"JSON: {path.name} is valid"}
-
-    # ── _PH- approval ──
-
-    def check_ph_generation(
-        self,
-        pipeline_name: str,
-        tool_name: str,
-        output_dir: str | Path,
-        output_files: list[str],
-    ) -> tuple[bool, str]:
-        """Validate the output of a _PH- tool generation.
-
-        Returns:
-            Tuple of (passed, detail_message).
-        """
-        result = self.validate_output(output_dir, output_files)
-        if result["ok"]:
-            record = self.record_success(pipeline_name, tool_name)
-            return True, record["detail"]
-        return False, result["detail"]
-
-    def record_success(self, pipeline_name: str, tool_name: str) -> dict:
-        """Record a successful validation, resetting failure count."""
-        self._failure_counts.pop(pipeline_name, None)
-        logger.info("guardian: %s %s validation passed", pipeline_name, tool_name)
-        return {"ok": True, "detail": f"{tool_name} validation passed"}
 
     # ── STALE tracking ──
 
