@@ -1295,7 +1295,7 @@ body {
 .pipe-card-actions { display: flex; gap: 4px; flex-wrap: wrap; }
 
 /* ════════════════════════════════════════════ */
-/* ═══ TAB 5: 参数管理 ═══ */
+/* ═══ TAB 5: 凭据管理 ═══ */
 /* ════════════════════════════════════════════ */
 .cred-layout { display: flex; flex: 1; overflow: hidden; flex-direction: column; }
 .cred-toolbar {

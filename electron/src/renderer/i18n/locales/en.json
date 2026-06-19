@@ -7,7 +7,7 @@
     "chat": "Chat",
     "log": "Log",
     "pipelines": "Pipelines",
-    "params": "Params",
+    "params": "Credentials",
     "settings": "Settings",
     "running": "Running"
   },
@@ -107,17 +107,17 @@
     "deleteConfirm": "Delete pipeline \"{{name}}\"? This action cannot be undone."
   },
   "paramsTab": {
-    "title": "Params Manager",
-    "noParams": "No params",
+    "title": "Credentials",
+    "noParams": "No credentials",
     "add": "+ Add",
     "key": "Key",
     "value": "Value",
     "actions": "Actions",
     "delete": "Delete",
     "save": "Save",
-    "setParam": "Set param",
-    "deleteConfirm": "Delete this param?",
-    "hint": "Persistent parameters — stored locally. Use for passwords, API keys, etc."
+    "setParam": "Set credential",
+    "deleteConfirm": "Delete this credential?",
+    "hint": "Persistent credentials — stored locally. Use for passwords, API keys, etc."
   },
   "settingsTab": {
     "title": "Settings",

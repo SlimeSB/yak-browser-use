@@ -7,7 +7,7 @@
     "chat": "对话",
     "log": "日志",
     "pipelines": "管线",
-    "params": "参数",
+    "params": "凭据",
     "settings": "设置",
     "running": "运行中"
   },
@@ -107,17 +107,17 @@
     "deleteConfirm": "确定要删除管线「{{name}}」？此操作不可恢复。"
   },
   "paramsTab": {
-    "title": "参数管理",
-    "noParams": "暂无参数",
+    "title": "凭据管理",
+    "noParams": "暂无凭据",
     "add": "+ 添加",
-    "key": "参数名",
-    "value": "参数值",
+    "key": "凭据名",
+    "value": "凭据值",
     "actions": "操作",
     "delete": "删除",
     "save": "保存",
-    "setParam": "设置参数",
-    "deleteConfirm": "确定删除此参数？",
-    "hint": "持久化参数 — 本地存储。可用于密码、API 密钥等。"
+    "setParam": "设置凭据",
+    "deleteConfirm": "确定删除此凭据？",
+    "hint": "持久化凭据 — 本地存储。可用于密码、API 密钥等。"
   },
   "settingsTab": {
     "title": "设置",
