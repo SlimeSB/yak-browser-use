@@ -691,7 +691,7 @@ def _build_registry_impl() -> None:
     # ── captcha ───────────────────────────────────────────────────────
 
     registry.register("captcha", {
-        "description": "识别验证码图片。支持文字验证码（OCR）和滑块缺口检测。",
+        "description": "识别验证码图片。支持文字验证码（OCR）和滑块缺口检测。提供 dom_selector 时自动从页面 img 元素提取图片数据，无需手动传 image_bytes。",
         "parameters": {
             "type": "object",
             "properties": {
@@ -699,6 +699,10 @@ def _build_registry_impl() -> None:
                     "type": "string",
                     "enum": ["ocr", "slide"],
                     "description": "验证码类型：ocr（识别文字）、slide（检测滑块缺口位置）"
+                },
+                "dom_selector": {
+                    "type": "string",
+                    "description": "页面中验证码图片元素的 CSS 选择器（如 img[alt*='验证码']）。提供后自动从页面提取图片数据，无需手动传 image_bytes 或 image_path。"
                 },
                 "image_bytes": {
                     "type": "string",
@@ -725,6 +729,42 @@ def _build_registry_impl() -> None:
 
 async def _captcha_handler(args: dict, ctx: ToolContext) -> dict:
     from tools.captcha import captcha
+
+    # dom_selector → extract image from page via CDP, no base64 in LLM context
+    if args.get("dom_selector"):
+        if not ctx.cdp_helpers:
+            return {"ok": False, "error": "dom_selector 需要浏览器连接"}
+        selector = args.pop("dom_selector")
+        bridge = getattr(ctx.cdp_helpers, "bridge", None)
+        if bridge is None:
+            return {"ok": False, "error": "浏览器不可用"}
+        safe_sel = selector.replace("'", "\\'")
+        js = (
+            "(()=>{"
+            "const e=document.querySelector('" + safe_sel + "');"
+            "if(!e)return{error:'NOT_FOUND'};"
+            "if(e.tagName!=='IMG')return{error:'NOT_IMG'};"
+            "const c=document.createElement('canvas');"
+            "c.width=e.naturalWidth;c.height=e.naturalHeight;"
+            "c.getContext('2d').drawImage(e,0,0);"
+            "return{data:c.toDataURL('image/png').split(',')[1]};"
+            "})()"
+        )
+        try:
+            result = await bridge.evaluate(js)
+        except Exception as e:
+            return {"ok": False, "error": f"从页面提取图片失败: {e}"}
+        if isinstance(result, dict):
+            if "error" in result:
+                return {"ok": False, "error": result["error"]}
+            b64 = result.get("data", "")
+            if b64:
+                args["image_bytes"] = b64
+            else:
+                return {"ok": False, "error": "提取到的图片数据为空"}
+        else:
+            return {"ok": False, "error": f"页面 JS 返回异常: {result}"}
+
     kwargs = {k: args[k] for k in ("type", "image_bytes", "image_path", "background_bytes") if k in args}
     return await captcha(**kwargs)
 
