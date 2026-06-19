@@ -1,22 +1,23 @@
 """Unified log viewer for yak-browser-use.
 
-Reads log files from the ``logs/`` directory:
+Reads log files from the ``logs/`` directory or a specific run:
 
-  logs/backend.log   — Python backend (timed rotating, daily)
-  logs/electron.log  — Electron main process
-  logs/llm/*.jsonl   — LLM response records
+  logs/backend.log           — Python backend (timed rotating, daily)
+  logs/electron.log          — Electron main process
+  logs/llm/*.jsonl           — LLM response records
+  userdata/workspaces/<pipeline>/runs/<run_id>/  — run-specific logs
 
 Usage:
-  yak logs                     # last 50 lines from all sources
-  yak logs -f                  # tail live
-  yak logs --source backend    # only backend logs
-  yak logs -n 100              # last 100 lines
+  ybu logs                         # last 50 lines from all sources
+  ybu logs -f                      # tail live
+  ybu logs --source backend        # only backend logs
+  ybu logs -n 100                  # last 100 lines
+  ybu logs --run <run_id>          # logs for a specific run
 """
 
 from __future__ import annotations
 
 import asyncio
-import time
 from pathlib import Path
 
 from utils.logging import get_logger
@@ -24,10 +25,37 @@ from utils.logging import get_logger
 logger = get_logger(__name__)
 
 _LOG_DIR = (Path(__file__).resolve().parent.parent.parent / "logs").resolve()
+_WORKSPACES_ROOT = Path(__file__).resolve().parent.parent.parent / "userdata" / "workspaces"
 
 
-def _find_log_files(source: str) -> list[Path]:
+def _find_run_dir(run_id: str) -> Path | None:
+    """Search workspace directories for a run directory matching run_id."""
+    if not _WORKSPACES_ROOT.exists():
+        return None
+    for pipeline_dir in _WORKSPACES_ROOT.iterdir():
+        if not pipeline_dir.is_dir():
+            continue
+        run_dir = pipeline_dir / "runs" / run_id
+        if run_dir.is_dir():
+            return run_dir
+    return None
+
+
+def _find_log_files(source: str, run_dir: Path | None = None) -> list[Path]:
     """Yield existing log file paths matching the source filter."""
+    if run_dir:
+        # Run-specific logs: look for .log files in the run directory
+        files: list[Path] = []
+        for p in sorted(run_dir.glob("*.log")):
+            files.append(p)
+        for p in sorted(run_dir.glob("*.jsonl")):
+            files.append(p)
+        # Also include _run.json metadata
+        meta = run_dir / "_run.json"
+        if meta.exists():
+            files.append(meta)
+        return files
+
     files: list[Path] = []
     if source in ("all", "backend"):
         backend_log = _LOG_DIR / "backend.log"
@@ -57,23 +85,40 @@ def _tail_file(path: Path, lines: int) -> list[str]:
 
 
 def _label(path: Path) -> str:
-    if path.name == "backend.log":
-        return "[backend]"
-    if path.name == "electron.log":
-        return "[electron]"
-    if path.suffix == ".jsonl":
-        return f"[llm:{path.stem}]"
+    parent = path.parent
+    if parent.name == "logs" or parent.parent.name == "logs":
+        if path.name == "backend.log":
+            return "[backend]"
+        if path.name == "electron.log":
+            return "[electron]"
+        if path.suffix == ".jsonl":
+            return f"[llm:{path.stem}]"
+    # Run-specific logs — path looks like workspaces/<pipeline>/runs/<run_id>/*
+    if path.parent.parent.name == "runs" and path.parent.parent.parent.parent.name == "workspaces":
+        return f"[run:{path.parent.name}]"
+    if path.name == "_run.json":
+        return "[run:meta]"
     return f"[{path.stem}]"
 
 
-async def _cmd_logs(source: str = "all", lines: int = 50, follow: bool = False) -> None:
+async def _cmd_logs(source: str = "all", lines: int = 50, follow: bool = False, run: str | None = None) -> None:
     """View unified logs."""
-    log_files = _find_log_files(source)
+
+    # Resolve run directory if --run was given
+    run_dir = _find_run_dir(run) if run else None
+    if run and not run_dir:
+        print(f"Run '{run}' not found in any workspace")
+        return
+
+    log_files = _find_log_files(source, run_dir)
 
     if not log_files:
-        print(f"No log files found in {_LOG_DIR}")
-        if not _LOG_DIR.exists():
-            print("  (directory does not exist yet — run the app first)")
+        if run_dir:
+            print(f"No log files found in {run_dir}")
+        else:
+            print(f"No log files found in {_LOG_DIR}")
+            if not _LOG_DIR.exists():
+                print("  (directory does not exist yet — run the app first)")
         return
 
     if follow:
@@ -86,7 +131,6 @@ async def _cmd_logs(source: str = "all", lines: int = 50, follow: bool = False) 
 
 async def _tail_follow(paths: list[Path], source: str, head_lines: int) -> None:
     """Print recent lines then watch for new content in real time."""
-    # Print recent lines first
     file_positions: dict[Path, int] = {}
     for path in paths:
         try:
@@ -101,12 +145,10 @@ async def _tail_follow(paths: list[Path], source: str, head_lines: int) -> None:
     if not file_positions:
         return
 
-    # Poll for new content
     print("\n--- live tail (Ctrl+C to stop) ---")
     try:
         while True:
-            # Refresh file list in case new files appear
-            current = _find_log_files(source)
+            current = paths  # don't auto-refresh file list for run-specific
             for path in current:
                 if path not in file_positions:
                     try:
