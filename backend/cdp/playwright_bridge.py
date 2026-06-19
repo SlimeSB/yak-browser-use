@@ -280,6 +280,7 @@ class PlaywrightBridge:
         self._ref_map: dict[str, dict] = {}
         self._element_map: dict[str, Any] = {}
         self._last_highlight_elements: list[dict] = []
+        self._highlight_guard_task: asyncio.Task | None = None
 
     # ------------------------------------------------------------------
     # Lifecycle
@@ -306,14 +307,29 @@ class PlaywrightBridge:
 
         self._context.on("page", self._on_new_page)
         for p in self._context.pages:
-            p.on("load", lambda pg=p: self._schedule(self.ensure_highlights(pg)))
-        if self._page:
-            self._page.on("framenavigated", lambda f: self._schedule(self._on_frame_navigated(f)))
+            p.on("load", lambda pg=p: self._schedule(self._on_page_load(pg)))
+            p.on("close", lambda pg=p: self._schedule(self._on_page_closed(pg)))
+            p.on("framenavigated", lambda f, pg=p: self._schedule(self._on_frame_navigated(f, pg)))
+        await self.ensure_highlights()
+        # 给其他标签页也注入 bootstrap 框架（但不扫描，等切到时再扫）
+        for p in self._context.pages:
+            if p is not self._page:
+                await self.ensure_highlights(p)
+        # 自动扫描当前页面，让开局就有高亮（不依赖 chat tool call）
+        try:
+            await self.simplify_dom()
+            logger.info("initial DOM scan complete: %d interactive elements", len(self._last_highlight_elements))
+        except Exception:
+            logger.warning("initial DOM scan failed, will retry via guard", exc_info=True)
+        self._start_highlight_guard()
         logger.info("PlaywrightBridge connected (pages: %d)", len(self._context.pages))
 
     async def stop(self) -> None:
         """Release Playwright resources. Does NOT close Chrome."""
         logger.info("PlaywrightBridge stopping")
+        if self._highlight_guard_task is not None:
+            self._highlight_guard_task.cancel()
+            self._highlight_guard_task = None
         try:
             if self._context:
                 try:
@@ -340,8 +356,9 @@ class PlaywrightBridge:
 
     async def _on_new_page(self, page: Page) -> None:
         """Auto-inject highlight JS and page ID when a new tab/page opens."""
-        page.on("load", lambda pg=page: self._schedule(self.ensure_highlights(pg)))
-        page.on("framenavigated", lambda f: self._schedule(self._on_frame_navigated(f)))
+        page.on("load", lambda pg=page: self._schedule(self._on_page_load(pg)))
+        page.on("framenavigated", lambda f, pg=page: self._schedule(self._on_frame_navigated(f, pg)))
+        page.on("close", lambda: self._schedule(self._on_page_closed(page)))
         try:
             page_id = str(uuid.uuid4())[:8]
             await page.evaluate(f"window.__ybu_page_id = '{page_id}';")
@@ -354,26 +371,107 @@ class PlaywrightBridge:
             await page.evaluate(_HIGHLIGHT_BOOTSTRAP)
         except Exception:
             logger.debug("_on_new_page highlight injection failed", exc_info=True)
+        # 新标签页自动设为活动页并扫描（让用户点链接后马上看到高亮）
+        self._page = page
+        try:
+            await self.simplify_dom()
+        except Exception:
+            logger.debug("_on_new_page: auto-scan failed", exc_info=True)
+
+    async def _on_page_closed(self, page: Page) -> None:
+        """当页面被关闭时自动切换到其他可用页面。"""
+        if self._page is not page:
+            return
+        logger.info("current page closed, switching to another tab")
+        if self._context and self._context.pages:
+            self._page = self._context.pages[0]
+            await self.ensure_highlights()
+        else:
+            self._page = None
 
     async def ensure_highlights(self, page: Page | None = None) -> None:
-        """Page load / reload 后自动重注高亮数据 + bootstrap"""
+        """Inject highlight bootstrap and push element data into the page.
+
+        For the active page (pg is self._page), pushes fresh element data and
+        renders highlights.  For inactive pages, only ensures the bootstrap
+        framework is present — never writes stale element data so highlights
+        on other tabs stay clean.
+        """
         pg = page or self._page
         if not pg:
             return
         try:
-            if self._last_highlight_elements:
+            is_active = pg is self._page
+            if is_active:
                 await pg.evaluate(
                     f"window.__ybu_last_elements = {_json.dumps(self._last_highlight_elements)};"
                 )
             await pg.evaluate(_HIGHLIGHT_BOOTSTRAP)
-            await pg.evaluate("window.__ybu_run && window.__ybu_run();")
+            if is_active:
+                await pg.evaluate("window.__ybu_run && window.__ybu_run();")
         except Exception:
-            logger.debug("ensure_highlights failed", exc_info=True)
+            logger.warning("ensure_highlights failed for %s", pg.url[:60] if pg.url else "(no url)", exc_info=True)
 
-    async def _on_frame_navigated(self, frame) -> None:
-        """SPA pushState / replaceState — re-inject highlights on main frame."""
-        if self._page and frame == self._page.main_frame:
-            await self.ensure_highlights()
+    async def _on_page_load(self, page: Page) -> None:
+        """Page load / reload 后自动重注高亮 + 扫描新元素。"""
+        await self.ensure_highlights(page)
+        # 页面的 load 事件说明内容变了，自动扫描刷新高亮
+        if page is self._page:
+            try:
+                await self.simplify_dom()
+            except Exception:
+                logger.debug("_on_page_load: auto-scan failed", exc_info=True)
+
+    async def _on_frame_navigated(self, frame, page: Page | None = None) -> None:
+        """SPA pushState / replaceState — re-inject highlights + auto-scan."""
+        pg = page or self._page
+        if not pg or frame != pg.main_frame:
+            return
+        await self.ensure_highlights(pg)
+        if pg is self._page:
+            try:
+                await self.simplify_dom()
+            except Exception:
+                logger.debug("_on_frame_navigated: auto-scan failed", exc_info=True)
+
+    # ------------------------------------------------------------------
+    # Highlight guard — periodic safety-net refresh (every 2 s)
+    # ------------------------------------------------------------------
+
+    def _start_highlight_guard(self) -> None:
+        """Background task: periodically re-inject highlights every ~2 s.
+
+        Replicates the safety-net refresh that used to live in
+        ``routes._highlight_guard`` before the Playwright migration.
+        Covers async DOM mutations, injected scripts that clear the
+        overlay, and other events the event-driven path misses.
+        """
+
+        async def _guard() -> None:
+            while self._page is not None:
+                await asyncio.sleep(2.0)
+                try:
+                    # 如果当前页已被用户关闭，自动切到其他页
+                    if self._context and self._page not in self._context.pages:
+                        if self._context.pages:
+                            self._page = self._context.pages[0]
+                            await self.simplify_dom()
+                        else:
+                            self._page = None
+                            return
+                    await self.ensure_highlights()
+                except asyncio.CancelledError:
+                    raise
+                except Exception:
+                    pass
+
+        self._highlight_guard_task = asyncio.ensure_future(_guard())
+        self._highlight_guard_task.add_done_callback(
+            lambda t: logger.debug(
+                "_highlight_guard: task ended (cancelled=%s)",
+                t.cancelled(),
+            )
+        )
 
     # ------------------------------------------------------------------
     # Interaction ops
@@ -381,6 +479,11 @@ class PlaywrightBridge:
 
     async def goto(self, url: str) -> dict:
         await self._page.goto(url, wait_until="domcontentloaded")
+        # 导航后扫描新页面，自动刷新高亮
+        try:
+            await self.simplify_dom()
+        except Exception:
+            logger.debug("goto: auto-scan failed", exc_info=True)
         return {"url": url}
 
     async def click(self, selector: str, click_count: int = 1) -> dict:
@@ -466,6 +569,10 @@ class PlaywrightBridge:
             await self._page.go_forward()
         elif action == "reload":
             await self._page.reload()
+        try:
+            await self.simplify_dom()
+        except Exception:
+            logger.debug("navigate: auto-scan failed", exc_info=True)
         return {"action": action}
 
     async def wait(self, mode: str = "time", **kwargs: Any) -> dict:
@@ -500,6 +607,10 @@ class PlaywrightBridge:
                 await p.bring_to_front()
                 self._page = p
                 await self.ensure_highlights()
+                try:
+                    await self.simplify_dom()
+                except Exception:
+                    logger.debug("tab_switch: auto-scan failed", exc_info=True)
                 return {"targetId": target_id, "url": p.url}
         raise ValueError(f"Tab not found: {target_id}")
 
@@ -728,6 +839,7 @@ class PlaywrightBridge:
                 ]
 
         self._last_highlight_elements = list(elements)
+        await self.ensure_highlights()
 
         result: dict = {"elements": elements, "mode": "interactive"}
         try:
