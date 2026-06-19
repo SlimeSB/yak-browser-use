@@ -64,6 +64,7 @@ When a complex task is set via `goal_run`:
 - Use descriptive `step_name` like "step_1", "step_2".
 - Include a brief `explanation` of why this step is needed.
 - If a step fails, do NOT record it — fix and retry instead.
+- For non-browser tools (e.g. captcha), call `pipeline_update_step` to set `params` such as `image_path` referencing a saved screenshot file — transient data like `image_bytes` must be replaced with a file reference for replay.
 
 ## Credential Security
 When the user asks you to fill passwords, API keys, or other secrets:

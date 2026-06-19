@@ -6,16 +6,6 @@
 ## 当前页面快照
 {snapshot}
 
-## 可用工具
-你只能使用以下工具：
-- browser_snapshot：获取页面快照，了解当前 DOM 结构
-- browser_eval：执行 JavaScript 代码并获取返回值
-- browser_click：点击页面元素
-- browser_fill：填写输入框
-- browser_wait：等待指定时间
-- browser_source：获取完整 HTML
-- browser_scroll：滚动页面
-
 ## 可用 JS 函数库
 以下 JS 函数供你在 browser_eval 代码中参考使用（需要将函数体包含在你的 JS 中）：
 ```js

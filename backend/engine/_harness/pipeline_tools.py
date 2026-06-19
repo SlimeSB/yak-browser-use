@@ -24,7 +24,7 @@ logger = get_logger(__name__)
 PRESETS_DIR = Path(__file__).resolve().parent.parent.parent.parent / "userdata" / "presets"
 
 _VALID_UPDATE_KEYS = frozenset({
-    "browser_ops", "tool_name", "goal_description", "description", "depends_on",
+    "browser_ops", "tool_name", "goal_description", "description", "depends_on", "params",
 })
 
 
@@ -185,6 +185,8 @@ async def pipeline_update_step(
         step_dict["tool_name"] = updates["tool_name"]
     if "goal_description" in updates:
         step_dict["goal_description"] = updates["goal_description"]
+    if "params" in updates:
+        step_dict["params"] = updates["params"]
 
     if len(type_fields_in_updates) == 1:
         for other in ("browser_ops", "tool_name", "goal_description"):
@@ -423,10 +425,12 @@ async def pipeline_compile(
                     "goal_description": args.get("description", "") or result_text[:200],
                 })
             else:
+                params = {k: v for k, v in args.items() if k not in ("image_bytes", "background_bytes")}
                 steps.append({
                     "name": f"step_{step_index}",
                     "description": f"{tool_name}: {_fmt_args(args)}",
                     "tool_name": tool_name,
+                    "params": params or None,
                 })
             step_index += 1
 

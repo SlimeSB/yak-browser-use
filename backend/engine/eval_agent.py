@@ -60,7 +60,6 @@ class EvalAgent:
             "browser_wait",
             "browser_source",
             "browser_scroll",
-            "captcha",
         }
         return registry.filter(allowed)
 
