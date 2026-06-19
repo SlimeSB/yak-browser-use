@@ -144,6 +144,9 @@ async def execute_browser_op(
             elif op_type == "fill":
                 selector = params.get("selector", "")
                 text = params.get("text", params.get("value", ""))
+                if isinstance(text, dict) and "param_key" in text:
+                    from params.manager import resolve_param
+                    text = resolve_param(text["param_key"])
                 selector = await _resolve_element_ref(selector, element_map, bridge)
                 await bridge.fill(selector, text)
                 result["result"] = {"selector": selector}
@@ -243,6 +246,9 @@ async def execute_browser_op(
                     await bridge.keyboard_press(key)
                 elif mode == "text":
                     text = params.get("text", "")
+                    if isinstance(text, dict) and "param_key" in text:
+                        from params.manager import resolve_param
+                        text = resolve_param(text["param_key"])
                     await bridge.keyboard_type(text)
                 result["result"] = {"mode": mode}
 
@@ -253,8 +259,12 @@ async def execute_browser_op(
 
             elif op_type == "type_text":
                 text = params.get("text", "")
+                is_param = isinstance(text, dict) and "param_key" in text
+                if is_param:
+                    from params.manager import resolve_param
+                    text = resolve_param(text["param_key"])
                 await bridge.keyboard_type(text)
-                result["result"] = {"text": text}
+                result["result"] = {"text": "***" if is_param else text}
 
             elif op_type == "navigate":
                 action = params.get("action", "back")

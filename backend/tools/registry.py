@@ -131,7 +131,7 @@ def _build_registry_impl() -> None:
     _BROWSER_OPS = [
         "goto", "click", "fill", "snapshot", "scroll", "source", "eval",
         "get_element_by_number", "hover", "unhover", "focus", "select",
-        "clear", "press_key", "type_text", "navigate", "wait",
+        "clear", "keyboard", "press_key", "type_text", "navigate", "wait",
         "tab", "copy", "paste",
     ]
 
@@ -156,12 +156,21 @@ def _build_registry_impl() -> None:
             },
         },
         "fill": {
-            "description": "Fill text into an input element identified by CSS selector. NOTE: This clears existing content first. To append text without clearing, use browser_focus + browser_type_text instead.",
+            "description": "Fill text into an input element identified by CSS selector. NOTE: This clears existing content first. To append text without clearing, use browser_focus + browser_type_text instead. For passwords/secrets, use text={\"param_key\": \"key-name\"} — the value is resolved server-side and never appears in conversation.",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "selector": {"type": "string", "description": "CSS selector for the input element."},
-                    "text": {"type": "string", "description": "Text to fill into the input."},
+                    "text": {
+                        "oneOf": [
+                            {"type": "string", "description": "Plain text to fill into the input."},
+                            {"type": "object",
+                             "properties": {"param_key": {"type": "string", "description": "Stored credential key name. The secret value is resolved server-side and never appears in conversation."}},
+                             "required": ["param_key"],
+                             "description": "Use a stored credential instead of plain text."},
+                        ],
+                        "description": "Text to fill, or {\"param_key\": \"my-pwd\"} to use a stored secret.",
+                    },
                 },
                 "required": ["selector", "text"],
             },
@@ -270,6 +279,27 @@ def _build_registry_impl() -> None:
                 "required": ["selector"],
             },
         },
+        "keyboard": {
+            "description": "Press a key or type text. mode='key' for single keys (e.g. 'Enter', 'Tab'), mode='text' to type a string. For passwords/secrets in mode='text', use text={\"param_key\": \"key-name\"} — the value is resolved server-side and never appears in conversation.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "mode": {"type": "string", "enum": ["key", "text"], "description": "'key' to press a single key, 'text' to type a string."},
+                    "key": {"type": "string", "description": "Key or key combination to press (mode='key'). e.g. 'Enter', 'Tab', 'Control+A'."},
+                    "text": {
+                        "oneOf": [
+                            {"type": "string", "description": "Plain text to type (mode='text')."},
+                            {"type": "object",
+                             "properties": {"param_key": {"type": "string", "description": "Stored credential key name."}},
+                             "required": ["param_key"],
+                             "description": "Use a stored credential instead of plain text."},
+                        ],
+                        "description": "Text to type, or {\"param_key\": \"my-pwd\"} to use a stored secret.",
+                    },
+                },
+                "required": [],
+            },
+        },
         "press_key": {
             "description": "Press a keyboard key or key combination (e.g. 'Enter', 'Control+A', 'Escape').",
             "parameters": {
@@ -279,10 +309,21 @@ def _build_registry_impl() -> None:
             },
         },
         "type_text": {
-            "description": "Type text character by character into the currently focused element. Does NOT clear existing content — use browser_focus first to position cursor, then type_text to append.",
+            "description": "Type text character by character into the currently focused element. Does NOT clear existing content — use browser_focus first to position cursor, then type_text to append. For passwords/secrets, use text={\"param_key\": \"key-name\"} — the value is resolved server-side and never appears in conversation.",
             "parameters": {
                 "type": "object",
-                "properties": {"text": {"type": "string", "description": "Text to type character by character."}},
+                "properties": {
+                    "text": {
+                        "oneOf": [
+                            {"type": "string", "description": "Plain text to type character by character."},
+                            {"type": "object",
+                             "properties": {"param_key": {"type": "string", "description": "Stored credential key name."}},
+                             "required": ["param_key"],
+                             "description": "Use a stored credential instead of plain text."},
+                        ],
+                        "description": "Text to type, or {\"param_key\": \"my-pwd\"} to use a stored secret.",
+                    },
+                },
                 "required": ["text"],
             },
         },

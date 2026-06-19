@@ -109,7 +109,9 @@ class ParamManager:
         key = ref.key if isinstance(ref, ParamRef) else ref
         value = self.get(key)
         if value is None:
-            raise RuntimeError(f"Parameter '{key}' not found (store: {self._path})")
+            available = self.list_keys()
+            hint = f" Available keys: {available}" if available else " No keys stored."
+            raise RuntimeError(f"Parameter '{key}' not found.{hint}")
         return value
 
 
