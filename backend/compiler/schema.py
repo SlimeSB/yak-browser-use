@@ -117,12 +117,18 @@ class PipelineYaml(BaseModel):
 
 
 def _convert_browser_op(op: dict) -> dict:
-    """Convert a single-key browser operation dict to internal format."""
+    """Convert a single-key browser operation dict to internal format.
+    
+    Passes through extra top-level keys (retry, optional, etc.) alongside type/value.
+    """
     for key, val in op.items():
         if isinstance(val, dict):
             result = {"type": key, **val}
         else:
             result = {"type": key, "value": val}
+        for k, v in op.items():
+            if k != key:
+                result[k] = v
         return result
     return {}
 
@@ -132,15 +138,20 @@ def ops_to_yaml(ops: list[dict]) -> list[dict]:
 
     {type: "goto", value: "url"} → {goto: "url"}
     {type: "fill", selector, value} → {fill: {selector, value}}
+    {type: "click", value: "#ad", retry: 2, optional: true} → {click: "#ad", retry: 2, optional: true}
     """
     result: list[dict] = []
+    meta_keys = {"retry", "optional"}
     for op in ops:
         op_type = op.get("type", "")
-        rest = {k: v for k, v in op.items() if k != "type"}
+        style = {k: v for k, v in op.items() if k in meta_keys}
+        rest = {k: v for k, v in op.items() if k != "type" and k not in meta_keys}
         if len(rest) == 1 and "value" in rest:
-            result.append({op_type: rest["value"]})
+            entry = {op_type: rest["value"]}
         elif rest:
-            result.append({op_type: rest})
+            entry = {op_type: rest}
         else:
-            result.append({op_type: op.get("value", "")})
+            entry = {op_type: op.get("value", "")}
+        entry.update(style)
+        result.append(entry)
     return result

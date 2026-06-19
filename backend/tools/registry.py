@@ -423,7 +423,7 @@ def _build_registry_impl() -> None:
             },
         },
         "pipeline_add_step": {
-            "description": "Add a new step to a pipeline. If `after` is provided, the step is inserted after the named step; otherwise it is appended to the end.",
+            "description": "Add a new step to a pipeline. If `after` is provided, the step is inserted after the named step; otherwise it is appended to the end. Set `heading=true` to create an outline placeholder step with only name + description (no browser_ops/tool_name/goal_description).",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -436,6 +436,7 @@ def _build_registry_impl() -> None:
                     "depends_on": {"type": "array", "description": "List of step names this step depends on.", "items": {"type": "string"}},
                     "check": {"type": "object", "description": "Optional programmatic check conditions for this step. Supported keys: url_contains, element_exists, text_contains, element_visible."},
                     "after": {"type": "string", "description": "Name of the step to insert after. Omit to append."},
+                    "heading": {"type": "boolean", "description": "Set to true to create an outline placeholder step without browser_ops, tool_name, or goal_description."},
                     "explanation": {"type": "string", "description": "Human-readable explanation of what was changed and why."},
                 },
                 "required": ["pipeline_name", "step_name", "description"],
@@ -657,18 +658,18 @@ def _build_registry_impl() -> None:
     # ── record_step ──────────────────────────────────────────────────
 
     registry.register("record_step", {
-        "description": "Record a browser operation as a step in the pipeline.yaml. Call this AFTER each browser_* operation completes successfully. This appends the step to the pipeline so it can be replayed later.",
+        "description": "Record a browser operation as a step in the pipeline.yaml. Call this AFTER each browser_* operation completes successfully. This appends the step to the pipeline so it can be replayed later. When op_type is omitted, creates an outline placeholder step with only name + description — fill it later by calling record_step again with the same step_name and op_type.",
         "parameters": {
             "type": "object",
             "properties": {
                 "pipeline_name": {"type": "string", "description": "Name of the pipeline preset to record into."},
                 "step_name": {"type": "string", "description": "Unique name for this step, e.g. 'step_1', 'step_2'."},
                 "description": {"type": "string", "description": "Human-readable description of what this step does."},
-                "op_type": {"type": "string", "description": "The browser operation type: goto, click, fill, scroll, snapshot, source, eval."},
+                "op_type": {"type": "string", "description": "The browser operation type: goto, click, fill, scroll, snapshot, source, eval. Omit to create an outline placeholder step."},
                 "op_args": {"type": "object", "description": "The exact arguments passed to the browser operation, e.g. {\"url\": \"https://baidu.com\"}."},
                 "explanation": {"type": "string", "description": "Brief explanation of why this step is needed in the pipeline."},
             },
-            "required": ["pipeline_name", "step_name", "description", "op_type", "op_args"],
+            "required": ["pipeline_name", "step_name", "description"],
         },
     }, _record_step_handler)
 

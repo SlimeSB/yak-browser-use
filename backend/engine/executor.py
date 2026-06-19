@@ -693,7 +693,44 @@ async def execute_browser_step(
             else:
                 core_params = {k: v for k, v in op.items() if k != "type"}
 
-            core_result = await execute_browser_op(op_type, core_params, bridge, element_map)
+            retry = op.get("retry", 0)
+            optional = op.get("optional", False)
+
+            core_result = None
+            for attempt in range(retry + 1):
+                try:
+                    core_result = await execute_browser_op(op_type, core_params, bridge, element_map)
+                except Exception as e:
+                    if attempt < retry:
+                        await asyncio.sleep(1)
+                        continue
+                    if optional:
+                        op_record["ok"] = False
+                        op_record["skipped"] = True
+                        op_record["error"] = str(e)
+                        op_record["duration_ms"] = 0
+                        result["ops"].append(op_record)
+                        core_result = None
+                        break
+                    raise
+
+                if not core_result["ok"]:
+                    if attempt < retry:
+                        await asyncio.sleep(1)
+                        continue
+                    if optional:
+                        op_record["ok"] = False
+                        op_record["skipped"] = True
+                        op_record["error"] = core_result.get("error", "")
+                        op_record["duration_ms"] = core_result["duration_ms"]
+                        result["ops"].append(op_record)
+                        core_result = None
+                        break
+                break
+
+            if core_result is None:
+                continue
+
             op_record["ok"] = core_result["ok"]
             op_record["duration_ms"] = core_result["duration_ms"]
 

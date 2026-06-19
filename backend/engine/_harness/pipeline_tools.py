@@ -241,12 +241,13 @@ async def pipeline_add_step(
         "name": step_name,
         "description": description,
     }
-    if browser_ops is not None:
-        step_dict["browser_ops"] = browser_ops
-    if tool_name is not None:
-        step_dict["tool_name"] = tool_name
-    if goal_description is not None:
-        step_dict["goal_description"] = goal_description
+    if not heading:
+        if browser_ops is not None:
+            step_dict["browser_ops"] = browser_ops
+        if tool_name is not None:
+            step_dict["tool_name"] = tool_name
+        if goal_description is not None:
+            step_dict["goal_description"] = goal_description
     if depends_on is not None:
         step_dict["depends_on"] = depends_on
 

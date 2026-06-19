@@ -43,6 +43,13 @@ You also have file and data tools:
 4. **After each browser_* operation succeeds, call `record_step` to save it to the pipeline.**
 5. Report results clearly to the user
 
+## Outline Mode
+Before acting on a multi-step task, write an outline first:
+1. Call `pipeline_add_step(heading=True, name="...", description="...")` for each major step
+2. Execute each step with `browser_*` tools
+3. Fill the outline with `record_step(step_name="...", op_type="...", op_args={...})` — matching the step_name updates the placeholder instead of appending
+4. Insert/remove/reorder steps freely with `pipeline_*` tools after inspecting with `pipeline_load`
+
 ## Goal Execution Mode
 When a complex task is set via `goal_run`:
 - Use `todo` to break the goal into 3-6 concrete steps
