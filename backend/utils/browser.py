@@ -1,4 +1,4 @@
-"""LLM factory — creates a BrowserUse LLM instance from config."""
+"""LLM factory — creates an LLMClient instance from config."""
 from __future__ import annotations
 
 import json
@@ -31,12 +31,12 @@ def _load_config() -> dict:
 
 
 def create_llm(model: str | None = None) -> object:
-    """Create a browser-use LLM instance.
+    """Create an LLMClient instance.
 
     Reads from <project>/provider.json first, then falls back to
     YBU_MODEL / YBU_API_KEY / YBU_API_BASE env vars.
     """
-    from browser_use.llm.openai.chat import ChatOpenAI
+    from llm.client import LLMClient
 
     cfg = _load_config()
 
@@ -56,4 +56,4 @@ def create_llm(model: str | None = None) -> object:
     if api_base:
         kwargs["base_url"] = api_base
 
-    return ChatOpenAI(**kwargs)
+    return LLMClient(**kwargs)

@@ -97,7 +97,7 @@ async def _plan(document_content: str, pipeline_name: str | None = None) -> dict
         Dict with keys: pipeline_name, description, required_params, steps.
     """
     from utils.browser import create_llm
-    from browser_use.llm.messages import UserMessage
+    from llm.messages import UserMessage
 
     prompt_template = load_prompt("planner-plan")
     prompt = prompt_template.format(document_content=document_content)
@@ -106,7 +106,7 @@ async def _plan(document_content: str, pipeline_name: str | None = None) -> dict
 
     llm = create_llm()
     response = await llm.ainvoke([UserMessage(content=prompt)])
-    text = response.completion if hasattr(response, "completion") else str(response)
+    text = response.content or str(response)
 
     plan = _extract_json(text)
     if not plan:
@@ -138,7 +138,7 @@ async def _expand_all(plan: dict, document_content: str) -> dict:
         Updated plan dict with ops filled in for steps that need them.
     """
     from utils.browser import create_llm
-    from browser_use.llm.messages import UserMessage
+    from llm.messages import UserMessage
 
     prompt_template = load_prompt("planner-expand")
 
@@ -165,7 +165,7 @@ async def _expand_all(plan: dict, document_content: str) -> dict:
 
         llm = create_llm()
         response = await llm.ainvoke([UserMessage(content=prompt)])
-        text = response.completion if hasattr(response, "completion") else str(response)
+        text = response.content or str(response)
 
         ops = _extract_ops(text)
         step["ops"] = ops

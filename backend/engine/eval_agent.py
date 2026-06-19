@@ -50,9 +50,7 @@ class EvalAgent:
 
     def get_restricted_tools(self) -> list[dict]:
         """Return the restricted tool set for the eval agent."""
-        from engine._harness.tools import (
-            BROWSER_TOOLS,
-        )
+        from tools.registry import registry
 
         allowed = {
             "browser_eval",
@@ -63,7 +61,7 @@ class EvalAgent:
             "browser_source",
             "browser_scroll",
         }
-        return [t for t in BROWSER_TOOLS if t["function"]["name"] in allowed]
+        return registry.filter(allowed)
 
 
 def _load_js_lib() -> str:

@@ -129,10 +129,8 @@ def _create_chat_llm_call(
 
     from utils.browser import create_llm
     from utils.response_logger import _log_non_streaming_response, _log_streaming_response
-    from browser_use.llm.messages import UserMessage, SystemMessage, AssistantMessage
-    from browser_use.llm.openai.serializer import OpenAIMessageSerializer
-
-    from browser_use.llm.messages import ToolCall as BUMessageToolCall
+    from llm.messages import UserMessage, SystemMessage, AssistantMessage, ToolCall
+    from llm.client import serialize_messages
 
     llm = create_llm()
     _streaming = any(cb is not None for cb in [on_text_delta, on_reasoning_delta])
@@ -162,7 +160,7 @@ def _create_chat_llm_call(
             elif role == "assistant":
                 tool_calls_data = msg.get("tool_calls")
                 if tool_calls_data:
-                    tc_objs = [BUMessageToolCall(**tc) for tc in tool_calls_data]
+                    tc_objs = [ToolCall(**tc) for tc in tool_calls_data]
                     converted.append(AssistantMessage(content=content, tool_calls=tc_objs))
                 else:
                     converted.append(AssistantMessage(content=content))
@@ -181,7 +179,7 @@ def _create_chat_llm_call(
             return response
 
         # ── Streaming path ──────────────────────────────────────────
-        openai_messages = list(OpenAIMessageSerializer.serialize_messages(converted))
+        openai_messages = list(serialize_messages(converted))
 
         for msg in messages:
             if msg.get("role") == "tool":
@@ -336,8 +334,7 @@ def create_pipeline_llm_call(persist_id: str = ""):
     """
     from utils.browser import create_llm
     from utils.response_logger import _log_non_streaming_response
-    from browser_use.llm.messages import UserMessage, SystemMessage, AssistantMessage
-    from browser_use.llm.messages import ToolCall as BUMessageToolCall
+    from llm.messages import UserMessage, SystemMessage, AssistantMessage, ToolCall
 
     llm = create_llm()
 
@@ -363,7 +360,7 @@ def create_pipeline_llm_call(persist_id: str = ""):
             elif role == "assistant":
                 tool_calls_data = msg.get("tool_calls")
                 if tool_calls_data:
-                    tc_objs = [BUMessageToolCall(**tc) for tc in tool_calls_data]
+                    tc_objs = [ToolCall(**tc) for tc in tool_calls_data]
                     converted.append(AssistantMessage(content=content, tool_calls=tc_objs))
                 else:
                     converted.append(AssistantMessage(content=content))

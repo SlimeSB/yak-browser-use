@@ -63,14 +63,14 @@ async def generate_handler(
         step_def.key, pipeline_name,
     )
     from utils.browser import create_llm
-    from browser_use.llm.messages import UserMessage
+    from llm.messages import UserMessage
 
     prompt = generate_handler_prompt(step_def)
     llm = create_llm()
 
     try:
         response = await llm.ainvoke([UserMessage(content=prompt)])
-        text = response.completion if hasattr(response, "completion") else str(response)
+        text = response.content or str(response)
 
         code = _extract_python_code(text)
         if code:

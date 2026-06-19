@@ -796,8 +796,19 @@ async def execute_tool_step(
         **params,
     }
 
-    core_result = await execute_tool(tool_name, core_params, tools_dir, cdp_helpers)
-    result["duration_ms"] = core_result["duration_ms"]
+    from tools.registry import registry, ToolContext as RegistryToolContext
+
+    ctx = RegistryToolContext(
+        cdp_helpers=cdp_helpers,
+        tools_dir=tools_dir,
+    )
+    dispatch_result = await registry.dispatch(tool_name, core_params, ctx)
+
+    if dispatch_result.get("ok") is False and dispatch_result.get("error", "").startswith("Unknown tool:"):
+        core_result = await execute_tool(tool_name, core_params, tools_dir, cdp_helpers)
+    else:
+        core_result = dispatch_result
+    result["duration_ms"] = core_result.get("duration_ms", 0)
 
     if not core_result["ok"]:
         result["status"] = "failed"

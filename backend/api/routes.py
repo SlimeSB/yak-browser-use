@@ -74,8 +74,8 @@ def register_all_routes(app: FastAPI) -> None:
     async def api_test_provider(request: dict) -> JSONResponse:
         """Test an LLM provider config by making a simple call."""
         try:
-            from browser_use.llm.openai.chat import ChatOpenAI
-            from browser_use.llm.messages import UserMessage
+            from llm.client import LLMClient
+            from llm.messages import UserMessage
 
             model = request.get("model", "gpt-4o")
             api_key = request.get("api_key", "")
@@ -87,7 +87,7 @@ def register_all_routes(app: FastAPI) -> None:
             if api_base:
                 kwargs["base_url"] = api_base
 
-            llm = ChatOpenAI(**kwargs)
+            llm = LLMClient(**kwargs)
             await llm.ainvoke([UserMessage(content="Say hello in one word.")])
             return JSONResponse({"ok": True})
         except Exception as e:
@@ -1176,32 +1176,5 @@ def _prepare_steps(content: str, pipeline_path: Path) -> tuple[Any, list[dict]]:
 
     Returns (parsed_frontmatter_plus, steps_data).
     """
-    from compiler.context import resolve_context
-    from compiler.graph import build_graph, get_execution_order, validate_file_refs
-    from compiler.parser import parse_pipeline
-    from compiler.resolver import resolve
-
-    parsed = parse_pipeline(content)
-    context = resolve_context(parsed.frontmatter, pipeline_path)
-    if context:
-        for step in parsed.steps:
-            step.system_prompt = context
-
-    dag = build_graph(parsed.steps)
-    validate_file_refs(parsed.steps)
-    execution_order = get_execution_order(dag)
-
-    step_key_map = {s.key: s for s in parsed.steps}
-    ordered_steps = [step_key_map[k] for k in execution_order]
-
-    steps_data: list[dict] = []
-    for step in ordered_steps:
-        handler = resolve(step, parsed.name)
-        step_data = step.to_runtime_dict(handler)
-        steps_data.append(step_data)
-
-    logger.info(
-        "Prepared %d steps for pipeline '%s'",
-        len(steps_data), parsed.name,
-    )
-    return parsed, steps_data
+    from compiler.prepare import prepare_steps
+    return prepare_steps(content, pipeline_path)

@@ -35,6 +35,9 @@ def create_app() -> FastAPI:
     @app.on_event("startup")
     async def startup() -> None:
         logger.info("Yak Browser-Use API starting …")
+        from tools.registry import build_registry
+        build_registry()
+        logger.info("Tool registry built")
 
     @app.on_event("shutdown")
     async def shutdown() -> None:

@@ -1,20 +1,29 @@
-"""Tests for tools registration module."""
+"""Tests for tools registration module — via ToolRegistry."""
 
-from engine._harness.tools import (
-    BROWSER_TOOLS,
-    GOAL_RUN_TOOL,
-    PIPELINE_TOOLS,
-    get_all_tools,
-    get_browser_tools,
-)
+from tools.registry import registry, build_registry
+
+
+def _ensure_registry():
+    if not registry._tools:
+        build_registry()
+
+
+def _browser_tools():
+    _ensure_registry()
+    return [t for t in registry.get_schemas() if t["function"]["name"].startswith("browser_")]
+
+
+def _pipeline_tools():
+    _ensure_registry()
+    return [t for t in registry.get_schemas() if t["function"]["name"].startswith("pipeline_")]
 
 
 def test_browser_tools_count():
-    assert len(BROWSER_TOOLS) == 20
+    assert len(_browser_tools()) == 20
 
 
 def test_browser_tools_structure():
-    for tool in BROWSER_TOOLS:
+    for tool in _browser_tools():
         assert "type" in tool
         assert tool["type"] == "function"
         fn = tool["function"]
@@ -25,16 +34,19 @@ def test_browser_tools_structure():
 
 
 def test_goal_run_tool():
-    assert GOAL_RUN_TOOL["function"]["name"] == "goal_run"
-    assert "description" in GOAL_RUN_TOOL["function"]["parameters"]["properties"]
+    _ensure_registry()
+    goal_run = next((t for t in registry.get_schemas() if t["function"]["name"] == "goal_run"), None)
+    assert goal_run is not None
+    assert goal_run["function"]["name"] == "goal_run"
+    assert "description" in goal_run["function"]["parameters"]["properties"]
 
 
 def test_pipeline_tools_count():
-    assert len(PIPELINE_TOOLS) == 8
+    assert len(_pipeline_tools()) == 8
 
 
 def test_pipeline_tools_names():
-    names = [t["function"]["name"] for t in PIPELINE_TOOLS]
+    names = [t["function"]["name"] for t in _pipeline_tools()]
     assert "pipeline_load" in names
     assert "pipeline_list" in names
     assert "pipeline_update_step" in names
@@ -44,6 +56,8 @@ def test_pipeline_tools_names():
 
 
 def test_get_all_tools_with_goal():
+    from engine._harness.tools import get_all_tools
+
     tools = get_all_tools(include_goal_run=True)
     assert len(tools) == 40
     names = [t["function"]["name"] for t in tools]
@@ -62,6 +76,8 @@ def test_get_all_tools_with_goal():
 
 
 def test_get_all_tools_without_goal():
+    from engine._harness.tools import get_all_tools
+
     tools = get_all_tools(include_goal_run=False)
     assert len(tools) == 39
     names = [t["function"]["name"] for t in tools]
@@ -71,6 +87,8 @@ def test_get_all_tools_without_goal():
 
 
 def test_get_browser_tools():
+    from engine._harness.tools import get_browser_tools
+
     tools = get_browser_tools()
     assert len(tools) == 20
     names = [t["function"]["name"] for t in tools]
@@ -85,6 +103,8 @@ def test_get_browser_tools():
 
 
 def test_todo_tool_definition():
+    from engine._harness.tools import get_all_tools
+
     tools = get_all_tools(include_goal_run=True)
     todo_tool = next((t for t in tools if t["function"]["name"] == "todo"), None)
     assert todo_tool is not None

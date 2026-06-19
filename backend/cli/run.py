@@ -17,6 +17,9 @@ logger = get_logger(__name__)
 
 async def _cmd_run(path: str, params: dict | None = None) -> None:
     """Run a pipeline synchronously (blocks until done)."""
+    from tools.registry import build_registry
+    build_registry()
+
     input_path = Path(path)
     if not input_path.exists():
         logger.error("File not found: %s", path)
@@ -109,30 +112,6 @@ async def _cmd_run(path: str, params: dict | None = None) -> None:
 
 
 def _prepare_steps(content: str, pipeline_path: Path) -> tuple[any, list[dict]]:
-    """Parse pipeline.yaml and prepare ordered steps. (from api/routes.py)"""
-    from compiler.context import resolve_context
-    from compiler.graph import build_graph, get_execution_order, validate_file_refs
-    from compiler.parser import parse_pipeline
-    from compiler.resolver import resolve
-
-    parsed = parse_pipeline(content)
-    context = resolve_context(parsed.frontmatter, pipeline_path)
-    if context:
-        for step in parsed.steps:
-            step.system_prompt = context
-
-    dag = build_graph(parsed.steps)
-    validate_file_refs(parsed.steps)
-    execution_order = get_execution_order(dag)
-
-    step_key_map = {s.key: s for s in parsed.steps}
-    ordered_steps = [step_key_map[k] for k in execution_order]
-
-    steps_data: list[dict] = []
-    for step in ordered_steps:
-        handler = resolve(step, parsed.name)
-        step_data = step.to_runtime_dict(handler)
-        steps_data.append(step_data)
-
-    logger.info("Prepared %d steps for pipeline '%s'", len(steps_data), parsed.name)
-    return parsed, steps_data
+    """Parse pipeline.yaml and prepare ordered steps."""
+    from compiler.prepare import prepare_steps
+    return prepare_steps(content, pipeline_path)

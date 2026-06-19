@@ -25,6 +25,13 @@ from prompts._loader import load_prompt
 
 logger = get_logger(__name__)
 
+# Event type constants — shared between conversation_loop and tool_executor
+EVENT_TURN_START = "turn_start"
+EVENT_LLM_TURN = "llm_turn"
+EVENT_TOOL_START = "chat.tool_start"
+EVENT_TOOL_END = "chat.tool_end"
+EVENT_ERROR = "chat.error"
+
 # CDP reconnect backoff (3 tries: 1s / 2s / 4s)
 _CDP_RECONNECT_DELAYS = [1.0, 2.0, 4.0]
 _CDP_RECONNECT_MAX = 3
@@ -89,7 +96,7 @@ async def execute_tool_calls_sequential(
 
         if stream_callback:
             stream_callback({
-                "type": "chat.tool_start",
+                "type": EVENT_TOOL_START,
                 "tool_name": fn_name,
                 "args": fn_args,
                 "id": tool_call_id,
@@ -148,15 +155,12 @@ async def execute_tool_calls_sequential(
         if result_dict.get("_pipeline_finish"):
             break
 
-        if ok and fn_name in ("browser_goto", "browser_click", "browser_fill") and cdp_helpers is not None:
-            await _auto_refresh_highlights(cdp_helpers)
-
-        if ok and fn_name == "browser_scroll" and cdp_helpers is not None:
+        if ok and fn_name in ("browser_goto", "browser_click", "browser_fill", "browser_scroll") and cdp_helpers is not None:
             await _auto_refresh_highlights(cdp_helpers)
 
         if stream_callback:
             stream_callback({
-                "type": "chat.tool_end",
+                "type": EVENT_TOOL_END,
                 "tool_name": fn_name,
                 "ok": ok,
                 "duration_ms": result_dict.get("duration_ms", 0),
@@ -165,7 +169,7 @@ async def execute_tool_calls_sequential(
             })
 
         if not ok and fn_name == "goal_run" and stream_callback:
-            stream_callback({"type": "chat.error", "message": error_msg})
+            stream_callback({"type": EVENT_ERROR, "message": error_msg})
 
     if guardrail_state:
         guardrail_state.reset()
@@ -189,161 +193,47 @@ async def _execute_single_tool_call(
     - CDP reconnect with 3x exponential backoff
     - Unrecoverable error detection
     """
-    from engine.executor import execute_browser_op, execute_tool
+    from engine.executor import execute_tool
+    from tools.registry import registry, ToolContext as RegistryToolContext
 
     reconnect_attempts = 0
     timeout_retried = False
 
     while True:
         try:
-            if fn_name.startswith("browser_"):
-                op_type = fn_name.replace("browser_", "")
+            # ── Scratchpad caching (before dispatch) ─────────────────
+            if fn_name == "browser_get_element_by_number":
+                cached_result = _try_scratchpad_element_lookup(fn_args)
+                if cached_result is not None:
+                    return cached_result
 
-                if op_type == "get_element_by_number":
-                    cached_result = _try_scratchpad_element_lookup(fn_args)
-                    if cached_result is not None:
-                        return cached_result
+            if fn_name == "browser_source" and fn_args.get("cached"):
+                cached_result = _try_scratchpad_source_read()
+                if cached_result is not None:
+                    return cached_result
 
-                if op_type == "source" and fn_args.get("cached"):
-                    cached_result = _try_scratchpad_source_read()
-                    if cached_result is not None:
-                        return cached_result
+            # ── Dispatch via registry ────────────────────────────────
+            ctx = RegistryToolContext(
+                cdp_helpers=cdp_helpers,
+                tools_dir=tools_dir,
+                pipeline_name=pipeline_name,
+                budget=budget,
+                llm_call=llm_call,
+                interrupt_check=interrupt_check,
+                stream_callback=stream_callback,
+            )
 
-                if cdp_helpers is None:
-                    return {"ok": False, "error": "浏览器不可用 — 请确保 CDP 连接已建立"}
-                bridge = cdp_helpers.bridge if hasattr(cdp_helpers, "bridge") else cdp_helpers
-                return await execute_browser_op(op_type, fn_args, bridge)
+            result = await registry.dispatch(fn_name, fn_args, ctx)
 
-            elif fn_name == "pipeline_finish":
-                status = fn_args.get("status", "")
-                if status not in ("completed", "failed"):
-                    status = "completed"
-                summary = fn_args.get("summary", "")
-                if budget is not None:
-                    budget.exhaust()
-                return {"ok": True, "status": status, "summary": summary, "_pipeline_finish": True}
-
-            elif fn_name.startswith("pipeline_"):
-                from engine._harness.pipeline_tools import (
-                    pipeline_load,
-                    pipeline_list,
-                    pipeline_update_step,
-                    pipeline_add_step,
-                    pipeline_remove_step,
-                    pipeline_create,
-                    pipeline_compile,
-                )
-
-                dispatch = {
-                    "pipeline_load": pipeline_load,
-                    "pipeline_list": pipeline_list,
-                    "pipeline_update_step": pipeline_update_step,
-                    "pipeline_add_step": pipeline_add_step,
-                    "pipeline_remove_step": pipeline_remove_step,
-                    "pipeline_create": pipeline_create,
-                    "pipeline_compile": pipeline_compile,
-                }
-
-                handler = dispatch.get(fn_name)
-                if handler is None:
-                    return {"ok": False, "error": f"Unknown pipeline tool: {fn_name}"}
-
-                result_str = await handler(**fn_args)
-                try:
-                    result_dict = json.loads(result_str)
-                except (json.JSONDecodeError, TypeError):
-                    return {"ok": True, "result": result_str}
-
-                # Flattened pipeline tools (pipeline_load, pipeline_list,
-                # pipeline_compile) omit the 'result' key; add it here so
-                # _format_tool_result can display a JSON snapshot to the LLM.
-                if "result" not in result_dict and result_dict.get("ok"):
-                    result_dict["result"] = json.dumps(
-                        {k: v for k, v in result_dict.items() if k not in ("ok", "result")},
-                        ensure_ascii=False,
-                    )
-                return result_dict
-
-            elif fn_name == "goal_run":
-                description = fn_args.get("description", fn_args.get("goal", ""))
-                return {
-                    "ok": True,
-                    "result": (
-                        f"目标已设定: {description}\n\n"
-                        f"请用 todo 工具将目标拆解为 3-6 个步骤逐项执行。"
-                        f"每步完成后调 record_step。不确定时直接问我。"
-                    ),
-                }
-
-            elif fn_name == "todo":
-                from tools.todo_store import current_store
-                from tools.todo import todo
-
-                store = current_store.get()
-                todos = fn_args.get("todos")
-                merge = fn_args.get("merge", False)
-                result_str = await todo(todos=todos, merge=merge, store=store)
-                return {"ok": True, "result": result_str}
-
-            elif fn_name == "file_read":
-                from tools.file_read import file_read
-
-                result_dict = await file_read(**fn_args)
-                return result_dict
-
-            elif fn_name == "file_write":
-                from tools.file_write import file_write
-
-                result_dict = await file_write(**fn_args)
-                return result_dict
-
-            elif fn_name == "format_convert":
-                from tools.format_convert import format_convert
-
-                result = await format_convert(**fn_args)
-                return result
-
-            elif fn_name == "eval_agent":
-                return await _handle_eval_agent(
-                    fn_args=fn_args,
-                    cdp_helpers=cdp_helpers,
-                    llm_call=llm_call,
-                    budget=budget,
-                    interrupt_check=interrupt_check,
-                    stream_callback=stream_callback,
-                    pipeline_name=pipeline_name,
-                )
-
-            elif fn_name.startswith("skill_"):
-                from engine._harness.skill_tools import (
-                    skill_list,
-                    skill_view,
-                    skill_create,
-                    skill_edit,
-                    skill_delete,
-                )
-
-                dispatch = {
-                    "skill_list": skill_list,
-                    "skill_view": skill_view,
-                    "skill_create": skill_create,
-                    "skill_edit": skill_edit,
-                    "skill_delete": skill_delete,
-                }
-
-                handler = dispatch.get(fn_name)
-                if handler is None:
-                    return {"ok": False, "error": f"Unknown skill tool: {fn_name}"}
-
-                return handler(**fn_args)
-
-            else:
+            if result.get("ok") is False and result.get("error", "").startswith("Unknown tool:"):
                 return await execute_tool(
                     tool_name=fn_name,
                     params=fn_args,
                     tools_dir=tools_dir or Path("."),
                     cdp_helpers=cdp_helpers,
                 )
+
+            return result
 
         except TimeoutError as e:
             if not timeout_retried:
@@ -386,7 +276,7 @@ async def _execute_single_tool_call(
                         budget.resume()
                 if reconnect_attempts >= _CDP_RECONNECT_MAX and stream_callback:
                     stream_callback({
-                        "type": "chat.error",
+                        "type": EVENT_ERROR,
                         "message": "浏览器连接丢失，请检查 Chrome 是否运行",
                     })
                 timeout_retried = False
@@ -418,27 +308,29 @@ async def _handle_eval_agent(
     output_dir = fn_args.get("output_dir", "")
 
     from engine.eval_agent import EvalAgent
-    from engine._harness.conversation_loop import run_conversation_loop
+    from engine._harness.conversation_loop import Agent
 
-    agent = EvalAgent(max_attempts=max_attempts)
-    system_prompt = agent.build_system_prompt(purpose=purpose, snapshot=snapshot)
-    tools = agent.get_restricted_tools()
+    eval_config = EvalAgent(max_attempts=max_attempts)
+    system_prompt = eval_config.build_system_prompt(purpose=purpose, snapshot=snapshot)
+    tools = eval_config.get_restricted_tools()
 
     eval_budget = IterationBudget(max_total=10)
     messages: list[dict] = [{"role": "user", "content": f"任务: {purpose}"}]
 
+    agent = Agent(
+        llm_call=llm_call,
+        system_prompt=system_prompt,
+        messages=messages,
+        tools=tools,
+        cdp_helpers=cdp_helpers,
+        budget=eval_budget,
+        interrupt_check=interrupt_check,
+        stream_callback=stream_callback,
+    )
+
     try:
         result = await asyncio.wait_for(
-            run_conversation_loop(
-                llm_call=llm_call,
-                system_prompt=system_prompt,
-                messages=messages,
-                tools=tools,
-                cdp_helpers=cdp_helpers,
-                budget=eval_budget,
-                interrupt_check=interrupt_check,
-                stream_callback=stream_callback,
-            ),
+            agent.run(),
             timeout=120,
         )
     except asyncio.TimeoutError:
