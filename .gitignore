@@ -53,3 +53,4 @@ userdata/presets/*.pipeline.yaml
 .history/
 opencode.jsonc
 /userdata
+/.agents

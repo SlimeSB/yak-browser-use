@@ -1,0 +1,331 @@
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="logo.png">
+    <img src="logo.png" alt="yak-browser-use logo" width="240">
+  </picture>
+</p>
+
+<h1 align="center">Yak Browser-Use</h1>
+
+<p align="center">
+  <strong>CHAT · BROWSER · AUTOMATE</strong>
+</p>
+
+<p align="center">
+  <em>一个让 AI Agent 跟你聊天同时操控浏览器的自动化框架</em>
+</p>
+
+<p align="center">
+  <img src="https://img.shields.io/badge/python-%E2%89%A53.12-blue?style=flat-square&logo=python" alt="Python ≥3.12">
+  <img src="https://img.shields.io/badge/license-MIT-green?style=flat-square" alt="MIT License">
+  <img src="https://img.shields.io/badge/status-alpha-orange?style=flat-square" alt="Alpha">
+  <img src="https://img.shields.io/badge/Playwright-ready-45ba4b?style=flat-square&logo=playwright" alt="Playwright">
+  <img src="https://img.shields.io/badge/Electron-desktop-47848F?style=flat-square&logo=electron" alt="Electron Desktop">
+  <a href="./README.md"><img src="https://img.shields.io/badge/README-English-blue?style=flat-square" alt="English"></a>
+</p>
+<p align="center">
+  <a href="./README.md">English</a> · <a href="./README.zh-CN.md">简体中文</a>
+</p>
+
+---
+
+## 项目简介
+
+**yak-browser-use**（简称 **ybu**）是一个面向浏览器自动化的 AI Agent 框架。核心交互模型：
+
+> **你跟 Agent 聊天 → Agent 自主操控浏览器 → 实时同步给你看**
+
+支持两种模式：
+
+- **Chat 模式** — 自然语言对话式操控，Agent 边聊边操作浏览器
+- **Preset 模式** — 预设 Pipeline 回放，Agent 按编排步骤自动执行
+
+技术底座基于 [Playwright](https://playwright.dev/) `connect_over_cdp()` 和 [browser-use](https://github.com/browser-use/browser-use) 的 LLM 工具链。
+
+---
+
+## 核心功能
+
+| | 能力 | 说明 |
+|---|------|------|
+| **🗣️ Chat + 浏览器同步** | 用户在 chat 输入指令，Agent 自主操作浏览器，操作过程实时推送给用户 |
+| **🔧 丰富浏览器工具集** | goto / click / fill / snapshot / scroll / eval / hover / tab 管理…… 覆盖日常自动化需求 |
+| **📋 Pipeline 编排** | 聊天过程中自动录制操作步骤到 pipeline.yaml，可保存为预设后续回放 |
+| **🤖 Agent Swimlane** | Pipeline 执行出问题时 Agent 自动介入恢复，无需人工干预 |
+| **🛡️ 安全护栏** | 路径守卫 (PathGuard)、域名白名单、熔断器、审核门控 (Guardian) — 多重安全机制 |
+| **🏓 流式 LLM** | 流式推理 + 文本增量 + 工具名实时推送，WebSocket 推送到前端 |
+| **🖥️ Electron 桌面** | React + Vite + Monaco 编辑器，提供完整桌面端体验 |
+| **🔌 REST + WebSocket API** | FastAPI 后端，支持 REST 调用和实时事件推送 |
+| **📂 第三方工具脚本** | `tools/` 目录支持自定义 Python 工具热加载 |
+| **🔑 Provider 灵活配置** | 支持 DeepSeek / OpenAI / 任意 OpenAI-compatible 提供商，平铺 JSON 配置 |
+
+---
+
+## 快速上手
+
+### 前置要求
+
+| 依赖 | 版本 | 安装 |
+|------|------|------|
+| Python | ≥ 3.12 | [python.org](https://python.org) |
+| [uv](https://docs.astral.sh/uv/) | ≥ 0.4 | `powershell -c "irm https://astral.sh/uv/install.ps1 \| iex"` |
+| Node.js | ≥ 18 | [nodejs.org](https://nodejs.org) |
+| Chrome / Chromium | ≥ 120 | 已安装的 Chrome，或 `uv run playwright install chromium` |
+
+### 安装
+
+```bash
+# Windows 一键安装
+install.bat
+
+# 或手动三步
+cd backend
+uv sync                              # 安装 Python 依赖
+uv run playwright install chromium   # 安装 Playwright Chromium
+cd ../electron
+npm install                          # 安装 Electron 前端依赖
+```
+
+### 启动
+
+```bash
+# CLI 模式
+cd backend
+uv run python __main__.py --help
+
+# 启动 REST API 服务
+uv run python __main__.py serve --port 8080
+
+# 启动 Electron 桌面端
+cd electron
+npm run electron:dev
+```
+
+### 配置 Provider
+
+创建 `userdata/provider.json`：
+
+```json
+{
+  "provider": "deepseek",
+  "model": "deepseek-chat",
+  "api_key": "sk-xxx...xxxx"
+}
+```
+
+也可用 CLI 配置：`ybu param set provider.api_key "sk-xxx"`
+
+---
+
+## 命令参考
+
+```text
+ybu run <path>                执行 pipeline.yaml
+ybu serve [--port PORT]       启动 REST API 服务
+ybu logs [-f] [--source all]  查看统一日志
+```
+
+> 更多子命令：`chrome`、`param`、`pipeline`、`daemon`、`tool`、`debug` — 见 `ybu <subcommand> --help`。
+
+---
+
+## 架构说明
+
+### 两层架构
+
+```
+┌─────────────────────────────────────────────────────┐
+│                   编排层                             │
+│  conversation_loop → LLM 决策 → tool_executor 执行   │
+│  chat 模式 / preset 模式 / agent swimlane            │
+└──────────────────┬──────────────────────────────────┘
+                   │
+┌──────────────────▼──────────────────────────────────┐
+│                 CDP 浏览器控制层                       │
+│  PlaywrightBridge → connect_over_cdp() → Chrome      │
+│  CDPHelpers / ToolContext / ToolCDPHelpers           │
+└─────────────────────────────────────────────────────┘
+```
+
+### 两种运行模式
+
+#### Chat 模式（交互式）
+
+```
+POST /api/chat { message: "打开百度搜咖啡" }
+  └→ service.process_chat_message()
+       └→ run_conversation_loop()
+            ├→ 加载 chat/system.md 系统提示
+            ├→ LLM 调用（携带 browser_* / goal_run / todo 工具）
+            ├→ LLM 返回工具调用 → tool_executor 执行
+            │     ├→ browser_goto  → PlaywrightBridge.goto()
+            │     ├→ browser_click → PlaywrightBridge.click()
+            │     └→ record_step   → 写入 pipeline.yaml
+            └→ LLM 返回文本 → 结束本轮
+```
+
+**特点：**
+- 用户看着浏览器画面发出指令，Agent 自主操作
+- 流式 LLM 响应（推理过程 + 文本增量）实时推送
+- WebSocket 事件流通知前端（turn_start / tool_start / text_chunk）
+- Agent 会自动记录操作步骤到 pipeline.yaml
+
+#### Preset 模式（预设回放）
+
+```
+POST /api/run { pipeline: "..." }
+  └→ run_pipeline() / run_preset_loop()
+       ├→ 加载已录制的 pipeline.yaml
+       ├→ LLM 看到完整步骤列表
+       ├→ 用 browser_* 工具逐条执行步骤
+       └→ Agent Swimlane — 遇到故障自动恢复
+```
+
+**特点：**
+- 可重复执行的自动化流程
+- Pipeline 三步设计：**goal**（目标描述）→ **ops**（浏览器操作列表）→ **check**（程序化验收）
+- ops 失败时自动 fallback 到 goal 让 Agent 动态决策
+- check 支持 `url_contains` / `element_exists` / `text_contains` / `element_visible` 验收
+
+---
+
+## 项目结构
+
+```
+yak-browser-use/
+├── __main__.py              # CLI 入口（run/serve/logs）
+├── pyproject.toml            # 项目配置 + 依赖
+│
+├── api/                      # FastAPI REST + WebSocket 接口
+│   ├── routes.py             # 路由注册
+│   └── service.py            # 业务逻辑
+│
+├── engine/                   # 核心执行引擎 ★
+│   ├── agent.py              # Agent 入口 + 流式 LLM call
+│   ├── runner.py             # Chat 模式 runner
+│   ├── runner_preset.py      # Preset 模式 orchestrator
+│   ├── executor.py           # 浏览器/工具/目标三层执行器
+│   ├── step_machine.py       # Pipeline DAG 遍历
+│   │
+│   ├── _harness/             # Conversation loop 基础设施 ★
+│   │   ├── conversation_loop.py   # 核心对话循环
+│   │   ├── tools.py               # 工具注册（browser_*/goal_run/todo/pipeline_*）
+│   │   ├── tool_executor.py       # 工具调用执行器
+│   │   ├── pipeline_tools.py      # Pipeline 管理工具
+│   │   ├── iteration_budget.py    # LLM 轮次预算控制
+│   │   ├── tool_guardrails.py     # 工具护栏
+│   │   └── turn_context.py        # 每轮次上下文管理
+│   │
+│   └── _lifecycle/           # Pipeline 生命周期
+│       ├── guardian.py       # 审核门控
+│       └── tool_runner.py    # 工具生命周期
+│
+├── cdp/                      # Chrome DevTools Protocol 层
+│   ├── playwright_bridge.py  # Playwright 统一驱动
+│   ├── helpers.py            # CDPHelpers 高级封装
+│   ├── daemon.py             # CDP Daemon 管理
+│   ├── discover.py           # Chrome 发现/连接
+│   └── launcher.py           # Chrome 启动
+│
+├── compiler/                 # Pipeline 编译
+│   ├── parser.py             # YAML 解析
+│   ├── graph.py              # DAG 构建
+│   └── resolver.py           # 依赖解析
+│
+├── tools/                    # 自定义工具脚本
+│   ├── file_read.py          # 文件读取工具
+│   ├── file_write.py         # 文件写入工具
+│   ├── format_convert.py     # 格式转换（CSV/JSON/Excel）
+│   ├── extract.py / data.py  # 数据处理工具
+│   ├── schemas.py            # 工具 schema 注册
+│   └── edit_pipeline.py      # Pipeline 编辑
+│
+├── prompts/                  # Prompt 模板（Markdown）
+│   ├── chat/system.md        # Chat 模式系统提示
+│   └── eval_agent/system.md  # Eval Agent 系统提示
+│
+├── params/                   # 持久化参数管理
+├── workspace/                # 工作区管理
+├── cli/                      # CLI 命令实现
+├── utils/                    # 工具函数
+│
+├── electron/                 # Electron 桌面前端
+│   └── src/
+│       └── renderer/         # React + Vite + Monaco Editor
+│
+├── docs/                     # 文档
+│   └── architecture-overview.md  # 架构详解
+│
+├── logo.png                  # 项目 Logo
+├── install.bat               # Windows 一键安装脚本
+├── run.bat                   # 快速启动脚本
+├── README.md                 # 英文 README
+└── README.zh-CN.md           # 中文 README（本文件）
+```
+
+---
+
+## 核心设计原则
+
+1. **去子 Agent** — 不再 spawn browser-use Agent 作为子进程。`goal_run` 是模式切换信号，主 LLM 用 `todo` + `browser_*` 自己分步执行，减少隔离开销。
+
+2. **重数据进 Scratchpad** — 浏览器返回的 HTML、元素列表、截图 base64 等大块数据存入内存缓存（scratchpad），LLM 看到的只是摘要，按需通过 `browser_source(cached=true)` 或 `browser_get_element_by_number(@e5)` 获取详情。
+
+3. **Pipeline 是副产品** — pipeline.yaml 是 Agent 聊天过程的录制产物，不是设计的起点。Agent 聊天产生有用流程后保存下来供后续回放。
+
+4. **Playwright 统一驱动** — 所有浏览器操作统一通过 Playwright `connect_over_cdp()`，获得 auto-wait / auto-scroll / auto-retry 能力。`CDPHelpers` 和 `ToolContext` 提供双层封装。
+
+5. **文件即契约** — pipeline.yaml 是静态契约，编译阶段严格校验（DAG 环检测、文件引用校验），运行时尽量减少意外。
+
+---
+
+## 开发
+
+```bash
+# 创建并激活虚拟环境
+cd backend
+uv venv
+source .venv/bin/activate   # Linux/macOS
+.venv\Scripts\activate      # Windows
+
+# 安装开发依赖
+uv sync --dev
+
+# 运行测试
+uv run pytest
+
+# 测试覆盖率
+uv run pytest --cov=.
+
+# 打开 Chrome 远程调试端口
+chrome.exe --remote-debugging-port=9222
+```
+
+### 常用开发命令
+
+| 命令 | 说明 |
+|------|------|
+| `uv run python __main__.py serve --port 8080` | 启动 API 服务 |
+| `uv run python __main__.py run path/to/pipeline.yaml` | 执行 Pipeline |
+| `uv run python __main__.py logs -f` | 实时查看日志 |
+| `cd electron && npm run electron:dev` | 启动前端 |
+
+---
+
+## 架构文档
+
+完整架构详解（数据流图、设计原则、执行路径）请见 [`docs/architecture-overview.md`](docs/architecture-overview.md)。
+
+---
+
+## 许可证
+
+MIT © 2026 Yak Browser-Use Contributors
+
+---
+
+<p align="center">
+  <img src="logo.png" alt="yak" width="64">
+  <br/>
+  <sub>Built with yak power · Chat · Browser · Automate</sub>
+</p>

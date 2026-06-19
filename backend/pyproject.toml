@@ -1,7 +1,7 @@
 [project]
 name = "yak-browser-use"
 version = "0.1.0"
-description = "A clean, learnable browser automation framework"
+description = "A clean, learnable browser automation framework — Chat mode + Preset replay via Playwright CDP"
 readme = "../README.md"
 requires-python = ">=3.12"
 dependencies = [

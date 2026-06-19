@@ -1,47 +1,330 @@
-# Yak Browser-Use
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="logo.png">
+    <img src="logo.png" alt="yak-browser-use logo" width="240">
+  </picture>
+</p>
 
-A clean, learnable browser automation framework based on browser-use, CDP, and browser-use Agent.
+<h1 align="center">Yak Browser-Use</h1>
+
+<p align="center">
+  <strong>CHAT · BROWSER · AUTOMATE</strong>
+</p>
+
+<p align="center">
+  <em>An AI Agent framework that chats with you while operating the browser</em>
+</p>
+
+<p align="center">
+  <img src="https://img.shields.io/badge/python-%E2%89%A53.12-blue?style=flat-square&logo=python" alt="Python ≥3.12">
+  <img src="https://img.shields.io/badge/license-MIT-green?style=flat-square" alt="MIT License">
+  <img src="https://img.shields.io/badge/status-alpha-orange?style=flat-square" alt="Alpha">
+  <img src="https://img.shields.io/badge/Playwright-ready-45ba4b?style=flat-square&logo=playwright" alt="Playwright">
+  <img src="https://img.shields.io/badge/Electron-desktop-47848F?style=flat-square&logo=electron" alt="Electron Desktop">
+  <a href="./README.zh-CN.md"><img src="https://img.shields.io/badge/README-中文-blue?style=flat-square" alt="中文"></a>
+</p>
+<p align="center">
+  <a href="./README.md">English</a> · <a href="./README.zh-CN.md">简体中文</a>
+</p>
+
+---
+
+## What is Ybu?
+
+**yak-browser-use** (aliased as **ybu**) is a browser automation AI Agent framework. Its core interaction model:
+
+> **You chat with the Agent → Agent controls the browser → You watch it happen in real-time**
+
+Two modes:
+- **Chat Mode** — natural language conversational control, Agent browses while chatting
+- **Preset Mode** — replay recorded pipelines, Agent executes pre-defined steps autonomously
+
+Built on [Playwright](https://playwright.dev/) `connect_over_cdp()` and the [browser-use](https://github.com/browser-use/browser-use) LLM toolchain.
+
+---
+
+## Features
+
+| | Capability | Description |
+|---|------------|-------------|
+| **🗣️ Chat + Browser Sync** | Type commands, Agent operates the browser, everything streams back in real-time |
+| **🔧 Rich Browser Toolkit** | goto / click / fill / snapshot / scroll / eval / hover / tab management… full daily automation coverage |
+| **📋 Pipeline Recording** | Agent automatically records operations into pipeline.yaml as you chat; save and replay later |
+| **🤖 Agent Swimlane** | When a pipeline step fails, the Agent autonomously recovers — no manual intervention needed |
+| **🛡️ Safety Guards** | PathGuard, domain whitelisting, circuit breaker, Guardian approval gate — multiple safety layers |
+| **🏓 Streaming LLM** | Real-time reasoning stream, text deltas, tool name push — all via WebSocket to the frontend |
+| **🖥️ Electron Desktop** | React + Vite + Monaco Editor, full desktop experience |
+| **🔌 REST + WebSocket API** | FastAPI backend with both REST endpoints and real-time event push |
+| **📂 Custom Tool Scripts** | Hot-load Python scripts from `tools/` directory at runtime |
+| **🔑 Flexible Providers** | DeepSeek / OpenAI / any OpenAI-compatible provider, flat JSON config |
+
+---
 
 ## Quick Start
 
+### Prerequisites
+
+| Dependency | Version | Install |
+|------------|---------|---------|
+| Python | ≥ 3.12 | [python.org](https://python.org) |
+| [uv](https://docs.astral.sh/uv/) | ≥ 0.4 | `powershell -c "irm https://astral.sh/uv/install.ps1 \| iex"` |
+| Node.js | ≥ 18 | [nodejs.org](https://nodejs.org) |
+| Chrome / Chromium | ≥ 120 | Your existing Chrome, or `uv run playwright install chromium` |
+
+### Install
+
 ```bash
-# Install dependencies
+# Windows one-click
 install.bat
 
-# Run CLI
-python __main__.py --help
-
-# Start Electron app
-cd electron && npm run electron:dev
+# Or manual three steps
+cd backend
+uv sync                              # Install Python deps
+uv run playwright install chromium   # Install Playwright Chromium
+cd ../electron
+npm install                          # Install Electron frontend deps
 ```
+
+### Start
+
+```bash
+# CLI mode
+cd backend
+uv run python __main__.py --help
+
+# Start REST API server
+uv run python __main__.py serve --port 8080
+
+# Start Electron desktop
+cd electron
+npm run electron:dev
+```
+
+### Configure Provider
+
+Create `userdata/provider.json`:
+
+```json
+{
+  "provider": "deepseek",
+  "model": "deepseek-chat",
+  "api_key": "sk-xxx...xxxx"
+}
+```
+
+Or via CLI: `ybu param set provider.api_key "sk-xxx"`
+
+---
 
 ## Commands
 
-| Command | Description |
-|---------|-------------|
-| `ybu run <path>` | Execute an agent.md pipeline |
-| `ybu serve` | Start the REST API server |
-| `ybu convert <path>` | Convert a document to agent.md format |
-| `ybu chrome <subcommand>` | Chrome/Chromium management |
-| `ybu param set/list/delete` | Persistent parameter management |
-| `ybu pipeline <subcommand>` | Pipeline lifecycle management |
-| `ybu daemon <subcommand>` | CDP daemon management |
-| `ybu tool <subcommand>` | Tool debugging utilities |
-| `ybu debug <subcommand>` | Debugging tools |
+```text
+ybu run <path>                 Execute a pipeline.yaml
+ybu serve [--port PORT]        Start the REST API server
+ybu logs [-f] [--source all]   View unified logs
+```
 
-## Architecture
+> More subcommands: `chrome`, `param`, `pipeline`, `daemon`, `tool`, `debug` — see `ybu <subcommand> --help`.
+
+---
+
+## How It Works
+
+### Two-Layer Architecture
+
+```
+┌─────────────────────────────────────────────────────┐
+│              Orchestration Layer                     │
+│  conversation_loop → LLM decides → tool_executor     │
+│  chat mode / preset mode / agent swimlane            │
+└──────────────────┬──────────────────────────────────┘
+                   │
+┌──────────────────▼──────────────────────────────────┐
+│              Browser Control Layer (CDP)              │
+│  PlaywrightBridge → connect_over_cdp() → Chrome      │
+│  CDPHelpers / ToolContext / ToolCDPHelpers           │
+└─────────────────────────────────────────────────────┘
+```
+
+### Two Execution Modes
+
+#### Chat Mode (Interactive)
+
+```
+POST /api/chat { message: "Open Baidu and search for coffee" }
+  └→ service.process_chat_message()
+       └→ run_conversation_loop()
+            ├→ Load chat/system.md system prompt
+            ├→ LLM call (with browser_* / goal_run / todo tools)
+            ├→ LLM returns tool calls → tool_executor runs them
+            │     ├→ browser_goto  → PlaywrightBridge.goto()
+            │     ├→ browser_click → PlaywrightBridge.click()
+            │     └→ record_step   → append to pipeline.yaml
+            └→ LLM returns text → end turn
+```
+
+**Key Points:**
+- User watches the browser and types commands; Agent operates autonomously
+- Streaming LLM response (reasoning + text) pushed in real-time
+- WebSocket event stream: turn_start / tool_start / text_chunk
+- Agent auto-records operation steps to pipeline.yaml
+
+#### Preset Mode (Pipeline Replay)
+
+```
+POST /api/run { pipeline: "..." }
+  └→ run_pipeline() / run_preset_loop()
+       ├→ Load previously recorded pipeline.yaml
+       ├→ LLM sees the full step list
+       ├→ Executes steps one by one with browser_* tools
+       └→ Agent Swimlane — auto-recover on failure
+```
+
+**Key Points:**
+- Repeatable automation workflow
+- Pipeline three-step design: **goal** → **ops** (browser ops) → **check** (programmatic verification)
+- `check` supports: `url_contains` / `element_exists` / `text_contains` / `element_visible`
+- Falls back from ops to goal on failure for dynamic Agent decision
+
+---
+
+## Project Structure
 
 ```
 yak-browser-use/
-├── cdp/          Chrome DevTools Protocol connection
-├── engine/       Step execution engine (runner, executor, agent)
-├── compiler/     agent.md compiler (parser, graph, generator)
-├── converter/    NL-to-agent.md converter
-├── params/       Persistent parameter store (JSON)
-├── tools/        Tool registration and data tools
-├── api/          FastAPI REST + WebSocket bridge
-├── cli/          Command-line interface
-├── workspace/    Pipeline workspace management
-├── electron/     Electron desktop frontend
-└── utils/        Shared utilities
+├── __main__.py              # CLI entry (run/serve/logs)
+├── pyproject.toml            # Project config + deps
+│
+├── api/                      # FastAPI REST + WebSocket
+│   ├── routes.py             # Route registration
+│   └── service.py            # Business logic
+│
+├── engine/                   # Core execution engine ★
+│   ├── agent.py              # Agent entry + streaming LLM call
+│   ├── runner.py             # Chat mode runner
+│   ├── runner_preset.py      # Preset mode orchestrator
+│   ├── executor.py           # Browser/tool/goal triple-layer executor
+│   ├── step_machine.py       # Pipeline DAG walker
+│   │
+│   ├── _harness/             # Conversation loop infrastructure ★
+│   │   ├── conversation_loop.py   # Core agent turn loop
+│   │   ├── tools.py               # Tool definitions (browser_*/goal_run/todo/pipeline_*)
+│   │   ├── tool_executor.py       # Sequential tool call dispatcher
+│   │   ├── pipeline_tools.py      # Pipeline CRUD tools
+│   │   ├── iteration_budget.py    # LLM turn budget control
+│   │   ├── tool_guardrails.py     # Tool call guardrails
+│   │   └── turn_context.py        # Per-turn context (retry counters, etc.)
+│   │
+│   └── _lifecycle/           # Pipeline lifecycle management
+│       ├── guardian.py       # Approval gate
+│       └── tool_runner.py    # Tool lifecycle
+│
+├── cdp/                      # Chrome DevTools Protocol layer
+│   ├── playwright_bridge.py  # Playwright unified driver
+│   ├── helpers.py            # CDPHelpers high-level API
+│   ├── daemon.py             # CDP Daemon management
+│   ├── discover.py           # Chrome discovery / connection
+│   └── launcher.py           # Chrome launch
+│
+├── compiler/                 # Pipeline compilation
+│   ├── parser.py             # YAML parser
+│   ├── graph.py              # DAG builder
+│   └── resolver.py           # Dependency resolver
+│
+├── tools/                    # Custom tool scripts
+│   ├── file_read.py          # File reading tool
+│   ├── file_write.py         # File writing tool
+│   ├── format_convert.py     # Format conversion (CSV/JSON/Excel)
+│   ├── extract.py / data.py  # Data processing tools
+│   ├── schemas.py            # Tool schema registry
+│   └── edit_pipeline.py      # Pipeline editing tools
+│
+├── prompts/                  # Prompt templates (Markdown)
+│   ├── chat/system.md        # Chat mode system prompt
+│   └── eval_agent/system.md  # Eval Agent system prompt
+│
+├── params/                   # Persistent parameter manager
+├── workspace/                # Pipeline workspace management
+├── cli/                      # CLI command implementations
+├── utils/                    # Shared utilities
+│
+├── electron/                 # Electron desktop frontend
+│   └── src/
+│       └── renderer/         # React + Vite + Monaco Editor
+│
+├── docs/                     # Documentation
+│   └── architecture-overview.md  # Full architecture deep-dive (Chinese)
+│
+├── logo.png                  # Project logo
+├── install.bat               # Windows one-click installer
+├── run.bat                   # Quick launch script
+├── README.md                 # This file (English)
+└── README.zh-CN.md           # Chinese translation
 ```
+
+---
+
+## Key Design Decisions
+
+1. **No Spawned Sub-Agents** — `goal_run` is a mode switch, not a sub-Agent spawn. The main LLM decomposes goals with `todo` + `browser_*` tools, eliminating isolation overhead.
+
+2. **Heavy Data Goes to Scratchpad** — Large payloads (HTML, element lists, screenshot base64) go to an in-memory scratchpad. The LLM sees summaries and fetches details on demand via `browser_source(cached=true)` or `browser_get_element_by_number(@e5)`.
+
+3. **Pipeline is a Byproduct** — pipeline.yaml is a recording artifact from chat sessions, not the design starting point. Useful flows get saved and replayed later.
+
+4. **Playwright Unified Driver** — All browser operations go through Playwright `connect_over_cdp()`, gaining auto-wait / auto-scroll / auto-retry. `CDPHelpers` and `ToolContext` provide two layers of wrapping.
+
+5. **File as Contract** — pipeline.yaml is a static contract, strictly validated at compile time (DAG cycle detection, file reference validation), minimizing surprises at runtime.
+
+---
+
+## Development
+
+```bash
+# Create and activate venv
+cd backend
+uv venv
+source .venv/bin/activate   # Linux/macOS
+.venv\Scripts\activate      # Windows
+
+# Install dev dependencies
+uv sync --dev
+
+# Run tests
+uv run pytest
+
+# Coverage
+uv run pytest --cov=.
+
+# Open Chrome remote debugging port
+chrome.exe --remote-debugging-port=9222
+```
+
+### Dev Commands
+
+| Command | Description |
+|---------|-------------|
+| `uv run python __main__.py serve --port 8080` | Start API server |
+| `uv run python __main__.py run path/to/pipeline.yaml` | Run a pipeline |
+| `uv run python __main__.py logs -f` | Tail logs live |
+| `cd electron && npm run electron:dev` | Start Electron frontend |
+
+---
+
+## Architecture Docs
+
+For a full architectural deep-dive (data flow diagrams, design principles, execution paths), see [`docs/architecture-overview.md`](docs/architecture-overview.md).
+
+---
+
+## License
+
+MIT © 2026 Yak Browser-Use Contributors
+
+---
+
+<p align="center">
+  <img src="logo.png" alt="yak" width="64">
+  <br/>
+  <sub>Built with yak power · Chat · Browser · Automate</sub>
+</p>
