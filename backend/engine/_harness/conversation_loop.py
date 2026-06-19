@@ -119,12 +119,14 @@ class Agent:
         if self._guardrail_config is not None:
             self._guardrail_state.config = self._guardrail_config  # type: ignore[assignment]
 
-        if not self._preset_mode:
-            try:
-                guidance_text = load_prompt("guidance/tool_strategy")
-                self._system_prompt = self._system_prompt + "\n\n" + guidance_text
-            except Exception:
-                pass
+        # Load tool_strategy for both chat and preset modes
+        # (preset previously used template-injection via preset/system.md;
+        #  now it uses build_system_prompt() so tool_strategy is appended here)
+        try:
+            guidance_text = load_prompt("guidance/tool_strategy")
+            self._system_prompt = self._system_prompt + "\n\n" + guidance_text
+        except Exception:
+            pass
 
         self._start_time = time.time()
 
@@ -301,21 +303,19 @@ async def run_preset_loop(
     task_descriptor = adapter.build_descriptor()
 
     try:
-        tool_strategy = load_prompt("guidance/tool_strategy")
-    except Exception:
-        tool_strategy = ""
-
-    try:
         error_recovery = load_prompt("guidance/error_recovery")
     except Exception:
         error_recovery = ""
 
-    system_prompt = load_prompt(
-        "preset/system",
-        pipeline=task_descriptor.format(),
-        tool_strategy=tool_strategy,
-        error_recovery=error_recovery,
+    from prompts._loader import build_system_prompt
+
+    system_prompt = build_system_prompt()
+    system_prompt += (
+        f"\n\n## Pipeline\n\n"
+        f"{task_descriptor.format()}\n\n"
     )
+    if error_recovery:
+        system_prompt += error_recovery + "\n\n"
 
     if messages is None:
         messages = []

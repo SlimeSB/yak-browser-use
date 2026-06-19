@@ -31,6 +31,8 @@ tags: [system, goal, execution, workflow]
 - 中间试探性操作（如"看看这个元素是什么"）**不调** `record_step`
 - 只有确认有效的操作才记录
 - 用 `step_1`、`step_2` 等命名步骤
+- **反幻觉原则**：`record_step` 的 `op_args` 必须来自你实际执行的 `browser_*` 调用参数，不得凭空编造 selector、URL 或任何操作参数
+- 不要在执行前预先填充 pipeline 的 browser_ops —— 先操作、验证、再记录
 
 ### 失败恢复
 
