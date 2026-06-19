@@ -687,10 +687,45 @@ def _build_registry_impl() -> None:
         },
     }, _eval_agent_handler)
 
+    # ── captcha ───────────────────────────────────────────────────────
+
+    registry.register("captcha", {
+        "description": "识别验证码图片。支持文字验证码（OCR）和滑块缺口检测。",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "type": {
+                    "type": "string",
+                    "enum": ["ocr", "slide"],
+                    "description": "验证码类型：ocr（识别文字）、slide（检测滑块缺口位置）"
+                },
+                "image_bytes": {
+                    "type": "string",
+                    "description": "验证码图片的 base64 编码数据（纯 base64 字符串，不带 data:image/... 前缀）"
+                },
+                "image_path": {
+                    "type": "string",
+                    "description": "验证码图片的文件路径（preset 模式下替代 image_bytes）"
+                },
+                "background_bytes": {
+                    "type": "string",
+                    "description": "仅 slide 模式需要：滑块背景图的 base64 编码数据"
+                }
+            },
+            "required": ["type"]
+        },
+    }, _captcha_handler)
+
     logger.info("build_registry: registered %d tools", len(registry._tools))
 
 
 # ── Handler functions ──────────────────────────────────────────────────────
+
+
+async def _captcha_handler(args: dict, ctx: ToolContext) -> dict:
+    from tools.captcha import captcha
+    kwargs = {k: args[k] for k in ("type", "image_bytes", "image_path", "background_bytes") if k in args}
+    return await captcha(**kwargs)
 
 
 async def _goal_run_handler(args: dict, ctx: ToolContext) -> dict:

@@ -23,7 +23,7 @@ async def record_step(
     pipeline_name: str,
     step_name: str,
     description: str,
-    op_type: str,
+    op_type: str | None = None,
     op_args: dict | None = None,
     explanation: str = "",
     **kwargs,
@@ -35,6 +35,7 @@ async def record_step(
         step_name: Unique step name (e.g. 'step_1').
         description: Human-readable description.
         op_type: Operation type (goto, click, fill, scroll, snapshot, source, eval, goal_run).
+            When omitted, creates an outline placeholder step with only name + description.
         op_args: Arguments passed to the operation.
         explanation: Why this step is needed.
 
@@ -76,11 +77,12 @@ async def record_step(
         "description": description,
     }
 
-    if op_type == "goal_run":
-        step_entry["goal_description"] = op_args.get("description", description) if op_args else description
-    else:
-        browser_op: dict = {op_type: op_args.get("value", "") if op_args and "value" in op_args else (op_args or {})}
-        step_entry["browser_ops"] = [browser_op]
+    if op_type is not None:
+        if op_type == "goal_run":
+            step_entry["goal_description"] = op_args.get("description", description) if op_args else description
+        else:
+            browser_op: dict = {op_type: op_args.get("value", "") if op_args and "value" in op_args else (op_args or {})}
+            step_entry["browser_ops"] = [browser_op]
 
     # Append or update step
     existing_idx = next((i for i, s in enumerate(steps) if s.get("name") == step_name), None)
@@ -88,7 +90,7 @@ async def record_step(
         steps[existing_idx] = step_entry
     else:
         steps.append(step_entry)
-        logger.debug("Recording step %s: %s", step_name, op_type)
+        logger.debug("Recording step %s%s", step_name, f": {op_type}" if op_type else "")
 
     # Save checkpoint before writing
     original = preset_path.read_text(encoding="utf-8") if preset_path.exists() else ""

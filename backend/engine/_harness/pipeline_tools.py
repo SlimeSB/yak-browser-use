@@ -221,6 +221,7 @@ async def pipeline_add_step(
     goal_description: str | None = None,
     depends_on: list | None = None,
     after: str | None = None,
+    heading: bool = False,
     explanation: str = "",
     **kwargs,
 ) -> str:

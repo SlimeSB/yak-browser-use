@@ -59,7 +59,7 @@ def test_get_all_tools_with_goal():
     from engine._harness.tools import get_all_tools
 
     tools = get_all_tools(include_goal_run=True)
-    assert len(tools) == 41
+    assert len(tools) == 42
     names = [t["function"]["name"] for t in tools]
     assert "browser_goto" in names
     assert "goal_run" in names
@@ -79,7 +79,7 @@ def test_get_all_tools_without_goal():
     from engine._harness.tools import get_all_tools
 
     tools = get_all_tools(include_goal_run=False)
-    assert len(tools) == 40
+    assert len(tools) == 41
     names = [t["function"]["name"] for t in tools]
     assert "goal_run" not in names
     assert "edit_pipeline" not in names
