@@ -38,14 +38,23 @@ def build_graph(steps: list[StepDef]) -> dict[str, Any]:
     start_node: str | None = None
 
     name_to_key: dict[str, str] = {}
+    all_keys: set[str] = set()
     for step in steps:
         name_to_key[step.name] = step.key
+        all_keys.add(step.key)
 
     for i, step in enumerate(steps):
         deps: list[str] = []
         if step.depends_on:
             for dep_name in step.depends_on:
-                dep_key = name_to_key.get(dep_name, dep_name)
+                if dep_name not in name_to_key and dep_name not in all_keys:
+                    raise ValueError(
+                        f"Step '{step.name}' depends on unknown step '{dep_name}'"
+                    )
+                dep_key = name_to_key.get(dep_name)
+                if dep_key is None:
+                    # dep_name may be a step key, not a name
+                    dep_key = dep_name
                 deps.append(dep_key)
                 edges.append((dep_key, step.key))
         elif i > 0:

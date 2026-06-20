@@ -51,7 +51,7 @@ def _get_slide():
 
 
 def _strip_data_prefix(s: str) -> str:
-    m = re.match(r"^data:image/\w+;base64,", s)
+    m = re.match(r"^data:image/[a-z0-9+.-]+;base64,", s)
     if m:
         return s[m.end():]
     return s
