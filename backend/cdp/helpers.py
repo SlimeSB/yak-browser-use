@@ -102,7 +102,7 @@ class CDPHelpers:
         except Exception:
             logger.info("interactive snapshot degraded to full")
             full = await self.capture_snapshot()
-            return {"elements": [], "mode": "interactive", "degraded": True, **full}
+            return {"elements": [], "mode": "interactive", **full}
 
     async def capture_snapshot_simplified(self) -> dict:
         try:
@@ -150,7 +150,7 @@ class CDPHelpers:
         except Exception:
             logger.info("simplified snapshot degraded to full")
             full = await self.capture_snapshot()
-            return {"summary": "", "lists": [], "tables": [], "mode": "simplified", "degraded": True, **full}
+            return {"summary": "", "lists": [], "tables": [], "mode": "simplified", **full}
 
         lines = []
         if data.get("title"):

@@ -101,7 +101,7 @@ async def launch_user_chrome(profile_name: str | None = None) -> str | None:
             _user_chrome_process.terminate()
             await _user_chrome_process.wait()
         except Exception:
-            pass
+            logger.debug("launch_user_chrome: failed to terminate previous process", exc_info=True)
 
     port = 9222
 
@@ -167,7 +167,7 @@ async def launch_user_chrome(profile_name: str | None = None) -> str | None:
         try:
             _user_chrome_process.terminate()
         except Exception:
-            pass
+            logger.debug("launch_user_chrome: failed to terminate on timeout", exc_info=True)
         if _user_chrome_process.pid:
             _launched_pids.discard(_user_chrome_process.pid)
         _user_chrome_process = None
@@ -214,19 +214,19 @@ async def launch_isolated_chrome(
             _user_chrome_process.terminate()
             await _user_chrome_process.wait()
         except Exception:
-            pass
+            logger.debug("launch_isolated: failed to terminate previous chrome", exc_info=True)
         _user_chrome_process = None
     if _playwright_browser is not None:
         try:
             await _playwright_browser.close()
         except Exception:
-            pass
+            logger.debug("launch_isolated: failed to close playwright browser", exc_info=True)
         _playwright_browser = None
     if _playwright_instance is not None:
         try:
             await _playwright_instance.stop()
         except Exception:
-            pass
+            logger.debug("launch_isolated: failed to stop playwright instance", exc_info=True)
         _playwright_instance = None
 
     if exe and "msedge" in exe.lower():
@@ -438,7 +438,7 @@ async def restart_user_chrome() -> str:
         try:
             _user_chrome_process.terminate()
         except Exception:
-            pass
+            logger.debug("restart_user_chrome: failed to terminate on timeout", exc_info=True)
         if _user_chrome_process.pid:
             _launched_pids.discard(_user_chrome_process.pid)
         _user_chrome_process = None

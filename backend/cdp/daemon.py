@@ -158,7 +158,7 @@ class CDPDaemon:
                     else:
                         await self._event_queue.put(data)
                 except json.JSONDecodeError:
-                    pass
+                    logger.debug("CDP listener: failed to decode message", exc_info=True)
         except websockets.exceptions.ConnectionClosed:
             self._running = False
             # Clean up pending futures on connection loss so callers don't hang 30s
