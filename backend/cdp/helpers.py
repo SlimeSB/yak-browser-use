@@ -184,6 +184,17 @@ class CDPHelpers:
         }
 
     async def add_dom_highlights(self, elements: list[dict] | None = None) -> dict:
+        """Push element data to the browser's bootstrap highlight renderer.
+
+        ⚠️🚫 不要在下面注 JS。再注死妈。
+        再写一套内联 JS 就会跟 playwright_bridge.py 的 _HIGHLIGHT_BOOTSTRAP
+        抢容器、抢事件、抢 MutationObserver——两个系统互拆互建，滚动卡死。
+        之前的 83 行内联 JS 就是这么死的。删了就好了。
+
+        正确做法：设 window.__ybu_last_elements + 调 _ybu_render()。
+        滚动有 RAF 节流 + transform 合成层定位，MO 只轻量重绘不拆容器。
+        所有高亮逻辑只在这一条路径里。
+        """
         highlight_elements = elements or []
 
         if elements:
@@ -205,88 +216,8 @@ class CDPHelpers:
 
         elements_json = _json.dumps(highlight_elements)
         js_code = (
-            "(function(){"
-            "function _ybu_run(){"
-            "if(!document.body)return;"
-            "var oldC=document.getElementById('ybu-highlights');"
-            "if(oldC){"
-            "if(oldC._ybu_scrollFn)window.removeEventListener('scroll',oldC._ybu_scrollFn);"
-            "if(oldC._ybu_resizeFn)window.removeEventListener('resize',oldC._ybu_resizeFn);"
-            "if(oldC._ybu_mo)oldC._ybu_mo.disconnect();"
-            "oldC.remove();"
-            "}"
-            "var outlined=document.querySelectorAll('[data-ybu-outlined]');"
-            "for(var i=0;i<outlined.length;i++){outlined[i].style.outline='';outlined[i].removeAttribute('data-ybu-outlined');}"
-            "var container=document.createElement('div');"
-            "container.id='ybu-highlights';"
-            "container.style.cssText='position:fixed;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:2147483646;';"
-            "document.body.appendChild(container);"
-            "var elements=" + elements_json + ";"
-            "var selIdx={};"
-            "for(var i=0;i<elements.length;i++){"
-            "var el=elements[i];"
-            "if(el.selector){"
-            "try{"
-            "var si=selIdx[el.selector]||0;selIdx[el.selector]=si+1;"
-            "var all=document.querySelectorAll(el.selector);"
-            "if(all.length>si){"
-            "var target=all[si];"
-            "target.style.outline='2px dashed #3b82f6';target.style.outlineOffset='0px';"
-            "target.setAttribute('data-ybu-outlined',el.ref);"
-            "var rect=target.getBoundingClientRect();"
-            "var badgeDiv=document.createElement('div');"
-            "badgeDiv.setAttribute('data-ybu-badge',el.ref);"
-            "badgeDiv.style.cssText='position:fixed;left:'+rect.left+'px;top:'+Math.max(0,rect.top-14)+'px;pointer-events:none;';"
-            "var badge=document.createElement('span');"
-            "badge.textContent=el.ref;"
-            "badge.style.cssText='background:#3b82f6;color:#fff;font-size:10px;font-family:Arial,sans-serif;padding:1px 4px;border-radius:2px;line-height:1.2;white-space:nowrap;';"
-            "badgeDiv.appendChild(badge);"
-            "container.appendChild(badgeDiv);"
-            "continue;"
-            "}"
-            "}catch(e){}"
-            "}"
-            "var div=document.createElement('div');"
-            "div.setAttribute('data-ybu-highlight',el.ref);"
-            "div.style.cssText='position:absolute;left:'+el.x+'px;top:'+el.y+'px;width:'+el.width+'px;height:'+el.height+'px;border:2px dashed #3b82f6;border-radius:2px;pointer-events:none;';"
-            "var fb=document.createElement('span');"
-            "fb.textContent=el.ref;"
-            "fb.style.cssText='position:absolute;top:-12px;left:-2px;background:#3b82f6;color:#fff;font-size:10px;font-family:Arial,sans-serif;padding:1px 4px;border-radius:2px;line-height:1.2;white-space:nowrap;pointer-events:none;';"
-            "div.appendChild(fb);"
-            "container.appendChild(div);"
-            "}"
-            "function _ybu_updateBadges(){"
-            "var o=document.querySelectorAll('[data-ybu-outlined]');"
-            "for(var j=0;j<o.length;j++){"
-            "var t=o[j];"
-            "var ref=t.getAttribute('data-ybu-outlined');"
-            "var bd=container.querySelector('[data-ybu-badge=\"'+ref.replace(/\"/g,'\\\\\"')+'\"]');"
-            "if(bd){"
-            "var r=t.getBoundingClientRect();"
-            "bd.style.left=r.left+'px';"
-            "bd.style.top=Math.max(0,r.top-14)+'px';"
-            "}"
-            "}"
-            "}"
-            "window.addEventListener('scroll',_ybu_updateBadges,{passive:true});"
-            "window.addEventListener('resize',_ybu_updateBadges,{passive:true});"
-            "container._ybu_scrollFn=_ybu_updateBadges;"
-            "container._ybu_resizeFn=_ybu_updateBadges;"
-            "var _ybu_moTimer=null;"
-            "if(window.MutationObserver){"
-            "container._ybu_mo=new MutationObserver(function(){"
-            "if(_ybu_moTimer)clearTimeout(_ybu_moTimer);"
-            "_ybu_moTimer=setTimeout(_ybu_run,300);"
-            "});"
-            "container._ybu_mo.observe(document.body,{childList:true,subtree:true,attributes:true,attributeFilter:['style','class','hidden','aria-hidden']});"
-            "}"
-            "}"
-            "if(document.readyState==='loading'){"
-            "document.addEventListener('DOMContentLoaded',_ybu_run);"
-            "}else{"
-            "_ybu_run();"
-            "}"
-            "})()"
+            f"window.__ybu_last_elements = {elements_json};"
+            "window.__ybu_render && window.__ybu_render();"
         )
         try:
             await self.js(js_code)
@@ -295,20 +226,7 @@ class CDPHelpers:
         return {"ok": True, "count": len(highlight_elements), "element_map": dict(self._ref_map)}
 
     async def remove_dom_highlights(self) -> None:
-        js = (
-            "(function(){"
-            "var o=document.querySelectorAll('[data-ybu-outlined]');"
-            "for(var i=0;i<o.length;i++){o[i].style.outline='';o[i].removeAttribute('data-ybu-outlined');}"
-            "var c=document.getElementById('ybu-highlights');"
-            "if(c){"
-            "if(c._ybu_scrollFn)window.removeEventListener('scroll',c._ybu_scrollFn);"
-            "if(c._ybu_resizeFn)window.removeEventListener('resize',c._ybu_resizeFn);"
-            "if(c._ybu_mo)c._ybu_mo.disconnect();"
-            "c.remove();"
-            "}"
-            "})()"
-        )
-        await self.js(js)
+        await self.js("window.__ybu_last_elements = []; window.__ybu_render && window.__ybu_render();")
 
     def get_element_by_index(self, ref: str) -> dict:
         return self._bridge.get_element_by_index(ref)

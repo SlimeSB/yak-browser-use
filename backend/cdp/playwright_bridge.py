@@ -100,6 +100,17 @@ def _build_selector_from_node(tag: str, attrs: dict[str, str]) -> str:
 
 # ---------------------------------------------------------------------------
 # highlight JS — injected into every new page so @eN badges are always visible
+#
+# 🚫 再写一套高亮系统死妈。
+# 所有高亮数据走 window.__ybu_last_elements，由 _ybu_render() 渲染。
+# helpers.py::add_dom_highlights 只推数据，不注 JS，不建容器，不绑事件。
+#
+# 滚动：RAF 节流 _ybu_onScroll → 先批量读 getBoundingClientRect
+# 再批量写 transform。所有定位用 translate3d() + will-change，
+# 保持在合成线程，不触发布局。
+#
+# MutationObserver：300ms 防抖，先 disconnect 再 render 再 observe，
+# 避免自触发循环。调 _ybu_render()（轻量重绘），不调 _ybu_run()（拆容器重建）。
 # ---------------------------------------------------------------------------
 
 _HIGHLIGHT_BOOTSTRAP = """
@@ -126,69 +137,130 @@ _HIGHLIGHT_BOOTSTRAP = """
         container.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:2147483646;';
         document.body.appendChild(container);
 
-        var elements = window.__ybu_last_elements || [];
-        var selIdx = {};
-        for (var i = 0; i < elements.length; i++) {
-            var el = elements[i];
-            if (el.selector) {
-                try {
-                    var si = selIdx[el.selector] || 0;
-                    selIdx[el.selector] = si + 1;
-                    var all = document.querySelectorAll(el.selector);
-                    if (all.length > si) {
-                        var target = all[si];
-                        target.style.outline = '2px dashed #3b82f6';
-                        target.style.outlineOffset = '0px';
-                        target.setAttribute('data-ybu-outlined', el.ref);
-                        var rect = target.getBoundingClientRect();
-                        var badgeDiv = document.createElement('div');
-                        badgeDiv.setAttribute('data-ybu-badge', el.ref);
-                        badgeDiv.style.cssText = 'position:fixed;left:' + rect.left + 'px;top:' + Math.max(0, rect.top - 14) + 'px;pointer-events:none;';
-                        var badge = document.createElement('span');
-                        badge.textContent = el.ref;
-                        badge.style.cssText = 'background:#3b82f6;color:#fff;font-size:10px;font-family:Arial,sans-serif;padding:1px 4px;border-radius:2px;line-height:1.2;white-space:nowrap;';
-                        badgeDiv.appendChild(badge);
-                        container.appendChild(badgeDiv);
-                        continue;
-                    }
-                } catch (e) {}
+        var scrollRAF = null;
+
+        function _ybu_render() {
+            if (!document.body) return;
+            var els = window.__ybu_last_elements || [];
+            // Clean old outlines
+            var oldO = document.querySelectorAll('[data-ybu-outlined]');
+            for (var i = 0; i < oldO.length; i++) {
+                oldO[i].style.outline = '';
+                oldO[i].removeAttribute('data-ybu-outlined');
             }
-            var div = document.createElement('div');
-            div.setAttribute('data-ybu-highlight', el.ref);
-            div.style.cssText = 'position:absolute;left:' + el.x + 'px;top:' + el.y + 'px;width:' + el.width + 'px;height:' + el.height + 'px;border:2px dashed #3b82f6;border-radius:2px;pointer-events:none;';
-            var fb = document.createElement('span');
-            fb.textContent = el.ref;
-            fb.style.cssText = 'position:absolute;top:-12px;left:-2px;background:#3b82f6;color:#fff;font-size:10px;font-family:Arial,sans-serif;padding:1px 4px;border-radius:2px;line-height:1.2;white-space:nowrap;pointer-events:none;';
-            div.appendChild(fb);
-            container.appendChild(div);
+            container.innerHTML = '';
+            var selIdx = {};
+            for (var i = 0; i < els.length; i++) {
+                var el = els[i];
+                if (el.selector) {
+                    try {
+                        var si = selIdx[el.selector] || 0;
+                        selIdx[el.selector] = si + 1;
+                        var all = document.querySelectorAll(el.selector);
+                        if (all.length > si) {
+                            var target = all[si];
+                            target.style.outline = '2px dashed #3b82f6';
+                            target.style.outlineOffset = '0px';
+                            target.setAttribute('data-ybu-outlined', el.ref);
+                            var rect = target.getBoundingClientRect();
+                            var badgeDiv = document.createElement('div');
+                            badgeDiv.className = 'ybu-badge-sel';
+                            badgeDiv.setAttribute('data-ybu-badge', el.ref);
+                            badgeDiv.style.cssText = 'position:fixed;pointer-events:none;will-change:transform;';
+                            badgeDiv.style.transform = 'translate3d(' + rect.left + 'px,' + Math.max(0, rect.top - 14) + 'px,0)';
+                            var badge = document.createElement('span');
+                            badge.textContent = el.ref;
+                            badge.style.cssText = 'background:#3b82f6;color:#fff;font-size:10px;font-family:Arial,sans-serif;padding:1px 4px;border-radius:2px;line-height:1.2;white-space:nowrap;';
+                            badgeDiv.appendChild(badge);
+                            container.appendChild(badgeDiv);
+                            continue;
+                        }
+                    } catch (e) {}
+                }
+                // Fallback: box + badge with stored original coords
+                var sx = window.pageXOffset || document.documentElement.scrollLeft || 0;
+                var sy = window.pageYOffset || document.documentElement.scrollTop || 0;
+                var box = document.createElement('div');
+                box.className = 'ybu-fb-box';
+                box.setAttribute('data-ybu-fb', el.ref);
+                box.setAttribute('data-ybu-ox', Math.round(el.x));
+                box.setAttribute('data-ybu-oy', Math.round(el.y));
+                box.style.cssText = 'position:fixed;width:' + el.width + 'px;height:' + el.height + 'px;border:2px dashed #3b82f6;border-radius:2px;pointer-events:none;will-change:transform;';
+                box.style.transform = 'translate3d(' + (el.x - sx) + 'px,' + (el.y - sy) + 'px,0)';
+                var fb = document.createElement('span');
+                fb.textContent = el.ref;
+                fb.style.cssText = 'position:absolute;top:-12px;left:-2px;background:#3b82f6;color:#fff;font-size:10px;font-family:Arial,sans-serif;padding:1px 4px;border-radius:2px;line-height:1.2;white-space:nowrap;pointer-events:none;';
+                box.appendChild(fb);
+                container.appendChild(box);
+            }
         }
 
-        function _ybu_updateBadges() {
-            var o = document.querySelectorAll('[data-ybu-outlined]');
-            for (var j = 0; j < o.length; j++) {
-                var t = o[j];
-                var ref = t.getAttribute('data-ybu-outlined');
-                var bd = container.querySelector('[data-ybu-badge="' + ref.replace(/"/g, '\\"') + '"]');
-                if (bd) {
-                    var r = t.getBoundingClientRect();
-                    bd.style.left = r.left + 'px';
-                    bd.style.top = Math.max(0, r.top - 14) + 'px';
-                }
+        function _ybu_onScroll() {
+            if (!document.hidden) {
+                // Active tab: RAF-coalesced, one layout pass per frame
+                if (scrollRAF) return;
+                scrollRAF = requestAnimationFrame(function() {
+                    scrollRAF = null;
+                    _ybu_update_positions();
+                });
+            } else {
+                // Browser throttles RAF to ~1fps on hidden tabs.
+                // Update immediately so badges don't freeze during scroll.
+                _ybu_update_positions();
             }
         }
-        window.__ybu_run = _ybu_run;
-        window.addEventListener('scroll', _ybu_updateBadges, {passive: true});
-        window.addEventListener('resize', _ybu_updateBadges, {passive: true});
-        container._ybu_scrollFn = _ybu_updateBadges;
-        container._ybu_resizeFn = _ybu_updateBadges;
+
+        function _ybu_update_positions() {
+            var sx = window.pageXOffset || document.documentElement.scrollLeft || 0;
+            var sy = window.pageYOffset || document.documentElement.scrollTop || 0;
+            // Batch READ — collect all layout rects
+            var outlined = document.querySelectorAll('[data-ybu-outlined]');
+            var rects = [];
+            for (var i = 0; i < outlined.length; i++) {
+                rects.push(outlined[i].getBoundingClientRect());
+            }
+            // Batch WRITE — transforms are composited, no layout
+            for (var i = 0; i < outlined.length; i++) {
+                var ref = outlined[i].getAttribute('data-ybu-outlined');
+                var bd = container.querySelector('[data-ybu-badge="' + ref.replace(/"/g, '\\"') + '"]');
+                if (bd) {
+                    bd.style.transform = 'translate3d(' + rects[i].left + 'px,' + Math.max(0, rects[i].top - 14) + 'px,0)';
+                }
+            }
+            // Fallback boxes: getAttribute is data-read (no layout)
+            var fbBoxes = container.querySelectorAll('[data-ybu-fb]');
+            for (var i = 0; i < fbBoxes.length; i++) {
+                var box = fbBoxes[i];
+                var ox = parseFloat(box.getAttribute('data-ybu-ox')) || 0;
+                var oy = parseFloat(box.getAttribute('data-ybu-oy')) || 0;
+                box.style.transform = 'translate3d(' + (ox - sx) + 'px,' + (oy - sy) + 'px,0)';
+            }
+        }
+
+        window.__ybu_render = _ybu_render;
+        window.__ybu_onScroll = _ybu_onScroll;
+        window.__ybu_run = _ybu_render;  // backward compat
+        window.addEventListener('scroll', _ybu_onScroll, {passive: true});
+        window.addEventListener('resize', _ybu_onScroll, {passive: true});
+        container._ybu_scrollFn = _ybu_onScroll;
+        container._ybu_resizeFn = _ybu_onScroll;
+
+        // MutationObserver: debounced 300ms, disconnect before render to avoid loop
         var _ybu_moTimer = null;
         if (window.MutationObserver) {
-            container._ybu_mo = new MutationObserver(function() {
+            var mo = new MutationObserver(function() {
                 if (_ybu_moTimer) clearTimeout(_ybu_moTimer);
-                _ybu_moTimer = setTimeout(_ybu_run, 300);
+                _ybu_moTimer = setTimeout(function() {
+                    mo.disconnect();
+                    _ybu_render();
+                    mo.observe(document.body, {childList: true, subtree: true, attributes: true, attributeFilter: ['style', 'class', 'hidden', 'aria-hidden']});
+                }, 300);
             });
-            container._ybu_mo.observe(document.body, {childList: true, subtree: true, attributes: true, attributeFilter: ['style', 'class', 'hidden', 'aria-hidden']});
+            mo.observe(document.body, {childList: true, subtree: true, attributes: true, attributeFilter: ['style', 'class', 'hidden', 'aria-hidden']});
+            container._ybu_mo = mo;
         }
+
+        _ybu_render();
     }
 
     if (document.readyState === 'loading') {
@@ -282,6 +354,8 @@ class PlaywrightBridge:
         self._last_highlight_elements: list[dict] = []
         self._highlight_guard_task: asyncio.Task | None = None
         self._stop_event = asyncio.Event()
+        # Per-page element cache, so each tab shows its own highlights
+        self._per_page_elements: dict[int, list[dict]] = {}
 
     # ------------------------------------------------------------------
     # Lifecycle
@@ -390,12 +464,20 @@ class PlaywrightBridge:
 
     async def _on_page_closed(self, page: Page) -> None:
         """当页面被关闭时自动切换到其他可用页面。"""
+        # 清理 per-page cache
+        self._per_page_elements.pop(id(page), None)
         if self._page is not page:
             return
         logger.info("current page closed, switching to another tab")
         if self._context and self._context.pages:
             self._page = self._context.pages[0]
+            # 先清空旧元素数据，不让淘宝的几百个 badge 污染新标签页
+            self._last_highlight_elements = []
             await self.ensure_highlights()
+            try:
+                await self.simplify_dom()
+            except Exception:
+                logger.debug("_on_page_closed: auto-scan failed", exc_info=True)
         else:
             self._page = None
 
@@ -416,21 +498,28 @@ class PlaywrightBridge:
                 await pg.evaluate(
                     f"window.__ybu_last_elements = {_json.dumps(self._last_highlight_elements)};"
                 )
+            else:
+                # 非活跃页使用各自的缓存数据，避免跨页污染
+                cached = self._per_page_elements.get(id(pg), [])
+                await pg.evaluate(
+                    f"window.__ybu_last_elements = {_json.dumps(cached)};"
+                )
             await pg.evaluate(_HIGHLIGHT_BOOTSTRAP)
-            if is_active:
-                await pg.evaluate("window.__ybu_run && window.__ybu_run();")
+            await pg.evaluate("window.__ybu_run && window.__ybu_run();")
         except Exception:
             logger.warning("ensure_highlights failed for %s", pg.url[:60] if pg.url else "(no url)", exc_info=True)
 
     async def _on_page_load(self, page: Page) -> None:
         """Page load / reload 后自动重注高亮 + 扫描新元素。"""
         await self.ensure_highlights(page)
-        # 页面的 load 事件说明内容变了，自动扫描刷新高亮
         if page is self._page:
             try:
                 await self.simplify_dom()
             except Exception:
                 logger.debug("_on_page_load: auto-scan failed", exc_info=True)
+        else:
+            # 非活跃页加载后也扫描并缓存，让切到时就有高亮
+            await self._scan_and_cache_page(page)
 
     async def _on_frame_navigated(self, frame, page: Page | None = None) -> None:
         """SPA pushState / replaceState — re-inject highlights + auto-scan."""
@@ -443,6 +532,98 @@ class PlaywrightBridge:
                 await self.simplify_dom()
             except Exception:
                 logger.debug("_on_frame_navigated: auto-scan failed", exc_info=True)
+        else:
+            await self._scan_and_cache_page(pg)
+
+    async def _scan_and_cache_page(self, page: Page) -> None:
+        """扫描非活跃页面的 DOM，缓存到 per-page cache，并渲染高亮。"""
+        try:
+            cdp = await self._context.new_cdp_session(page)
+            try:
+                doc = await cdp.send("DOM.getDocument", {"depth": -1, "pierce": True})
+            finally:
+                await cdp.detach()
+        except Exception:
+            logger.debug("_scan_and_cache_page: CDP session failed", exc_info=True)
+            return
+
+        elements: list[dict] = []
+
+        def walk(node: dict) -> None:
+            if node.get("nodeType") != 1:
+                for child in node.get("children", []):
+                    walk(child)
+                return
+            attrs_list = node.get("attributes", [])
+            attrs: dict[str, str] = {}
+            for i in range(0, len(attrs_list), 2):
+                if i + 1 < len(attrs_list):
+                    attrs[attrs_list[i]] = attrs_list[i + 1]
+            tag = node["nodeName"].lower()
+            bid = node["backendNodeId"]
+            if not _is_interactive(tag, attrs):
+                for child in node.get("children", []):
+                    walk(child)
+                return
+            selector = _build_selector_from_node(tag, attrs)
+            ref = f"@e_{bid}"
+            elem_type = attrs.get("type", "text") if tag == "input" else ""
+            elements.append({
+                "ref": ref, "selector": selector, "tag": tag,
+                "type": elem_type, "text": "", "value": attrs.get("value", ""),
+                "role": attrs.get("role", ""),
+                "tentative": _is_tentative(tag, attrs),
+                "x": 0, "y": 0, "width": 0, "height": 0,
+            })
+            for child in node.get("children", []):
+                walk(child)
+
+        walk(doc.get("root", {}))
+        logger.debug("_scan_and_cache_page: found %d interactive elements", len(elements))
+
+        if elements:
+            sels = [e["selector"] for e in elements]
+            js = (
+                "(function(){"
+                "var sels=" + _json.dumps(sels) + ";"
+                "var selIdx={};"
+                "var out=[];"
+                "for(var i=0;i<sels.length;i++){"
+                "var si=selIdx[sels[i]]||0;selIdx[sels[i]]=si+1;"
+                "try{"
+                "var all=document.querySelectorAll(sels[i]);"
+                "if(all.length>si){"
+                "var el=all[si];"
+                "var r=el.getBoundingClientRect();"
+                "var t=el.textContent||el.innerText||'';"
+                "var cs=getComputedStyle(el);"
+                "out.push({x:r.left,y:r.top,w:r.width,h:r.height,t:t.trim().substring(0,100),c:cs.cursor==='pointer'});"
+                "}else{out.push({x:0,y:0,w:0,h:0,t:'',c:false});}"
+                "}catch(e){out.push({x:0,y:0,w:0,h:0,t:'',c:false});}"
+                "}"
+                "return JSON.stringify(out);"
+                "})()"
+            )
+            try:
+                raw = await page.evaluate(js)
+                if raw:
+                    data = _json.loads(raw)
+                    for el, d in zip(elements, data):
+                        if isinstance(d, dict):
+                            el["x"] = d.get("x", 0)
+                            el["y"] = d.get("y", 0)
+                            el["width"] = d.get("w", 0)
+                            el["height"] = d.get("h", 0)
+                            el["text"] = d.get("t", "")
+                            el["clickable"] = d.get("c", False)
+            except Exception:
+                logger.debug("_scan_and_cache_page: position enrichment failed", exc_info=True)
+
+        elements = [el for el in elements if not el.get("tentative") or el.get("clickable")]
+
+        # 缓存到 per-page cache，供 ensure_highlights 在非活跃页上使用
+        self._per_page_elements[id(page)] = list(elements)
+        await self.ensure_highlights(page)
 
     # ------------------------------------------------------------------
     # Highlight guard — periodic safety-net refresh (every 2 s)
@@ -619,6 +800,10 @@ class PlaywrightBridge:
             if pid == target_id:
                 await p.bring_to_front()
                 self._page = p
+                # 切换时先把缓存恢复，避免闪一下旧页面的高亮
+                cached = self._per_page_elements.get(id(p))
+                if cached is not None:
+                    self._last_highlight_elements = list(cached)
                 await self.ensure_highlights()
                 try:
                     await self.simplify_dom()
@@ -852,6 +1037,8 @@ class PlaywrightBridge:
                 ]
 
         self._last_highlight_elements = list(elements)
+        # 缓存当前页的元素，让其他 tab 切到时能显示自己的高亮
+        self._per_page_elements[id(self._page)] = list(elements)
         await self.ensure_highlights()
 
         result: dict = {"elements": elements, "mode": "interactive"}
@@ -922,6 +1109,7 @@ class PlaywrightBridge:
         self._ref_map = {}
         self._element_map = {}
         self._last_highlight_elements = []
+        self._per_page_elements.clear()
 
     def get_element_by_index(self, ref: str) -> dict:
         if not self._ref_map:

@@ -190,7 +190,8 @@ async def launch_isolated_chrome(
 
     exe = _find_chrome_exe()
 
-    # Pick a random available port and keep it bound until browser starts
+    # Pick a random available port, then release it immediately
+    # so the browser can bind to it
     port_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     try:
         port_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -199,6 +200,7 @@ async def launch_isolated_chrome(
     except Exception:
         port_sock.close()
         raise
+    port_sock.close()  # Release port — browser needs to bind it
 
     if profile_name:
         user_data_dir = str(get_isolated_profile_dir(profile_name))
@@ -247,7 +249,6 @@ async def launch_isolated_chrome(
             if _user_chrome_process.pid:
                 _launched_pids.add(_user_chrome_process.pid)
         except Exception as e:
-            port_sock.close()
             raise RuntimeError(f"Failed to launch Edge: {e}") from e
     else:
         logger.info("No Edge detected, falling back to Playwright bundled Chromium")
@@ -255,7 +256,6 @@ async def launch_isolated_chrome(
         try:
             from playwright.async_api import async_playwright
         except ImportError:
-            port_sock.close()
             raise RuntimeError(
                 "Cannot find or launch Chrome. "
                 "Ensure Chrome is running, or install playwright "
@@ -274,7 +274,6 @@ async def launch_isolated_chrome(
                 ],
             )
         except Exception as e:
-            port_sock.close()
             raise RuntimeError(f"Failed to launch Playwright browser: {e}") from e
 
     from .discover import _fetch_json
@@ -286,11 +285,9 @@ async def launch_isolated_chrome(
         )
         if data and "webSocketDebuggerUrl" in data:
             logger.info("launch_isolated_chrome: ready on port %d", port)
-            port_sock.close()
             return data["webSocketDebuggerUrl"]
         await asyncio.sleep(0.5)
 
-    port_sock.close()
     raise RuntimeError(
         "Cannot obtain isolated browser WS URL (browser launch timed out)."
     )

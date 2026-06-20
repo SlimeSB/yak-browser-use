@@ -39,6 +39,8 @@ async def _get_session() -> "aiohttp.ClientSession":
 
 async def _fetch_json(url: str, timeout: float = 3.0) -> dict | None:
     """HTTP GET a JSON endpoint. Returns parsed dict or None."""
+    import aiohttp
+
     try:
         session = await _get_session()
         async with session.get(
