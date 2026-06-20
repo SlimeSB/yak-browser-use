@@ -1007,8 +1007,9 @@ def register_all_routes(app: FastAPI) -> None:
     async def delete_preset(name: str) -> JSONResponse:
         """Delete a saved preset."""
         import os
+        safe_name = Path(name).name
         presets_dir = Path(__file__).resolve().parent.parent.parent / "userdata" / "presets"
-        path = presets_dir / f"{name}.pipeline.yaml"
+        path = presets_dir / f"{safe_name}.pipeline.yaml"
         if path.exists():
             os.remove(str(path))
             return JSONResponse({"ok": True})
@@ -1047,10 +1048,12 @@ def register_all_routes(app: FastAPI) -> None:
     @app.get("/api/pipelines/{name}")
     async def api_get_pipeline(name: str) -> JSONResponse:
         """Get a specific pipeline's content (workspaces/ then presets/)."""
+        from pathlib import Path
+        safe_name = Path(name).name
         base = Path(__file__).resolve().parent.parent.parent
-        pipe_path = base / "userdata" / "workspaces" / name / "pipeline.yaml"
+        pipe_path = base / "userdata" / "workspaces" / safe_name / "pipeline.yaml"
         if not pipe_path.exists():
-            pipe_path = base / "userdata" / "presets" / f"{name}.pipeline.yaml"
+            pipe_path = base / "userdata" / "presets" / f"{safe_name}.pipeline.yaml"
         if not pipe_path.exists():
             raise APIError("pipeline not found", status_code=404)
         content = pipe_path.read_text(encoding="utf-8")
@@ -1061,15 +1064,17 @@ def register_all_routes(app: FastAPI) -> None:
         """Delete a pipeline from both workspaces/ and presets/."""
         import os
         import shutil
+        from pathlib import Path
+        safe_name = Path(name).name
         base = Path(__file__).resolve().parent.parent.parent
         deleted = False
 
-        preset_path = base / "userdata" / "presets" / f"{name}.pipeline.yaml"
+        preset_path = base / "userdata" / "presets" / f"{safe_name}.pipeline.yaml"
         if preset_path.exists():
             os.remove(str(preset_path))
             deleted = True
 
-        workspace_dir = base / "userdata" / "workspaces" / name
+        workspace_dir = base / "userdata" / "workspaces" / safe_name
         if workspace_dir.exists() and workspace_dir.is_dir():
             shutil.rmtree(str(workspace_dir))
             deleted = True

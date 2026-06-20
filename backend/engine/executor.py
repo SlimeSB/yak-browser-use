@@ -748,8 +748,6 @@ async def execute_browser_step(
                         elements_path = step_dir / "interactive_elements.json"
                         elements_path.write_text(_json.dumps(elements, ensure_ascii=False, indent=2), encoding="utf-8")
                         element_map = {el["ref"]: el["selector"] for el in elements if el.get("ref") and el.get("selector")}
-                        if snap_result.get("degraded"):
-                            _write_full_artifacts(snap_result, step_dir, base64, time)
                     elif snap_mode == "simplified":
                         summary = snap_result.get("summary", "")
                         lists_data = snap_result.get("lists", [])
@@ -757,8 +755,6 @@ async def execute_browser_step(
                         (step_dir / "page_summary.txt").write_text(summary, encoding="utf-8")
                         (step_dir / "detected_lists.json").write_text(_json.dumps(lists_data, ensure_ascii=False, indent=2), encoding="utf-8")
                         (step_dir / "detected_tables.json").write_text(_json.dumps(tables_data, ensure_ascii=False, indent=2), encoding="utf-8")
-                        if snap_result.get("degraded"):
-                            _write_full_artifacts(snap_result, step_dir, base64, time)
                     else:
                         _write_full_artifacts(core_result, step_dir, base64, time)
                 elif op_type == "source":

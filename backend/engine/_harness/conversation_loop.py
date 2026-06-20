@@ -300,6 +300,7 @@ async def run_preset_loop(
     budget: IterationBudget | None = None,
     interrupt_check: Callable[[], bool] | None = None,
     stream_callback: Callable[[dict], None] | None = None,
+    shared_store: dict | None = None,
 ) -> ConversationResult:
     from engine._harness.pipeline_task_adapter import PipelineTaskAdapter
     from engine._harness.tools import get_all_tools
@@ -339,6 +340,7 @@ async def run_preset_loop(
         interrupt_check=interrupt_check,
         stream_callback=stream_callback,
         preset_mode=True,
+        shared_store=shared_store,
     )
 
 

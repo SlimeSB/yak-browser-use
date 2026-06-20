@@ -266,19 +266,17 @@ async def restart_user_chrome() -> str:
     logger.info("Killing existing %s process", proc_name)
     try:
         if platform.system() == "Windows":
-            subprocess.run(
-                ["taskkill", "/F", "/IM", proc_name],
-                capture_output=True,
-                timeout=10,
+            await asyncio.to_thread(
+                subprocess.run, ["taskkill", "/F", "/IM", proc_name],
+                capture_output=True, timeout=10,
             )
-            subprocess.run(
-                ["taskkill", "/F", "/IM", "chrome_crashpad_handler.exe"],
-                capture_output=True,
-                timeout=5,
+            await asyncio.to_thread(
+                subprocess.run, ["taskkill", "/F", "/IM", "chrome_crashpad_handler.exe"],
+                capture_output=True, timeout=5,
             )
         else:
-            subprocess.run(
-                ["pkill", "-9", proc_name.replace(".exe", "")], timeout=10
+            await asyncio.to_thread(
+                subprocess.run, ["pkill", "-9", proc_name.replace(".exe", "")], timeout=10,
             )
     except Exception:
         pass
@@ -287,19 +285,16 @@ async def restart_user_chrome() -> str:
 
     if platform.system() == "Windows":
         try:
-            result = subprocess.run(
+            result = await asyncio.to_thread(
+                subprocess.run,
                 ["tasklist", "/FI", f"IMAGENAME eq {proc_name}", "/NH"],
-                capture_output=True,
-                text=True,
-                errors="replace",
-                timeout=5,
+                capture_output=True, text=True, errors="replace", timeout=5,
             )
             if proc_name.lower() in result.stdout.lower():
                 logger.info("Chrome still alive after first kill, retrying")
-                subprocess.run(
-                    ["taskkill", "/F", "/IM", proc_name],
-                    capture_output=True,
-                    timeout=10,
+                await asyncio.to_thread(
+                    subprocess.run, ["taskkill", "/F", "/IM", proc_name],
+                    capture_output=True, timeout=10,
                 )
                 await asyncio.sleep(2.0)
         except Exception:

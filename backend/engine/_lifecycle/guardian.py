@@ -224,7 +224,7 @@ class Guardian:
 
     # ── approval gating ──
 
-    def approve(self, step_name: str | None = None, step_def: dict | None = None) -> bool:
+    def approve(self, step_name: str | None = None, step_def: dict | None = None, pipeline_name: str = "") -> bool:
         """Check if a step requires manual approval.
 
         Conditions checked:
@@ -246,7 +246,7 @@ class Guardian:
             return False
 
         # Condition 3: circuit breaker fired (STALE)
-        if self.read_stale_marker() is not None:
+        if self.read_stale_marker(pipeline_name) is not None:
             logger.warning(
                 "guardian: step '%s' blocked — pipeline is STALE (circuit breaker fired)",
                 step_name,
@@ -313,10 +313,25 @@ class Guardian:
                 except OSError:
                     pass
 
-    def read_stale_marker(self) -> str | None:
-        """Read the most recent STALE marker content, or None if not stale."""
+    def read_stale_marker(self, pipeline_name: str = "") -> str | None:
+        """Read STALE marker for a specific pipeline, or None if not stale.
+
+        When *pipeline_name* is provided, only markers matching that pipeline
+        are considered — prevents cross-pipeline STALE pollution.
+
+        Backward compat: old-format STALE files (without ``pipeline:`` line)
+        are treated as matching ANY pipeline_name to avoid blocking pipelines
+        after upgrading from an older version.
+        """
         if self._versions_dir:
             markers = sorted(self._versions_dir.glob("STALE_*"))
-            if markers:
-                return markers[-1].read_text(encoding="utf-8").strip()
+            for marker in markers:
+                content = marker.read_text(encoding="utf-8").strip()
+                if not pipeline_name:
+                    return content
+                if f"pipeline: {pipeline_name}" in content:
+                    return content
+                # Backward compat: old-format files match any pipeline
+                if "pipeline:" not in content:
+                    return content
         return None

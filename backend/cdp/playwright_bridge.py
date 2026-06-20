@@ -478,6 +478,9 @@ class PlaywrightBridge:
     # ------------------------------------------------------------------
 
     async def goto(self, url: str) -> dict:
+        # SSRF guard: only allow http/https
+        if not url.startswith(("http://", "https://")):
+            return {"ok": False, "error": f"URL scheme not allowed: {url.split(':')[0]}:// (only http/https)"}
         await self._page.goto(url, wait_until="domcontentloaded")
         # 导航后扫描新页面，自动刷新高亮
         try:

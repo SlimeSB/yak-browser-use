@@ -29,3 +29,10 @@ class AssistantMessage:
     content: str = ""
     role: str = "assistant"
     tool_calls: list[ToolCall] | None = None
+
+
+@dataclass
+class ToolMessage:
+    content: str
+    role: str = "tool"
+    tool_call_id: str = ""

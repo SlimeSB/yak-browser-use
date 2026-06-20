@@ -81,7 +81,11 @@ async def record_step(
         if op_type == "goal_run":
             step_entry["goal_description"] = op_args.get("description", description) if op_args else description
         else:
-            browser_op: dict = {op_type: op_args.get("value", "") if op_args and "value" in op_args else (op_args or {})}
+            browser_op: dict
+            if op_args and "value" in op_args and len(op_args) == 1:
+                browser_op = {op_type: op_args["value"]}
+            else:
+                browser_op = {op_type: op_args or {}}
             step_entry["browser_ops"] = [browser_op]
 
     # Append or update step

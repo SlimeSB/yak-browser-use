@@ -187,6 +187,7 @@ async def _run_swimlane_agent(
     wm,
     events: EventSink,
     ctx: RunContext,
+    shared_store: dict | None = None,
 ) -> str | None:
     """Run the Agent Swimlane when a check fails.
 
@@ -283,6 +284,7 @@ async def _run_swimlane_agent(
             messages=[{"role": "user", "content": user_message}],
             cdp_helpers=cdp_helpers,
             budget=budget,
+            shared_store=shared_store,
         )
     except Exception as e:
         logger.error("swimlane: run_preset_loop failed: %s", e)
@@ -470,6 +472,7 @@ async def run_pipeline(
                 approved = guardian.approve(
                     step_name=ctx.current_step,
                     step_def=step_def,
+                    pipeline_name=pipeline_name,
                 )
                 if not approved:
                     machine.end_step(
@@ -639,6 +642,7 @@ async def run_pipeline(
                         wm=wm,
                         events=events,
                         ctx=ctx,
+                        shared_store=shared_store,
                     )
                     if swimlane_result:
                         step_status = StepStatus.SUCCESS if swimlane_result == "completed" else StepStatus.FAILED

@@ -113,7 +113,7 @@ class CDPDaemon:
         if sid:
             payload["sessionId"] = sid
 
-        future = asyncio.get_event_loop().create_future()
+        future = asyncio.get_running_loop().create_future()
         self._pending[msg_id] = future
 
         await self._ws.send(json.dumps(payload))  # type: ignore[reportOptionalMemberAccess]
@@ -155,8 +155,20 @@ class CDPDaemon:
                     pass
         except websockets.exceptions.ConnectionClosed:
             self._running = False
+            # Clean up pending futures on connection loss so callers don't hang 30s
+            if self._pending:
+                for future in self._pending.values():
+                    future.set_exception(ConnectionError("CDP connection lost"))
+                self._pending.clear()
             if not self._stopped_intentional:
                 await self._auto_reconnect()
+        except Exception as exc:
+            logger.warning("CDP listener error: %s", exc, exc_info=True)
+            self._running = False
+            if self._pending:
+                for future in self._pending.values():
+                    future.set_exception(ConnectionError("CDP connection lost"))
+                self._pending.clear()
 
     async def _auto_reconnect(self) -> None:
         """Exponential-backoff reconnection with up to *max_reconnect* attempts."""
