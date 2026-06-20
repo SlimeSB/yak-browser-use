@@ -57,6 +57,8 @@ class ToolCDPHelpers:
         self._check_failures()
         if mode == "a11y":
             result = await self._bridge.a11y_snapshot()
+        elif mode == "progressive":
+            result = await self._bridge._progressive_snapshot(query=query)
         elif mode == "interactive":
             result = await self._bridge.simplify_dom(query=query, in_viewport=in_viewport)
         elif mode == "simplified":

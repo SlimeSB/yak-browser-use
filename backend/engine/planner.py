@@ -30,7 +30,7 @@ Supported operation types and their required parameters:
 - goto: {"type": "goto", "value": "<url>"}
 - click: {"type": "click", "value": "<css_selector>"} or {"type": "click", "selector": "<css_selector>"}
 - fill: {"type": "fill", "selector": "<css_selector>", "value": "<text>"}
-- snapshot: {"type": "snapshot", "mode": "a11y|interactive|simplified|full", "query": "<optional>", "in_viewport": true|false}
+- snapshot: {"type": "snapshot", "mode": "a11y|progressive|interactive|simplified|full", "query": "<optional>", "in_viewport": true|false}
 - scroll: {"type": "scroll", "direction": "up|down", "amount": 300}
 - source: {"type": "source"}
 - eval: {"type": "eval", "code": "<javascript>"}

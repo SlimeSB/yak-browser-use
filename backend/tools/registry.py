@@ -178,19 +178,20 @@ def _build_registry_impl() -> None:
         },
         "snapshot": {
             "description": "Capture page snapshot. a11y（默认）通过 Accessibility Tree 获取可交互元素，轻量快速；"
-                           "interactive 通过 CDP DOM 深度扫描；simplified 纯文本概览。推荐用法：先调无参 snapshot()，"
-                           "元素不够用时换 snapshot(mode='interactive')。",
+                           "progressive 通过 CDP DOM 深度扫描 + 密度自适应，用于复杂长列表页面；"
+                           "simplified 纯文本概览。推荐用法：先调无参 snapshot()，"
+                           "元素不够用时换 snapshot(mode='progressive')。",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "mode": {
                         "type": "string",
-                        "enum": ["a11y", "interactive", "full", "simplified"],
-                        "description": "a11y（默认，推荐）→ interactive（复杂页面）→ simplified（纯文本概览）→ full（截图+HTML，token 最多）。",
+                        "enum": ["a11y", "progressive", "interactive", "full", "simplified"],
+                        "description": "a11y（默认，推荐）→ progressive（复杂长列表页面）→ interactive（CDP 全量扫描）→ simplified（纯文本概览）→ full（截图+HTML，token 最多）。",
                     },
                     "query": {
                         "type": "string",
-                        "description": "仅 interactive 模式有效。不以 #/. 开头时按文本/tag/type/role 模糊匹配；以 # 或 . 开头时按 CSS selector 精确匹配。",
+                        "description": "仅 progressive/interactive 模式有效。不以 #/. 开头时按文本/tag/type/role 模糊匹配；以 # 或 . 开头时按 CSS selector 精确匹配。",
                     },
                     "in_viewport": {
                         "type": "boolean",

@@ -54,3 +54,4 @@ userdata/presets/*.pipeline.yaml
 opencode.jsonc
 /userdata
 /.agents
+/backend/tests/fixtures

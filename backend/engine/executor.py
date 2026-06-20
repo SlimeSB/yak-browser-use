@@ -164,6 +164,9 @@ async def execute_browser_op(
                 if mode == "a11y":
                     snapshot = await bridge.a11y_snapshot()
                     result["result"] = snapshot
+                elif mode == "progressive":
+                    snapshot = await bridge._progressive_snapshot(query=query)
+                    result["result"] = snapshot
                 elif mode == "interactive":
                     snapshot = await bridge.simplify_dom(query=query, in_viewport=in_viewport)
                     result["result"] = snapshot

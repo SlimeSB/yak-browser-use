@@ -149,6 +149,248 @@ def _extract_text_from_children(node: dict) -> str:
 
 
 # ---------------------------------------------------------------------------
+# progressive snapshot — CDP DOM walk + density-adaptive disclosure
+# ---------------------------------------------------------------------------
+
+CONTAINER_DEPTH_RANGE = (2, 4)
+DENSITY_THRESHOLD = 50
+DENSITY_RATIO = 3.0
+SHALLOW_QUOTA = 30
+MAX_LLM_ELEMENTS = 80
+DIALOG_ROLES = {"dialog", "alertdialog"}
+
+_ALWAYS_FULL_TAGS = {"button", "input", "select", "textarea", "a"}
+_ALWAYS_FULL_ROLES = {"button", "link", "textbox", "combobox", "checkbox", "radio",
+                      "switch", "menuitem", "option", "tab"}
+
+
+def _is_interactive_progressive(tag: str, attrs: dict[str, str]) -> bool:
+    """Progressive mode interactive element detection (same as _is_interactive but
+    without the Vue/React heuristics — progressive catches everything from CDP DOM)."""
+    if tag in _ALWAYS_FULL_TAGS:
+        if tag == "a" and not attrs.get("href"):
+            return False
+        if tag == "input" and attrs.get("type", "").lower() == "hidden":
+            return False
+        return True
+    role = attrs.get("role", "").lower()
+    if role in _ALWAYS_FULL_ROLES:
+        return True
+    if attrs.get("onclick") or attrs.get("tabindex") or attrs.get("contenteditable"):
+        return True
+    return False
+
+
+def _node_attrs(node: dict) -> dict[str, str]:
+    """Extract attributes dict from CDP DOM node's flat array [k1, v1, k2, v2, ...]."""
+    attrs: dict[str, str] = {}
+    raw = node.get("attributes", [])
+    for i in range(0, len(raw), 2):
+        key = raw[i].lower()
+        attrs[key] = raw[i + 1] if i + 1 < len(raw) else ""
+    return attrs
+
+
+def _build_selector_from_node_progressive(node: dict) -> str:
+    """Build CSS selector from a CDP DOM node (progressive mode)."""
+    tag = node.get("nodeName", "").lower()
+    attrs = _node_attrs(node)
+    return _build_selector_from_attrs_progressive(tag, attrs)
+
+
+def _build_selector_from_attrs_progressive(tag: str, attrs: dict[str, str]) -> str:
+    """Build CSS selector from tag + attrs. Priority: id > data-testid > class > tag."""
+    if attrs.get("id"):
+        return f'{tag}#{attrs["id"]}'
+    if attrs.get("data-testid"):
+        return f'{tag}[data-testid="{attrs["data-testid"]}"]'
+    if attrs.get("class"):
+        cls = ".".join(attrs["class"].split()[:3])
+        return f"{tag}.{cls}"
+    return tag
+
+
+class CollectState:
+    """Phase 1: full-depth CDP DOM walk, collecting every interactive element."""
+
+    def __init__(self, ref_map: dict):
+        self.elements_all: list[dict] = []
+        self.stats_map: dict[str, dict] = {}
+        self._ref_map = ref_map
+        self._stack: list[str] = []
+        self._counter = 0
+
+    def walk(self, node: dict, depth: int = 0) -> None:
+        ckey = None
+        if CONTAINER_DEPTH_RANGE[0] <= depth <= CONTAINER_DEPTH_RANGE[1]:
+            ckey = f"c_{self._counter}"
+            self._counter += 1
+            self._stack.append(ckey)
+            c_attrs = _node_attrs(node)
+            self.stats_map[ckey] = {
+                "depth": depth,
+                "tag": node.get("nodeName", "").lower(),
+                "role": c_attrs.get("role", ""),
+                "selector": _build_selector_from_node_progressive(node),
+                "total_descendants": 0,
+                "whitelist_count": 0,
+            }
+
+        current_cont = self._stack[-1] if self._stack else None
+
+        if node.get("nodeType") == 1:
+            attrs = _node_attrs(node)
+            tag = node["nodeName"].lower()
+            if _is_interactive_progressive(tag, attrs):
+                bid = str(node["backendNodeId"])
+                ref = f"{PROGRESSIVE_REF_PREFIX}{bid}"
+                text = (attrs.get("aria-label", "")
+                        or attrs.get("title", "")
+                        or attrs.get("value", "")
+                        or attrs.get("placeholder", "")
+                        or _extract_text_from_children(node))
+                el = {
+                    "ref": ref, "tag": tag,
+                    "backendNodeId": bid,
+                    "selector": _build_selector_from_attrs_progressive(tag, attrs),
+                    "text": text,
+                    "role": attrs.get("role", ""),
+                    "_container": current_cont,
+                    "_whitelist": (tag in _ALWAYS_FULL_TAGS or
+                                   attrs.get("role", "").lower() in _ALWAYS_FULL_ROLES),
+                    "_in_view": False,
+                }
+                self.elements_all.append(el)
+                self._ref_map[ref] = el
+                # Increment ALL ancestor containers, not just the nearest one
+                for ckey in self._stack:
+                    s = self.stats_map[ckey]
+                    s["total_descendants"] += 1
+                    if el["_whitelist"]:
+                        s["whitelist_count"] += 1
+                        s["whitelist_count"] += 1
+
+        for child in node.get("children", []):
+            self.walk(child, depth + 1)
+
+        if ckey:
+            self._stack.pop()
+
+
+def _folded_summary_from_container(state: CollectState, ckey: str) -> str:
+    """Generate a human-readable summary for a folded container."""
+    stats = state.stats_map[ckey]
+    for el in state.elements_all:
+        if el.get("_container") == ckey:
+            text = el.get("text", "")
+            if text and len(text.strip()) > 1:
+                return f"{text[:20]} · 共 {stats['total_descendants']} 交互项"
+    return f"{stats['tag']} · 共 {stats['total_descendants']} 交互项"
+
+
+def build_llm_view(state: CollectState) -> tuple[list[dict], list[dict], dict[str, list[str]]]:
+    """Phase 2: density detection + shallow sampling → LLM-friendly view."""
+
+    # 1. Identify dense containers (dialog exemption)
+    dialog_keys = {ckey for ckey, s in state.stats_map.items()
+                   if s["tag"] in DIALOG_ROLES or "dialog" in s.get("role", "")}
+    valid_stats = {ckey: s for ckey, s in state.stats_map.items() if ckey not in dialog_keys}
+    mean_desc = (
+        sum(s["total_descendants"] for s in valid_stats.values())
+        / max(1, len(valid_stats))
+    )
+    dense_containers: set[str] = set()
+    for ckey, stats in state.stats_map.items():
+        if stats["tag"] in DIALOG_ROLES or "dialog" in stats.get("role", ""):
+            continue
+        if (stats["total_descendants"] > DENSITY_THRESHOLD or
+                (mean_desc > 0 and stats["total_descendants"] / mean_desc > DENSITY_RATIO)):
+            dense_containers.add(ckey)
+
+    # 2. Dense containers: shallow sampling
+    view_refs: set[str] = set()
+    folded: list[dict] = []
+    branch_index: dict[str, list[str]] = {}
+
+    for ckey in dense_containers:
+        all_refs = [el["ref"] for el in state.elements_all
+                    if el.get("_container") == ckey]
+        branch_index[ckey] = list(all_refs)
+
+        critical = [r for r in all_refs if state._ref_map[r]["_whitelist"]]
+        normal = [r for r in all_refs if r not in critical]
+
+        picked = list(critical[:SHALLOW_QUOTA])
+        remaining = SHALLOW_QUOTA - len(picked)
+        if remaining > 0 and normal:
+            step = max(1, len(normal) // remaining)
+            for i in range(0, len(normal), step):
+                if len(picked) >= SHALLOW_QUOTA:
+                    break
+                picked.append(normal[i])
+
+        for r in picked:
+            state._ref_map[r]["_in_view"] = True
+            view_refs.add(r)
+
+        folded.append({
+            "key": ckey,
+            "selector": state.stats_map[ckey]["selector"],
+            "type": _classify_by_tag(state.stats_map[ckey]["tag"]),
+            "total": state.stats_map[ckey]["total_descendants"],
+            "sampled": len(picked),
+            "summary": _folded_summary_from_container(state, ckey),
+        })
+
+    # 3. Non-dense + containerless elements → full inclusion
+    for el in state.elements_all:
+        ckey = el.get("_container")
+        if ckey is None or ckey not in dense_containers:
+            el["_in_view"] = True
+        if ckey and ckey not in dense_containers:
+            if ckey not in branch_index:
+                branch_index[ckey] = []
+            if el["ref"] not in branch_index[ckey]:
+                branch_index[ckey].append(el["ref"])
+
+    # 4. MAX_LLM_ELEMENTS hard cap
+    view_elements = [el for el in state.elements_all if el["_in_view"]]
+    if len(view_elements) > MAX_LLM_ELEMENTS:
+        crit = [e for e in view_elements if e["_whitelist"]]
+        crit = crit[:MAX_LLM_ELEMENTS]
+        rem = MAX_LLM_ELEMENTS - len(crit)
+        if rem > 0:
+            norm = [e for e in view_elements if not e["_whitelist"]]
+            view_elements = crit + norm[:rem]
+        else:
+            view_elements = crit
+        kept_refs = {e["ref"] for e in view_elements}
+        for el in state.elements_all:
+            if el["_in_view"] and el["ref"] not in kept_refs:
+                el["_in_view"] = False
+        for f in folded:
+            ckey = f["key"]
+            f["sampled"] = sum(
+                1 for e in view_elements if e.get("_container") == ckey
+            )
+
+    return view_elements, folded, branch_index
+
+
+def _classify_by_tag(tag: str) -> str:
+    """Classify a container by its tag for LLM context."""
+    if tag in ("ul", "ol"):
+        return "list"
+    if tag in ("table",):
+        return "table"
+    if tag in ("nav",):
+        return "nav"
+    if tag in ("form",):
+        return "form"
+    return "container"
+
+
+# ---------------------------------------------------------------------------
 # highlight JS — injected into every new page so @eN badges are always visible
 #
 # 🚫 再写一套高亮系统死妈。
@@ -1277,6 +1519,102 @@ class PlaywrightBridge:
         self._last_highlight_elements = list(elements)
         await self.ensure_highlights()
         return {"elements": elements, "mode": "a11y"}
+
+    async def _progressive_snapshot(self, query: str = "") -> dict:
+        """CDP DOM walk + two-phase density-adaptive disclosure.
+
+        Phase 1: full-depth walk collecting every interactive element.
+        Phase 2: density detection → shallow sampling for dense containers.
+        """
+        self._ref_map.clear()
+
+        highlight_on = await self._is_highlight_enabled()
+        if highlight_on:
+            await self._page.evaluate(
+                'document.querySelectorAll("[data-ybu-ref]")'
+                '.forEach(el => el.removeAttribute("data-ybu-ref"))'
+            )
+
+        cdp = await self._context.new_cdp_session(self._page)
+        try:
+            doc = await cdp.send("DOM.getDocument", {"depth": -1, "pierce": True})
+        finally:
+            await cdp.detach()
+
+        # Phase 1: full-depth walk
+        state = CollectState(ref_map=self._ref_map)
+        state.walk(doc.get("root", {}))
+
+        # Phase 2: build LLM view
+        view_elements, folded, branch_index = build_llm_view(state)
+
+        # Stamp via CDP backendNodeId
+        if highlight_on:
+            for el in view_elements:
+                try:
+                    bid = int(el["backendNodeId"])
+                    cdp2 = await self._context.new_cdp_session(self._page)
+                    try:
+                        result = await cdp2.send("DOM.resolveNode", {"backendNodeId": bid})
+                        await cdp2.send("Runtime.callFunctionOn", {
+                            "objectId": result["object"]["objectId"],
+                            "functionDeclaration": (
+                                f'function() {{ this.setAttribute("data-ybu-ref", {_json.dumps(el["ref"])}); }}'
+                            ),
+                        })
+                    finally:
+                        await cdp2.detach()
+                except Exception:
+                    pass
+
+        self._branch_index = branch_index
+        self._last_highlight_elements = list(view_elements)
+        self._per_page_elements[id(self._page)] = list(view_elements)
+        await self.ensure_highlights()
+
+        # Strip private fields before returning to LLM
+        public_elements = [{k: v for k, v in el.items() if not k.startswith("_")}
+                           for el in view_elements]
+
+        return {
+            "elements": public_elements,
+            "folded_containers": folded,
+            "branch_index": {k: len(v) for k, v in branch_index.items()},
+            "mode": "progressive",
+        }
+
+    async def expand_branch(self, key: str, limit: int = 30, offset: int = 0) -> dict:
+        """Expand a folded container branch — pure in-memory, zero CDP round-trips."""
+        if key not in self._branch_index:
+            return {"elements": [], "total": 0, "error": "container not found"}
+        idxs = self._branch_index[key]
+        total = len(idxs)
+        page = []
+        for idx in idxs[offset:offset + limit]:
+            el = self._ref_map.get(idx)
+            if not el:
+                continue
+            page.append({k: v for k, v in el.items() if not k.startswith("_")})
+        return {
+            "elements": page, "total": total, "returned": len(page),
+            "offset": offset, "has_more": (offset + len(page)) < total,
+        }
+
+    async def _wait_for_highlight_render(self, timeout_ms: int = 500) -> None:
+        """Wait for highlight overlay DOM to be mounted and at least one frame rendered.
+
+        Call before screenshot(image=True) — ensure_highlights() is fire-and-forget.
+        """
+        try:
+            await self._page.wait_for_function(
+                "() => document.querySelector('.ybu-overlay-container') !== null || document.getElementById('ybu-highlights') !== null",
+                timeout=timeout_ms,
+            )
+            await self._page.evaluate(
+                "() => new Promise(r => requestAnimationFrame(r))"
+            )
+        except Exception:
+            pass
 
     async def simplified_snapshot(self) -> dict:
         raw = await self._page.evaluate(_SIMPLIFIED_SNAPSHOT_JS)

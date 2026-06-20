@@ -643,6 +643,26 @@ def _apply_heavy_data_filter(
                 logger.warning("browser_snapshot a11y returned non-dict result, using fallback")
             return
 
+        if mode == "progressive":
+            if isinstance(result_payload, dict):
+                elements = result_payload.get("elements", [])
+                folded = result_payload.get("folded_containers", [])
+                branch_info = result_payload.get("branch_index", {})
+                url = result_payload.get("url", "")
+                title = result_payload.get("title", "")
+                store_scratchpad({
+                    "elements": elements,
+                    "folded_containers": folded,
+                    "branch_index": branch_info,
+                    "url": url,
+                    "title": title,
+                })
+                result_dict["result"] = get_scratchpad().summary
+            else:
+                result_dict["result"] = "progressive 快照已获取（摘要不可用）"
+                logger.warning("browser_snapshot progressive returned non-dict result, using fallback")
+            return
+
         if mode == "interactive":
             if isinstance(result_payload, dict):
                 degraded = result_payload.get("degraded", False)
