@@ -55,6 +55,13 @@ def build_graph(steps: list[StepDef]) -> dict[str, Any]:
                 if dep_key is None:
                     # dep_name may be a step key, not a name
                     dep_key = dep_name
+                elif dep_key != dep_name and dep_name in all_keys:
+                    # dep_name matches both a step name AND a different step's key
+                    logger.warning(
+                        "Step '%s' depends_on '%s' — ambiguous: resolved by name to key '%s', "
+                        "but '%s' is also a key of another step",
+                        step.name, dep_name, dep_key, dep_name,
+                    )
                 deps.append(dep_key)
                 edges.append((dep_key, step.key))
         elif i > 0:
