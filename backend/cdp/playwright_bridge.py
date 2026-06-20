@@ -99,6 +99,56 @@ def _build_selector_from_node(tag: str, attrs: dict[str, str]) -> str:
 
 
 # ---------------------------------------------------------------------------
+# a11y snapshot — Accessibility Tree + DOM stamping
+# ---------------------------------------------------------------------------
+
+A11Y_REF_PREFIX = "@a_"
+PROGRESSIVE_REF_PREFIX = "@p_"
+
+
+# Only these roles are considered "interactive" for a11y snapshot
+_A11Y_INTERACTIVE_ROLES = frozenset({
+    "button", "link", "checkbox", "radio", "switch", "tab",
+    "menuitem", "menuitemcheckbox", "menuitemradio", "option",
+    "combobox", "listbox", "textbox", "searchbox", "slider",
+    "spinbutton", "treeitem", "heading", "img", "listitem",
+})
+
+
+def _flatten_a11y_tree(node: dict, elements: list | None = None) -> list[dict]:
+    """Recursively flatten Playwright Accessibility Tree, keeping interactive elements only."""
+    if elements is None:
+        elements = []
+    role = (node.get("role") or "").lower()
+    name = (node.get("name") or "").strip()
+    if role in _A11Y_INTERACTIVE_ROLES:
+        elements.append({
+            "role": role,
+            "name": name,
+            "value": node.get("value", ""),
+            "description": node.get("description", ""),
+            "checked": node.get("checked"),
+            "disabled": node.get("disabled", False),
+        })
+    for child in node.get("children", []):
+        _flatten_a11y_tree(child, elements)
+    return elements
+
+
+def _extract_text_from_children(node: dict) -> str:
+    """Recursively extract text from CDP DOM node's subtree (unlimited depth)."""
+    parts = []
+    for child in node.get("children", []):
+        if child.get("nodeType") == 3:  # text node
+            v = (child.get("nodeValue") or "").strip()
+            if v:
+                parts.append(v)
+        elif child.get("nodeType") == 1:
+            parts.append(_extract_text_from_children(child))
+    return " ".join(p for p in parts if p)
+
+
+# ---------------------------------------------------------------------------
 # highlight JS — injected into every new page so @eN badges are always visible
 #
 # 🚫 再写一套高亮系统死妈。
@@ -356,6 +406,9 @@ class PlaywrightBridge:
         self._stop_event = asyncio.Event()
         # Per-page element cache, so each tab shows its own highlights
         self._per_page_elements: dict[int, list[dict]] = {}
+        # a11y / progressive mode state
+        self._branch_index: dict[str, list[str]] = {}
+        self._highlight_enabled: bool = True
 
     # ------------------------------------------------------------------
     # Lifecycle
@@ -480,6 +533,10 @@ class PlaywrightBridge:
                 logger.debug("_on_page_closed: auto-scan failed", exc_info=True)
         else:
             self._page = None
+
+    async def _is_highlight_enabled(self) -> bool:
+        """Check whether highlight rendering is enabled (sync, no CDP round-trip)."""
+        return self._highlight_enabled
 
     async def ensure_highlights(self, page: Page | None = None) -> None:
         """Inject highlight bootstrap and push element data into the page.
@@ -687,6 +744,117 @@ class PlaywrightBridge:
         else:
             await locator.click()
         return {"selector": selector}
+
+    # ------------------------------------------------------------------
+    # Ref-based interaction (a11y / progressive mode)
+    # ------------------------------------------------------------------
+
+    async def _locator_by_ref(self, ref: str):
+        """Resolve an a11y ref (@a_N) to a Playwright locator."""
+        el = self._ref_map.get(ref)
+        if not el:
+            raise ValueError(f"{ref} not found in _ref_map")
+        if not ref.startswith(A11Y_REF_PREFIX):
+            raise ValueError(f"{ref}: not an a11y ref")
+        locator = self._page.get_by_role(el["role"], name=el["name"], exact=True)
+        locator = locator.nth(el.get("nth", 0))
+        return locator
+
+    async def _backend_node_by_ref(self, ref: str) -> int:
+        """Resolve a progressive ref (@p_<backendNodeId>) to a CDP backendNodeId."""
+        el = self._ref_map.get(ref)
+        if not el:
+            raise ValueError(f"{ref} not found in _ref_map")
+        if not ref.startswith(PROGRESSIVE_REF_PREFIX):
+            raise ValueError(f"{ref}: not a progressive ref")
+        return int(el["backendNodeId"])
+
+    async def _click_backend_node(self, backend_node_id: int) -> None:
+        """Click an element via CDP backendNodeId (bypasses selector uniqueness issues)."""
+        cdp = await self._context.new_cdp_session(self._page)
+        try:
+            result = await cdp.send("DOM.resolveNode", {"backendNodeId": backend_node_id})
+            object_id = result["object"]["objectId"]
+            await cdp.send("DOM.scrollIntoViewIfNeeded", {"objectId": object_id})
+            box = await cdp.send("DOM.getBoxModel", {"objectId": object_id})
+            quad = box["model"]["content"]
+            x = (quad[0] + quad[4]) / 2
+            y = (quad[1] + quad[5]) / 2
+            await self._page.mouse.click(x, y)
+        finally:
+            await cdp.detach()
+
+    async def _type_backend_node(self, backend_node_id: int, text: str) -> None:
+        """Type text into an element via CDP backendNodeId."""
+        cdp = await self._context.new_cdp_session(self._page)
+        try:
+            result = await cdp.send("DOM.resolveNode", {"backendNodeId": backend_node_id})
+            object_id = result["object"]["objectId"]
+            await cdp.send("DOM.scrollIntoViewIfNeeded", {"objectId": object_id})
+            await cdp.send("Runtime.callFunctionOn", {
+                "objectId": object_id,
+                "functionDeclaration": "function() { this.focus(); this.select(); }",
+            })
+            await self._page.keyboard.type(text)
+        finally:
+            await cdp.detach()
+
+    async def click_ref(self, ref: str) -> dict:
+        """Click an element by ref (@a_N or @p_<backendNodeId>)."""
+        if ref.startswith(A11Y_REF_PREFIX):
+            locator = await self._locator_by_ref(ref)
+            await locator.click()
+        elif ref.startswith(PROGRESSIVE_REF_PREFIX):
+            bid = await self._backend_node_by_ref(ref)
+            await self._click_backend_node(bid)
+        else:
+            raise ValueError(f"{ref}: unknown ref prefix")
+        return {"ref": ref}
+
+    async def fill_ref(self, ref: str, text: str) -> dict:
+        """Fill an input by ref (@a_N or @p_<backendNodeId>)."""
+        if ref.startswith(A11Y_REF_PREFIX):
+            locator = await self._locator_by_ref(ref)
+            await locator.fill(text)
+        elif ref.startswith(PROGRESSIVE_REF_PREFIX):
+            bid = await self._backend_node_by_ref(ref)
+            await self._type_backend_node(bid, text)
+        else:
+            raise ValueError(f"{ref}: unknown ref prefix")
+        return {"ref": ref}
+
+    async def type_ref(self, ref: str, text: str) -> dict:
+        """Type text by ref (@a_N or @p_<backendNodeId>)."""
+        if ref.startswith(A11Y_REF_PREFIX):
+            locator = await self._locator_by_ref(ref)
+            await locator.type(text)
+        elif ref.startswith(PROGRESSIVE_REF_PREFIX):
+            bid = await self._backend_node_by_ref(ref)
+            await self._type_backend_node(bid, text)
+        else:
+            raise ValueError(f"{ref}: unknown ref prefix")
+        return {"ref": ref}
+
+    async def press_key_ref(self, ref: str, key: str) -> dict:
+        """Press a key on an element by ref."""
+        if ref.startswith(A11Y_REF_PREFIX):
+            locator = await self._locator_by_ref(ref)
+            await locator.press(key)
+        elif ref.startswith(PROGRESSIVE_REF_PREFIX):
+            bid = await self._backend_node_by_ref(ref)
+            cdp = await self._context.new_cdp_session(self._page)
+            try:
+                result = await cdp.send("DOM.resolveNode", {"backendNodeId": bid})
+                await cdp.send("Runtime.callFunctionOn", {
+                    "objectId": result["object"]["objectId"],
+                    "functionDeclaration": "function() { this.focus(); }",
+                })
+                await self._page.keyboard.press(key)
+            finally:
+                await cdp.detach()
+        else:
+            raise ValueError(f"{ref}: unknown ref prefix")
+        return {"ref": ref}
 
     async def fill(self, selector: str, text: str) -> dict:
         await self._page.locator(selector).fill(text)
@@ -1053,6 +1221,63 @@ class PlaywrightBridge:
             logger.warning("interactive_snapshot: failed to extract page meta", exc_info=True)
         return result
 
+    async def a11y_snapshot(self) -> dict:
+        """Snapshot via Playwright Accessibility Tree with DOM stamping.
+
+        Returns ``{elements: [{ref, role, name, nth}], mode: "a11y"}``.
+        Coordinates are never stored — the JS renderer computes them live
+        from ``[data-ybu-ref]`` elements via ``getBoundingClientRect()``.
+        """
+        tree = await self._page.accessibility.snapshot()
+        elements = _flatten_a11y_tree(tree) if tree else []
+
+        # I1: clear old _ref_map so stale refs don't survive
+        self._ref_map.clear()
+        # I4: clear _branch_index so progressive data doesn't leak
+        self._branch_index.clear()
+
+        highlight_on = await self._is_highlight_enabled()
+
+        # I2: clean old DOM stamps before applying new ones
+        if highlight_on:
+            await self._page.evaluate(
+                'document.querySelectorAll("[data-ybu-ref]")'
+                '.forEach(el => el.removeAttribute("data-ybu-ref"))'
+            )
+
+        name_counter: dict[str, int] = {}
+        for i, el in enumerate(elements):
+            ref = f"{A11Y_REF_PREFIX}{i}"
+            name = el["name"] or ""
+            if name:
+                key = f"{el['role']}:{name}"
+            else:
+                key = f"{el['role']}:__empty__:{i}"
+            name_counter[key] = name_counter.get(key, 0) + 1
+            nth = name_counter[key] - 1
+
+            el["ref"] = ref
+            el["nth"] = nth
+
+            locator = self._page.get_by_role(el["role"], name=el["name"], exact=True)
+            locator = locator.nth(nth)
+
+            if highlight_on:
+                try:
+                    await locator.evaluate(
+                        f'el => el.setAttribute("data-ybu-ref", {_json.dumps(ref)})'
+                    )
+                except Exception:
+                    pass
+
+            self._ref_map[ref] = {
+                "ref": ref, "role": el["role"], "name": el["name"], "nth": nth,
+            }
+
+        self._last_highlight_elements = list(elements)
+        await self.ensure_highlights()
+        return {"elements": elements, "mode": "a11y"}
+
     async def simplified_snapshot(self) -> dict:
         raw = await self._page.evaluate(_SIMPLIFIED_SNAPSHOT_JS)
         data = _json.loads(raw) if isinstance(raw, str) else raw
@@ -1110,6 +1335,7 @@ class PlaywrightBridge:
         self._element_map = {}
         self._last_highlight_elements = []
         self._per_page_elements.clear()
+        self._branch_index.clear()
 
     def get_element_by_index(self, ref: str) -> dict:
         if not self._ref_map:

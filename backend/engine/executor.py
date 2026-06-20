@@ -138,7 +138,10 @@ async def execute_browser_op(
                 if not selector:
                     raise ValueError("click op missing selector")
                 selector = await _resolve_element_ref(selector, element_map, bridge)
-                await bridge.click(selector, click_count)
+                if selector.startswith("@a_") or selector.startswith("@p_"):
+                    await bridge.click_ref(selector)
+                else:
+                    await bridge.click(selector, click_count)
                 result["result"] = {"selector": selector}
 
             elif op_type == "fill":
@@ -148,14 +151,20 @@ async def execute_browser_op(
                     from params.manager import resolve_param
                     text = resolve_param(text["param_key"])
                 selector = await _resolve_element_ref(selector, element_map, bridge)
-                await bridge.fill(selector, text)
+                if selector.startswith("@a_") or selector.startswith("@p_"):
+                    await bridge.fill_ref(selector, text)
+                else:
+                    await bridge.fill(selector, text)
                 result["result"] = {"selector": selector}
 
             elif op_type == "snapshot":
-                mode = params.get("mode", "interactive")
+                mode = params.get("mode", "a11y")
                 query = params.get("query", "")
                 in_viewport = params.get("in_viewport", False)
-                if mode == "interactive":
+                if mode == "a11y":
+                    snapshot = await bridge.a11y_snapshot()
+                    result["result"] = snapshot
+                elif mode == "interactive":
                     snapshot = await bridge.simplify_dom(query=query, in_viewport=in_viewport)
                     result["result"] = snapshot
                 elif mode == "simplified":
@@ -343,7 +352,12 @@ async def _resolve_element_ref(selector: str, element_map: dict | None, bridge: 
     """Resolve @eN element references to CSS selectors using the element map.
 
     In chat mode (element_map is None), falls back to bridge.get_element_by_index().
+
+    Returns the original ref unchanged if it starts with @a_ or @p_ — those are
+    resolved at click time via bridge.click_ref() / bridge.fill_ref().
     """
+    if selector.startswith("@a_") or selector.startswith("@p_"):
+        return selector
     if selector.startswith("@e"):
         if element_map:
             resolved = element_map.get(selector)

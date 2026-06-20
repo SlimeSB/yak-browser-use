@@ -53,9 +53,11 @@ class ToolCDPHelpers:
     async def wait(self, seconds: float = 1.0) -> None:
         await asyncio.sleep(seconds)
 
-    async def snapshot(self, mode: str = "full", query: str = "", in_viewport: bool = False) -> dict:
+    async def snapshot(self, mode: str = "a11y", query: str = "", in_viewport: bool = False) -> dict:
         self._check_failures()
-        if mode == "interactive":
+        if mode == "a11y":
+            result = await self._bridge.a11y_snapshot()
+        elif mode == "interactive":
             result = await self._bridge.simplify_dom(query=query, in_viewport=in_viewport)
         elif mode == "simplified":
             result = await self._bridge.simplified_snapshot()

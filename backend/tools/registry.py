@@ -177,22 +177,24 @@ def _build_registry_impl() -> None:
             },
         },
         "snapshot": {
-            "description": "Capture page snapshot. 推荐渐进式使用：simplified 看概览 → interactive+in_viewport+query 精准找 → interactive+query 全量搜 → interactive 全量看。",
+            "description": "Capture page snapshot. a11y（默认）通过 Accessibility Tree 获取可交互元素，轻量快速；"
+                           "interactive 通过 CDP DOM 深度扫描；simplified 纯文本概览。推荐用法：先调无参 snapshot()，"
+                           "元素不够用时换 snapshot(mode='interactive')。",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "mode": {
                         "type": "string",
-                        "enum": ["interactive", "full", "simplified"],
-                        "description": "simplified（页面概览，含标题/链接/表格，token 最少）→ interactive（可交互元素列表，带 @e_XXXXX ref，token 较多）→ full（截图+HTML，token 最多，一般不需要）。",
+                        "enum": ["a11y", "interactive", "full", "simplified"],
+                        "description": "a11y（默认，推荐）→ interactive（复杂页面）→ simplified（纯文本概览）→ full（截图+HTML，token 最多）。",
                     },
                     "query": {
                         "type": "string",
-                        "description": "仅 interactive 模式有效。不以 #/. 开头时按文本/tag/type/role 模糊匹配；以 # 或 . 开头时按 CSS selector 精确匹配。过滤后只有匹配元素会注册高亮和 ref 查找。如果没找到目标，省略 query 重新调用获取全量。",
+                        "description": "仅 interactive 模式有效。不以 #/. 开头时按文本/tag/type/role 模糊匹配；以 # 或 . 开头时按 CSS selector 精确匹配。",
                     },
                     "in_viewport": {
                         "type": "boolean",
-                        "description": "仅 interactive 模式有效。为 true 时只返回当前屏幕可见区域内的元素，减少无关噪音。默认 false（全量）。",
+                        "description": "仅 interactive 模式有效。为 true 时只返回当前屏幕可见区域内的元素。",
                     },
                 },
             },

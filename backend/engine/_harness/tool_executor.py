@@ -610,7 +610,7 @@ def _apply_heavy_data_filter(
         return
 
     if fn_name == "browser_snapshot":
-        mode = fn_args.get("mode", "interactive")
+        mode = fn_args.get("mode", "a11y")
 
         if mode == "simplified":
             result_payload = result_dict.get("result", {})
@@ -626,6 +626,22 @@ def _apply_heavy_data_filter(
             return
 
         result_payload = result_dict.get("result", {})
+
+        if mode == "a11y":
+            if isinstance(result_payload, dict):
+                elements = result_payload.get("elements", [])
+                url = result_payload.get("url", "")
+                title = result_payload.get("title", "")
+                store_scratchpad({
+                    "elements": elements,
+                    "url": url,
+                    "title": title,
+                })
+                result_dict["result"] = get_scratchpad().summary
+            else:
+                result_dict["result"] = "a11y 快照已获取（摘要不可用）"
+                logger.warning("browser_snapshot a11y returned non-dict result, using fallback")
+            return
 
         if mode == "interactive":
             if isinstance(result_payload, dict):
