@@ -37,7 +37,7 @@ def _detect_lang() -> str:
             lang = code.replace("_", "-")
             return lang
     except Exception:
-        pass
+        logger.debug("_detect_lang: locale detection failed, falling back to zh-CN", exc_info=True)
     return "zh-CN"
 
 
@@ -279,7 +279,7 @@ async def restart_user_chrome() -> str:
                 subprocess.run, ["pkill", "-9", proc_name.replace(".exe", "")], timeout=10,
             )
     except Exception:
-        pass
+        logger.debug("restart_user_chrome: first kill attempt failed", exc_info=True)
 
     await asyncio.sleep(3.0)
 
@@ -298,7 +298,7 @@ async def restart_user_chrome() -> str:
                 )
                 await asyncio.sleep(2.0)
         except Exception:
-            pass
+            logger.debug("restart_user_chrome: second kill attempt failed", exc_info=True)
 
     port = 9222
     logger.info("Relaunching %s with --remote-debugging-port=%d", exe, port)
@@ -325,7 +325,7 @@ async def restart_user_chrome() -> str:
                     text = err.decode("utf-8", errors="replace")[:1000]
                     logger.warning("Chrome stderr on startup: %s", text)
         except Exception:
-            pass
+            logger.debug("restart_user_chrome: failed to read Chrome stderr", exc_info=True)
 
     stderr_task = asyncio.create_task(_log_stderr())
 
@@ -369,7 +369,7 @@ async def cleanup_isolated() -> None:
         try:
             _user_chrome_process.terminate()
         except Exception:
-            pass
+            logger.debug("cleanup_isolated: failed to terminate Chrome process", exc_info=True)
         _user_chrome_process = None
 
     if _playwright_browser:
@@ -377,12 +377,12 @@ async def cleanup_isolated() -> None:
         try:
             await _playwright_browser.close()
         except Exception:
-            pass
+            logger.debug("cleanup_isolated: failed to close Playwright browser", exc_info=True)
         _playwright_browser = None
 
     if _playwright_instance:
         try:
             await _playwright_instance.stop()
         except Exception:
-            pass
+            logger.debug("cleanup_isolated: failed to stop Playwright instance", exc_info=True)
         _playwright_instance = None

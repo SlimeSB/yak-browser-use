@@ -99,7 +99,7 @@ async def edit_pipeline(
         for q in engine_state.ws_clients:
             try:
                 q.put_nowait(event)
-            except Exception:
+            except Exception:  # expected: no ws client
                 pass
 
     return (

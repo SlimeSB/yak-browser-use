@@ -154,5 +154,5 @@ def _push_edit_event(pipeline_name: str, original: str, modified: str, step_name
         for q in engine_state.ws_clients:
             try:
                 q.put_nowait(event)
-            except Exception:
+            except Exception:  # expected: no ws client
                 pass

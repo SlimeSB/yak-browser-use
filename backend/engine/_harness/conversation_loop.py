@@ -128,7 +128,7 @@ class Agent:
             guidance_text = load_prompt("guidance/tool_strategy")
             self._system_prompt = self._system_prompt + "\n\n" + guidance_text
         except Exception:
-            pass
+            logger.warning("Failed to load guidance/tool_strategy prompt", exc_info=True)
 
         self._start_time = time.time()
 

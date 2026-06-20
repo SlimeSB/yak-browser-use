@@ -48,6 +48,7 @@ class Service:
         self._active_session: SessionState | None = None
         self._event_callbacks: list[Callable[[dict], None]] = []
         self._chat_lock = asyncio.Lock()
+        self._chat_streaming = False
 
     # ── Session management ──────────────────────────────────────────
 
@@ -143,6 +144,7 @@ class Service:
                 return session.status in ("cancelled",)
 
             _todo_token = current_store.set(session.todo_store)
+            self._chat_streaming = True
             try:
                 result: ConversationResult = await run_conversation_loop(
                     llm_call=llm_call,
@@ -179,6 +181,7 @@ class Service:
                 return {"ok": False, "error": str(e)}
 
             finally:
+                self._chat_streaming = False
                 self._push_event({
                     "type": "session.state",
                     "status": session.status,
@@ -213,7 +216,7 @@ class Service:
                     "modified": f.stat().st_mtime,
                 })
             except Exception:
-                pass
+                logger.warning("Failed to stat preset file for %s", f, exc_info=True)
         return presets
 
     # ── Events ──────────────────────────────────────────────────────
@@ -224,17 +227,19 @@ class Service:
 
     def _push_event(self, event: dict) -> None:
         """Push an event to all registered callbacks AND engine_state WS clients."""
+        if event.get("type") == "chat.message" and self._chat_streaming:
+            return
         event["_ts"] = time.time()
         for cb in self._event_callbacks:
             try:
                 cb(event)
             except Exception:
-                pass
+                logger.warning("Event callback failed for type=%s", event.get("type"), exc_info=True)
         if self._engine_state and hasattr(self._engine_state, "ws_clients"):
             for q in self._engine_state.ws_clients:
                 try:
                     q.put_nowait(event)
-                except Exception:
+                except Exception:  # expected: queue full
                     pass
 
     # ── Internal helpers ────────────────────────────────────────────
@@ -303,7 +308,7 @@ class Service:
             for q in self._engine_state.ws_clients:
                 try:
                     q.put_nowait(event)
-                except Exception:
+                except Exception:  # expected: no ws client
                     pass
 
         # Register edit for confirm/revert

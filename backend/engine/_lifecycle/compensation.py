@@ -89,12 +89,17 @@ class CompensationRegistry:
             A list of OpRecord dicts in reverse order (last-executed first).
         """
         rollback: list[dict] = []
+        skipped = 0
         for record in reversed(self._ops[:failed_index]):
-            rollback.append(record.to_dict())
+            if record.reversible:
+                rollback.append(record.to_dict())
+            else:
+                skipped += 1
         logger.info(
-            "Suggested rollback: failed_index=%d, ops_to_undo=%d",
+            "Suggested rollback: failed_index=%d, ops_to_undo=%d, skipped_irreversible=%d",
             failed_index,
             len(rollback),
+            skipped,
         )
         return rollback
 

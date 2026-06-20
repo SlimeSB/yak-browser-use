@@ -219,7 +219,7 @@ async def _run_swimlane_agent(
         url_result = await cdp_helpers.js("window.location.href")
         current_url = str(url_result) if url_result else ""
     except Exception:
-        pass
+        logger.warning("swimlane: js url fetch failed", exc_info=True)
 
     checkpoints = _collect_checkpoints(run_dir, machine)
     completed_steps = []

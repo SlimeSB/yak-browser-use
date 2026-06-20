@@ -21,13 +21,14 @@ class PathGuard:
     def _check_allowed(self, path: str | Path) -> bool:
         """Check if the resolved path is under the workspace root or run dir."""
         resolved = Path(path).resolve()
-        allowed = (
-            str(resolved).startswith(str(self._workspace_root))
-            or str(resolved).startswith(str(self._run_dir))
-        )
-        if not allowed:
-            logger.warning("path_guard: blocked escape attempt: %s", path)
-        return allowed
+        for allowed_root in (self._workspace_root, self._run_dir):
+            try:
+                resolved.relative_to(allowed_root)
+                return True
+            except ValueError:
+                continue
+        logger.warning("path_guard: blocked escape attempt: %s", path)
+        return False
 
     def validate_input(self, path: str | Path) -> Path:
         """Validate an input path is within the workspace or run directory.
@@ -40,10 +41,6 @@ class PathGuard:
                 f"Path security check failed: {path} is not inside workspace "
                 f"{self._workspace_root} or run directory {self._run_dir}"
             )
-        if ".." in str(path):
-            raise PermissionError(
-                f"Path security check failed: {path} contains forbidden relative path '..'"
-            )
         return resolved
 
     def validate_output_dir(self, output_dir: str | Path) -> Path:
@@ -52,7 +49,9 @@ class PathGuard:
         Raises PermissionError if path escapes.
         """
         resolved = Path(output_dir).resolve()
-        if not str(resolved).startswith(str(self._run_dir)):
+        try:
+            resolved.relative_to(self._run_dir)
+        except ValueError:
             raise PermissionError(
                 f"Output directory check failed: {output_dir} is not inside "
                 f"run directory {self._run_dir}"

@@ -172,7 +172,7 @@ async def _tail_follow(paths: list[Path], source: str, head_lines: int) -> None:
                                     print(f"{_label(path)} {line}")
                         file_positions[path] = new_size
                 except Exception:
-                    pass
+                    logger.warning("tail_follow: error reading log chunk", exc_info=True)
             await asyncio.sleep(0.5)
     except KeyboardInterrupt:
         print("\n--- tail stopped ---")

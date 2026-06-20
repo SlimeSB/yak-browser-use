@@ -33,7 +33,7 @@ def _extract_pipeline_name(pipeline_text: str) -> str:
         data = yaml.safe_load(pipeline_text)
         if isinstance(data, dict) and "name" in data:
             return str(data["name"]).strip().strip('"').strip("'")
-    except Exception:
+    except Exception:  # expected: invalid yaml
         pass
     return "unnamed"
 
@@ -58,7 +58,7 @@ def register_all_routes(app: FastAPI) -> None:
                 data = json.loads(p.read_text(encoding="utf-8"))
                 return JSONResponse({"ok": True, "config": data})
             except Exception:
-                pass
+                logger.debug("Failed to parse provider config JSON", exc_info=True)
         return JSONResponse({"ok": True, "config": {}})
 
     @app.post("/api/provider-config")
@@ -238,7 +238,15 @@ def register_all_routes(app: FastAPI) -> None:
                     run_dir=run_dir,
                     version="0",
                 )
-                engine_state.running_pipeline = ctx
+
+                pipeline_lock = getattr(engine_state, "pipeline_lock", None)
+                if pipeline_lock is None:
+                    pipeline_lock = asyncio.Lock()
+                    engine_state.pipeline_lock = pipeline_lock
+                async with pipeline_lock:
+                    if engine_state.running_pipeline:
+                        raise APIError("a pipeline is already running")
+                    engine_state.running_pipeline = ctx
 
                 llm_call = create_pipeline_llm_call(persist_id=run_dir.name)
 
@@ -255,7 +263,8 @@ def register_all_routes(app: FastAPI) -> None:
                     wm.set_status(run_dir, "failed")
                     raise
                 finally:
-                    engine_state.running_pipeline = None
+                    async with engine_state.pipeline_lock:
+                        engine_state.running_pipeline = None
 
                 if result.interrupted:
                     ctx.errors.append({"step": "_agent_", "code": "AGENT_ERROR", "message": "agent interrupted"})
@@ -784,9 +793,6 @@ def register_all_routes(app: FastAPI) -> None:
         turn_index = (len(session.messages) if session else 0) + 1
 
         def _push(event: dict) -> None:
-            if event.get("type") == "chat.message" and llm_call._streaming_active is not None:
-                if llm_call._streaming_active():
-                    return
             service._push_event(event)
 
         def _on_stream_start() -> None:
@@ -818,15 +824,6 @@ def register_all_routes(app: FastAPI) -> None:
             interrupt_check=_interrupt_check,
         )
 
-        _original_push = service._push_event
-
-        def _filtered_push(event: dict) -> None:
-            if event.get("type") == "chat.message" and llm_call._streaming_active():
-                return
-            _original_push(event)
-
-        service._push_event = _filtered_push
-
         try:
             from cdp.helpers import CDPHelpers
 
@@ -854,8 +851,6 @@ def register_all_routes(app: FastAPI) -> None:
         except Exception as exc:
             logger.exception("Chat processing failed")
             raise ServerError(str(exc))
-        finally:
-            service._push_event = _original_push
 
     @app.post("/api/chat/reset")
     async def chat_reset() -> JSONResponse:

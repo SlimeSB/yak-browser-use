@@ -34,6 +34,7 @@ class _EngineState:
         self.ws_clients: list[asyncio.Queue] = []
         self._service: object | None = None
         self._service_lock = asyncio.Lock()
+        self.pipeline_lock = asyncio.Lock()
 
     # ── Chrome connection  ──────────────────────────────────────────
 

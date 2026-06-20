@@ -31,7 +31,7 @@ class EventSink:
         for ws in self._ws_clients:
             try:
                 ws.put_nowait(event)
-            except Exception:
+            except Exception:  # expected: queue full or client gone
                 pass
 
     def emit_run_start(self, pipeline_name: str, run_id: str, version: str) -> None:

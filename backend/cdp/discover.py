@@ -36,7 +36,7 @@ async def _fetch_json(url: str, timeout: float = 3.0) -> dict | None:
                 if resp.status == 200:
                     return await resp.json()
     except Exception:
-        pass
+        logger.debug("_fetch_json exception for url=%s", url, exc_info=True)
     logger.debug("_fetch_json failed for url=%s", url)
     return None
 
@@ -51,6 +51,7 @@ async def _check_port(host: str, port: int, timeout: float = 1.0) -> bool:
         await writer.wait_closed()
         return True
     except Exception:
+        logger.debug("_check_port: failed for %s:%s", host, port, exc_info=True)
         return False
 
 

@@ -768,7 +768,7 @@ async def execute_browser_step(
                     try:
                         await bridge.ensure_highlights()
                     except Exception:
-                        pass
+                        logger.warning("ensure_highlights failed after %s op", op_type, exc_info=True)
             else:
                 op_record["error"] = core_result["error"]
                 result["status"] = "failed"

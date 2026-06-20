@@ -477,14 +477,14 @@ def _append_eval_to_pipeline(
                 try:
                     tmp.unlink()
                 except Exception:
-                    pass
+                    logger.warning("_append_eval_to_pipeline: tmp cleanup failed", exc_info=True)
     except Exception as e:
         logger.debug("_append_eval_to_pipeline: failed for '%s': %s", pipeline_name, e)
         if tmp is not None and tmp.exists():
             try:
                 tmp.unlink()
             except Exception:
-                pass
+                logger.warning("_append_eval_to_pipeline: tmp cleanup failed on exception path", exc_info=True)
 
 
 def _is_cdp_disconnect(error: Exception) -> bool:

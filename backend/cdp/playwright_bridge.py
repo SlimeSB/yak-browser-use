@@ -335,9 +335,9 @@ class PlaywrightBridge:
                 try:
                     self._context.remove_listener("page", self._on_new_page)
                 except Exception:
-                    pass
+                    logger.warning("Failed to remove page listener during stop", exc_info=True)
         except Exception:
-            pass
+            logger.warning("Failed to access context during stop", exc_info=True)
         if self._playwright:
             await self._playwright.stop()
         self._page = None
@@ -463,7 +463,7 @@ class PlaywrightBridge:
                 except asyncio.CancelledError:
                     raise
                 except Exception:
-                    pass
+                    logger.warning("_highlight_guard: iteration failed", exc_info=True)
 
         self._highlight_guard_task = asyncio.ensure_future(_guard())
         self._highlight_guard_task.add_done_callback(
@@ -853,7 +853,7 @@ class PlaywrightBridge:
             result["url"] = meta.get("url", "")
             result["title"] = meta.get("title", "")
         except Exception:
-            pass
+            logger.warning("interactive_snapshot: failed to extract page meta", exc_info=True)
         return result
 
     async def simplified_snapshot(self) -> dict:

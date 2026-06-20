@@ -8,7 +8,7 @@ from pathlib import Path
 try:
     sys.stdout.reconfigure(encoding="utf-8")  # type: ignore[attr-defined]
     sys.stderr.reconfigure(encoding="utf-8")  # type: ignore[attr-defined]
-except Exception:
+except Exception:  # expected: non-utf8 terminal
     pass
 
 from dotenv import load_dotenv
