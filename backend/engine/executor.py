@@ -139,7 +139,10 @@ async def execute_browser_op(
                     raise ValueError("click op missing selector")
                 selector = await _resolve_element_ref(selector, element_map, bridge)
                 if selector.startswith("@a_") or selector.startswith("@p_"):
-                    await bridge.click_ref(selector)
+                    if hasattr(bridge, "click_ref"):
+                        await bridge.click_ref(selector)
+                    else:
+                        await bridge.click(selector, click_count)
                 else:
                     await bridge.click(selector, click_count)
                 result["result"] = {"selector": selector}
@@ -152,7 +155,10 @@ async def execute_browser_op(
                     text = resolve_param(text["param_key"])
                 selector = await _resolve_element_ref(selector, element_map, bridge)
                 if selector.startswith("@a_") or selector.startswith("@p_"):
-                    await bridge.fill_ref(selector, text)
+                    if hasattr(bridge, "fill_ref"):
+                        await bridge.fill_ref(selector, text)
+                    else:
+                        await bridge.fill(selector, text)
                 else:
                     await bridge.fill(selector, text)
                 result["result"] = {"selector": selector}
@@ -210,6 +216,17 @@ async def execute_browser_op(
                 code_str = params.get("code", params.get("js", ""))
                 eval_result = await bridge.evaluate(code_str)
                 result["result"] = eval_result
+
+            elif op_type == "expand_branch":
+                if hasattr(bridge, "expand_branch"):
+                    branch_result = await bridge.expand_branch(
+                        params.get("key", ""),
+                        limit=params.get("limit", 30),
+                        offset=params.get("offset", 0),
+                    )
+                    result["result"] = branch_result
+                else:
+                    result["result"] = {"error": "expand_branch not available on this bridge"}
 
             elif op_type == "get_element_by_number":
                 ref = params.get("ref", "")
@@ -651,7 +668,7 @@ async def execute_browser_step(
         if op_type in ("goto", "click", "fill", "snapshot", "scroll", "source", "eval",
                         "hover", "unhover", "focus", "select", "clear", "keyboard",
                         "press_key", "type_text",
-                        "navigate", "wait", "tab", "copy", "paste"):
+                        "navigate", "wait", "tab", "copy", "paste", "expand_branch"):
             if op_type == "goto":
                 core_params = {"url": value}
                 op_record["url"] = value
@@ -710,6 +727,12 @@ async def execute_browser_step(
                     core_params = {"mode": "time", "duration": int(float(value) * 1000)}
                 else:
                     core_params = {k: v for k, v in op.items() if k != "type"}
+            elif op_type == "expand_branch":
+                core_params = {
+                    "key": op.get("key", ""),
+                    "limit": op.get("limit", 30),
+                    "offset": op.get("offset", 0),
+                }
             else:
                 core_params = {k: v for k, v in op.items() if k != "type"}
 

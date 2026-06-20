@@ -133,7 +133,7 @@ def _build_registry_impl() -> None:
         "goto", "click", "fill", "snapshot", "scroll", "source", "eval",
         "get_element_by_number", "hover", "unhover", "focus", "select",
         "clear", "keyboard", "press_key", "type_text", "navigate", "wait",
-        "tab", "copy", "paste",
+        "tab", "copy", "paste", "expand_branch",
     ]
 
     _BROWSER_SCHEMAS: dict[str, dict] = {
@@ -198,6 +198,18 @@ def _build_registry_impl() -> None:
                         "description": "仅 interactive 模式有效。为 true 时只返回当前屏幕可见区域内的元素。",
                     },
                 },
+            },
+        },
+        "expand_branch": {
+            "description": "Expand a folded container from a progressive snapshot. Each folded container only shows a few representative items; use this to browse deeper. Returns paginated elements (limit=30 per page, use offset for next page).",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "key": {"type": "string", "description": "Container key from folded_containers list, e.g. 'c_117'"},
+                    "limit": {"type": "integer", "description": "Max items to return (default 30)."},
+                    "offset": {"type": "integer", "description": "Pagination offset for subsequent pages."},
+                },
+                "required": ["key"],
             },
         },
         "scroll": {

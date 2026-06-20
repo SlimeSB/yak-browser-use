@@ -1615,7 +1615,11 @@ class PlaywrightBridge:
 
         self._last_highlight_elements = list(elements)
         await self.ensure_highlights()
-        return {"elements": elements, "mode": "a11y"}
+        return {
+            "elements": elements, "mode": "a11y",
+            "url": self._page.url,
+            "title": await self._page.title(),
+        }
 
     async def _progressive_snapshot(self, query: str = "") -> dict:
         """CDP DOM walk + two-phase density-adaptive disclosure.
@@ -1645,24 +1649,43 @@ class PlaywrightBridge:
         # Phase 2: build LLM view
         view_elements, folded, branch_index = build_llm_view(state)
 
-        # Stamp via CDP backendNodeId
+        # Filter by query if provided (case-insensitive text/tag/role match)
+        if query:
+            q = query.lower()
+            view_elements = [
+                e for e in view_elements
+                if (q in e.get("text", "").lower()
+                    or q in e.get("tag", "").lower()
+                    or q in e.get("role", "").lower()
+                    or q in e.get("ref", "").lower())
+            ]
+            # Re-stamp kept refs after filter
+            kept_refs = {e["ref"] for e in view_elements}
+            for el in state.elements_all:
+                el["_in_view"] = el["ref"] in kept_refs
+            for f in folded:
+                f["sampled"] = sum(
+                    1 for ref in f.get("_sampled_refs", []) if ref in kept_refs
+                )
+
+        # Stamp via CDP backendNodeId (single session reused)
         if highlight_on:
-            for el in view_elements:
-                try:
-                    bid = int(el["backendNodeId"])
-                    cdp2 = await self._context.new_cdp_session(self._page)
+            cdp_stamp = await self._context.new_cdp_session(self._page)
+            try:
+                for el in view_elements:
                     try:
-                        result = await cdp2.send("DOM.resolveNode", {"backendNodeId": bid})
-                        await cdp2.send("Runtime.callFunctionOn", {
+                        bid = int(el["backendNodeId"])
+                        result = await cdp_stamp.send("DOM.resolveNode", {"backendNodeId": bid})
+                        await cdp_stamp.send("Runtime.callFunctionOn", {
                             "objectId": result["object"]["objectId"],
                             "functionDeclaration": (
                                 f'function() {{ this.setAttribute("data-ybu-ref", {_json.dumps(el["ref"])}); }}'
                             ),
                         })
-                    finally:
-                        await cdp2.detach()
-                except Exception:
-                    pass
+                    except Exception:
+                        pass
+            finally:
+                await cdp_stamp.detach()
 
         self._branch_index = branch_index
         self._last_highlight_elements = list(view_elements)
@@ -1672,12 +1695,16 @@ class PlaywrightBridge:
         # Strip private fields before returning to LLM
         public_elements = [{k: v for k, v in el.items() if not k.startswith("_")}
                            for el in view_elements]
+        public_folded = [{k: v for k, v in f.items() if not k.startswith("_")}
+                         for f in folded]
 
         return {
             "elements": public_elements,
-            "folded_containers": folded,
+            "folded_containers": public_folded,
             "branch_index": {k: len(v) for k, v in branch_index.items()},
             "mode": "progressive",
+            "url": self._page.url,
+            "title": await self._page.title(),
             "folded_note": (
                 "Folded containers hold dense interactive regions (product feeds, nav menus, lists). "
                 "Use expand_branch(key='c_N', limit=30, offset=0) to browse inside. "

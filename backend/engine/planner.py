@@ -31,6 +31,7 @@ Supported operation types and their required parameters:
 - click: {"type": "click", "value": "<css_selector>"} or {"type": "click", "selector": "<css_selector>"}
 - fill: {"type": "fill", "selector": "<css_selector>", "value": "<text>"}
 - snapshot: {"type": "snapshot", "mode": "a11y|progressive|interactive|simplified|full", "query": "<optional>", "in_viewport": true|false}
+- expand_branch: {"type": "expand_branch", "key": "c_N", "limit": 30, "offset": 0}
 - scroll: {"type": "scroll", "direction": "up|down", "amount": 300}
 - source: {"type": "source"}
 - eval: {"type": "eval", "code": "<javascript>"}

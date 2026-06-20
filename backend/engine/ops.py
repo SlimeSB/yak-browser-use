@@ -164,6 +164,18 @@ class ToolContext:
             self._fail_count += 1
             raise
 
+    async def expand_branch(self, key: str, limit: int = 30, offset: int = 0) -> dict:
+        """Expand a folded container from progressive snapshot (pure in-memory, no CDP)."""
+        self._check_domain()
+        self._check_failures()
+        try:
+            result = await self._bridge.expand_branch(key, limit=limit, offset=offset)
+            self._fail_count = 0
+            return result
+        except Exception:
+            self._fail_count += 1
+            raise
+
     async def screenshot(self) -> str:
         """Capture the current viewport as a base64-encoded PNG string."""
         self._check_domain()

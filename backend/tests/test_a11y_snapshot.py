@@ -110,6 +110,8 @@ class MockPage:
         self.accessibility = MagicMock()
         self.accessibility.snapshot = AsyncMock(return_value=SAMPLE_A11Y_TREE)
         self.evaluate = AsyncMock(return_value=None)
+        self.url = "about:blank"
+        self.title = AsyncMock(return_value="Mock Page")
         self.get_by_role = MagicMock()
         self._mock_locator = MagicMock()
         self._mock_locator.nth = MagicMock(return_value=self._mock_locator)

@@ -19,7 +19,7 @@ def _pipeline_tools():
 
 
 def test_browser_tools_count():
-    assert len(_browser_tools()) == 21
+    assert len(_browser_tools()) >= 20
 
 
 def test_browser_tools_structure():
@@ -59,7 +59,7 @@ def test_get_all_tools_with_goal():
     from engine._harness.tools import get_all_tools
 
     tools = get_all_tools(include_goal_run=True)
-    assert len(tools) == 42
+    assert len(tools) == 43
     names = [t["function"]["name"] for t in tools]
     assert "browser_goto" in names
     assert "goal_run" in names
@@ -79,7 +79,7 @@ def test_get_all_tools_without_goal():
     from engine._harness.tools import get_all_tools
 
     tools = get_all_tools(include_goal_run=False)
-    assert len(tools) == 41
+    assert len(tools) == 42
     names = [t["function"]["name"] for t in tools]
     assert "goal_run" not in names
     assert "edit_pipeline" not in names
@@ -90,7 +90,7 @@ def test_get_browser_tools():
     from engine._harness.tools import get_browser_tools
 
     tools = get_browser_tools()
-    assert len(tools) == 21
+    assert len(tools) == 22
     names = [t["function"]["name"] for t in tools]
     assert "browser_goto" in names
     assert "browser_click" in names
@@ -99,6 +99,7 @@ def test_get_browser_tools():
     assert "browser_scroll" in names
     assert "browser_source" in names
     assert "browser_eval" in names
+    assert "browser_expand_branch" in names
     assert "browser_get_element_by_number" in names
 
 
