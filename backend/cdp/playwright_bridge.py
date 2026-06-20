@@ -152,16 +152,62 @@ def _extract_text_from_children(node: dict) -> str:
 # progressive snapshot — CDP DOM walk + density-adaptive disclosure
 # ---------------------------------------------------------------------------
 
-CONTAINER_DEPTH_RANGE = (2, 4)
+CONTAINER_DEPTH_RANGE = (2, 30)       # (min, max) depth guard
 DENSITY_THRESHOLD = 50
 DENSITY_RATIO = 3.0
 SHALLOW_QUOTA = 30
-MAX_LLM_ELEMENTS = 80
+BODY_QUOTA = 5
+PAGE_LEVEL_DEPTH = 2
+MAX_LLM_ELEMENTS = 200
 DIALOG_ROLES = {"dialog", "alertdialog"}
+
+# Semantic container tags — always create containers for these
+_CONTAINER_TAGS = frozenset({
+    "ul", "ol", "table", "nav", "section", "article",
+    "header", "footer", "main", "aside", "form", "dl", "tbody",
+    "body", "head",
+})
+
+# Class keywords that suggest a structural container
+_CONTAINER_CLASS_PATTERNS = frozenset({
+    "list", "card", "grid", "panel", "container", "wrapper",
+    "group", "row", "col", "menu", "feed", "items", "content",
+    "category", "module", "layout",
+})
 
 _ALWAYS_FULL_TAGS = {"button", "input", "select", "textarea", "a"}
 _ALWAYS_FULL_ROLES = {"button", "link", "textbox", "combobox", "checkbox", "radio",
                       "switch", "menuitem", "option", "tab"}
+
+
+def _looks_like_container(node: dict) -> bool:
+    """Heuristic: does this node look like it contains interactive descendants?
+
+    Returns True if:
+      - The tag is a semantic container (ul/ol/table/nav/section etc.), OR
+      - The node has >= 2 element children (not text/comments), OR
+      - The class attribute contains a container keyword (list/card/grid etc.)
+    """
+    tag = node.get("nodeName", "").lower()
+    if tag in _CONTAINER_TAGS:
+        return True
+
+    element_children = 0
+    for child in node.get("children", []):
+        if child.get("nodeType") == 1:
+            element_children += 1
+    if element_children >= 2:
+        return True
+
+    attrs_list = node.get("attributes", [])
+    for i in range(0, len(attrs_list), 2):
+        if i + 1 < len(attrs_list) and attrs_list[i].lower() == "class":
+            cls = attrs_list[i + 1].lower()
+            for pattern in _CONTAINER_CLASS_PATTERNS:
+                if pattern in cls:
+                    return True
+            break
+    return False
 
 
 def _is_interactive_progressive(tag: str, attrs: dict[str, str]) -> bool:
@@ -222,7 +268,9 @@ class CollectState:
 
     def walk(self, node: dict, depth: int = 0) -> None:
         ckey = None
-        if CONTAINER_DEPTH_RANGE[0] <= depth <= CONTAINER_DEPTH_RANGE[1]:
+        if (node.get("nodeType") == 1
+                and CONTAINER_DEPTH_RANGE[0] <= depth <= CONTAINER_DEPTH_RANGE[1]
+                and _looks_like_container(node)):
             ckey = f"c_{self._counter}"
             self._counter += 1
             self._stack.append(ckey)
@@ -255,7 +303,7 @@ class CollectState:
                     "selector": _build_selector_from_attrs_progressive(tag, attrs),
                     "text": text,
                     "role": attrs.get("role", ""),
-                    "_container": current_cont,
+                    "_containers": list(self._stack),
                     "_whitelist": (tag in _ALWAYS_FULL_TAGS or
                                    attrs.get("role", "").lower() in _ALWAYS_FULL_ROLES),
                     "_in_view": False,
@@ -263,29 +311,43 @@ class CollectState:
                 self.elements_all.append(el)
                 self._ref_map[ref] = el
                 # Increment ALL ancestor containers, not just the nearest one
-                for ckey in self._stack:
-                    s = self.stats_map[ckey]
+                for ancestor_key in self._stack:
+                    s = self.stats_map[ancestor_key]
                     s["total_descendants"] += 1
                     if el["_whitelist"]:
-                        s["whitelist_count"] += 1
                         s["whitelist_count"] += 1
 
         for child in node.get("children", []):
             self.walk(child, depth + 1)
 
-        if ckey:
+        if ckey and self._stack:
             self._stack.pop()
 
 
 def _folded_summary_from_container(state: CollectState, ckey: str) -> str:
-    """Generate a human-readable summary for a folded container."""
+    """Generate a human-readable summary for a folded container.
+
+    Collects up to 5 distinct text samples from elements inside this container
+    so LLM can gauge whether to expand_branch.
+    """
     stats = state.stats_map[ckey]
+    snippet = stats.get("selector", "")
+    if len(snippet) > 40:
+        snippet = snippet[:37] + "..."
+
+    seen: set[str] = set()
+    samples: list[str] = []
     for el in state.elements_all:
-        if el.get("_container") == ckey:
-            text = el.get("text", "")
-            if text and len(text.strip()) > 1:
-                return f"{text[:20]} · 共 {stats['total_descendants']} 交互项"
-    return f"{stats['tag']} · 共 {stats['total_descendants']} 交互项"
+        if ckey in el.get("_containers", []):
+            text = el.get("text", "").strip()
+            if text and text not in seen:
+                seen.add(text)
+                samples.append(text[:15])
+                if len(samples) >= 5:
+                    break
+
+    joined = " · ".join(samples) if samples else stats["tag"]
+    return f"{joined}  [{stats['total_descendants']} total]"
 
 
 def build_llm_view(state: CollectState) -> tuple[list[dict], list[dict], dict[str, list[str]]]:
@@ -314,18 +376,20 @@ def build_llm_view(state: CollectState) -> tuple[list[dict], list[dict], dict[st
 
     for ckey in dense_containers:
         all_refs = [el["ref"] for el in state.elements_all
-                    if el.get("_container") == ckey]
+                    if ckey in el.get("_containers", [])]
         branch_index[ckey] = list(all_refs)
 
         critical = [r for r in all_refs if state._ref_map[r]["_whitelist"]]
         normal = [r for r in all_refs if r not in critical]
 
-        picked = list(critical[:SHALLOW_QUOTA])
-        remaining = SHALLOW_QUOTA - len(picked)
+        quota = BODY_QUOTA if state.stats_map[ckey]["depth"] <= PAGE_LEVEL_DEPTH else SHALLOW_QUOTA
+
+        picked = list(critical[:quota])
+        remaining = quota - len(picked)
         if remaining > 0 and normal:
             step = max(1, len(normal) // remaining)
             for i in range(0, len(normal), step):
-                if len(picked) >= SHALLOW_QUOTA:
+                if len(picked) >= quota:
                     break
                 picked.append(normal[i])
 
@@ -339,39 +403,72 @@ def build_llm_view(state: CollectState) -> tuple[list[dict], list[dict], dict[st
             "type": _classify_by_tag(state.stats_map[ckey]["tag"]),
             "total": state.stats_map[ckey]["total_descendants"],
             "sampled": len(picked),
+            "_sampled_refs": set(picked),
+            "expand_hint": f"[expand_branch(key='{ckey}') to browse all {state.stats_map[ckey]['total_descendants']} items]",
             "summary": _folded_summary_from_container(state, ckey),
         })
 
     # 3. Non-dense + containerless elements → full inclusion
     for el in state.elements_all:
-        ckey = el.get("_container")
-        if ckey is None or ckey not in dense_containers:
+        containers = el.get("_containers", [])
+        in_any_dense = any(c in dense_containers for c in containers) if containers else False
+        if not in_any_dense:
             el["_in_view"] = True
-        if ckey and ckey not in dense_containers:
-            if ckey not in branch_index:
-                branch_index[ckey] = []
-            if el["ref"] not in branch_index[ckey]:
-                branch_index[ckey].append(el["ref"])
+        if containers:
+            ckey = containers[-1]  # nearest container
+            if ckey not in dense_containers:
+                if ckey not in branch_index:
+                    branch_index[ckey] = []
+                if el["ref"] not in branch_index[ckey]:
+                    branch_index[ckey].append(el["ref"])
 
-    # 4. MAX_LLM_ELEMENTS hard cap
+    # 4. MAX_LLM_ELEMENTS hard cap — round-robin across containers
     view_elements = [el for el in state.elements_all if el["_in_view"]]
     if len(view_elements) > MAX_LLM_ELEMENTS:
-        crit = [e for e in view_elements if e["_whitelist"]]
-        crit = crit[:MAX_LLM_ELEMENTS]
-        rem = MAX_LLM_ELEMENTS - len(crit)
-        if rem > 0:
-            norm = [e for e in view_elements if not e["_whitelist"]]
-            view_elements = crit + norm[:rem]
-        else:
-            view_elements = crit
+        # Group elements by their deepest dense container
+        grouped: dict[str, list[dict]] = {}
+        for e in view_elements:
+            containers = e.get("_containers", [])
+            # Walk reversed to find the deepest dense container
+            key = "_root"
+            for c in reversed(containers):
+                if c in dense_containers:
+                    key = c
+                    break
+            grouped.setdefault(key, []).append(e)
+
+        # Sort each group: whitelist first, then walk order (pre-existing)
+        for g in grouped.values():
+            g.sort(key=lambda e: (0 if e["_whitelist"] else 1, state.elements_all.index(e)))
+
+        # Round-robin interleave across groups, largest containers first
+        group_order = sorted(grouped.keys(), key=lambda c: (
+            state.stats_map[c]["total_descendants"] if c != "_root" else 0
+        ), reverse=True)
+        iters = {c: iter(grouped[c]) for c in group_order}
+
+        result: list[dict] = []
+        while len(result) < MAX_LLM_ELEMENTS:
+            added = False
+            for c in list(iters.keys()):
+                try:
+                    result.append(next(iters[c]))
+                    added = True
+                    if len(result) >= MAX_LLM_ELEMENTS:
+                        break
+                except StopIteration:
+                    del iters[c]
+            if not added:
+                break
+
+        view_elements = result
         kept_refs = {e["ref"] for e in view_elements}
         for el in state.elements_all:
             if el["_in_view"] and el["ref"] not in kept_refs:
                 el["_in_view"] = False
         for f in folded:
-            ckey = f["key"]
             f["sampled"] = sum(
-                1 for e in view_elements if e.get("_container") == ckey
+                1 for ref in f.get("_sampled_refs", []) if ref in kept_refs
             )
 
     return view_elements, folded, branch_index
@@ -1581,6 +1678,11 @@ class PlaywrightBridge:
             "folded_containers": folded,
             "branch_index": {k: len(v) for k, v in branch_index.items()},
             "mode": "progressive",
+            "folded_note": (
+                "Folded containers hold dense interactive regions (product feeds, nav menus, lists). "
+                "Use expand_branch(key='c_N', limit=30, offset=0) to browse inside. "
+                "Each container sampled a few representative items — the rest are hidden to save context."
+            ),
         }
 
     async def expand_branch(self, key: str, limit: int = 30, offset: int = 0) -> dict:

@@ -186,14 +186,17 @@ def test_collect_state_marks_whitelist():
 def test_collect_state_container_stats():
     ref_map = {}
     state = CollectState(ref_map)
-    # depth=0 root (html), depth=1 body, depth=2 container div, depth=3 buttons
-    root = _make_cdp_node(node_name="html", backend_node_id=0, children=[
-        _make_cdp_node(node_name="body", backend_node_id=99, children=[
-            _make_cdp_node(node_name="div", backend_node_id=100,
-                           attributes=["class", "product-list"], children=[
-                               _make_cdp_node(node_name="button", backend_node_id=i)
-                               for i in range(1, 4)
-                           ]),
+    # CDP DOM: #document(depth=0) > html(1) > head(2) + body(2) > div(3) > buttons(4)
+    # body at depth=2 is in range and is semantic → container
+    root = _make_cdp_node(node_name="#document", backend_node_id=0, children=[
+        _make_cdp_node(node_name="html", backend_node_id=98, children=[
+            _make_cdp_node(node_name="body", backend_node_id=99, children=[
+                _make_cdp_node(node_name="div", backend_node_id=100,
+                               attributes=["class", "product-list"], children=[
+                                   _make_cdp_node(node_name="button", backend_node_id=i)
+                                   for i in range(1, 4)
+                               ]),
+            ]),
         ]),
     ])
     state.walk(root)
@@ -202,11 +205,10 @@ def test_collect_state_container_stats():
     assert len(div_container) == 1
     # div aggregates all 3 buttons (ancestor inheritance)
     assert div_container[0]["total_descendants"] == 3
-    # Each button is its own container + counts itself
-    button_containers = [s for s in stats.values() if s["tag"] == "button"]
-    assert len(button_containers) == 3
-    for bc in button_containers:
-        assert bc["total_descendants"] == 1  # self-count
+    # body at depth=2 also accumulates
+    body_stats = [s for s in stats.values() if s["tag"] == "body"]
+    assert len(body_stats) == 1
+    assert body_stats[0]["total_descendants"] == 3
 
 
 def test_collect_state_extracts_text():
@@ -263,7 +265,7 @@ def _make_element(ref: str, tag: str = "div", role: str = "button",
     return {
         "ref": ref, "tag": tag, "backendNodeId": ref.replace("@p_", ""),
         "selector": tag, "text": ref, "role": role,
-        "_container": container, "_whitelist": whitelist, "_in_view": in_view,
+        "_containers": [container] if container else [], "_whitelist": whitelist, "_in_view": in_view,
     }
 
 
@@ -427,7 +429,7 @@ def test_build_llm_view_shallow_quota_hard_cap():
 
     view, folded, bi = build_llm_view(state)
     assert folded[0]["sampled"] <= SHALLOW_QUOTA
-    sampled_in_view = [e for e in view if e.get("_container") == c1]
+    sampled_in_view = [e for e in view if c1 in e.get("_containers", [])]
     assert len(sampled_in_view) <= SHALLOW_QUOTA
 
 
@@ -447,7 +449,7 @@ def test_build_llm_view_folded_sampled_sync():
         ref_map[el["ref"]] = el
 
     view, folded, bi = build_llm_view(state)
-    actual_in_container = sum(1 for e in view if e.get("_container") == c1)
+    actual_in_container = sum(1 for e in view if c1 in e.get("_containers", []))
     assert folded[0]["sampled"] == actual_in_container
     assert actual_in_container <= SHALLOW_QUOTA  # dense + sampled
 
