@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import asyncio
-from typing import Any
+from typing import Any, TYPE_CHECKING
 
 from cdp.playwright_bridge import PlaywrightBridge
-from engine.state import RunContext
 from utils.logging import get_logger
+
+if TYPE_CHECKING:
+    from engine.state import RunContext
 
 logger = get_logger(__name__)
 

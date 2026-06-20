@@ -14,10 +14,6 @@ from fastapi.responses import JSONResponse
 
 from api.errors import APIError, ServerError
 from api.state import engine_state
-from tools.edit_pipeline import (
-    delete_checkpoint, get_checkpoint_path,
-    get_edit_status, set_edit_status, _edit_pipelines,
-)
 from utils.logging import get_logger
 
 logger = get_logger(__name__)
@@ -885,6 +881,11 @@ def register_all_routes(app: FastAPI) -> None:
             return JSONResponse({"status": "error", "error": "edit_id is required"}, status_code=400)
 
         try:
+            from tools.edit_pipeline import (
+                delete_checkpoint, get_checkpoint_path,
+                get_edit_status, set_edit_status,
+                get_edit_pipeline_name,
+            )
             status = get_edit_status(edit_id)
             if status == "confirmed":
                 return JSONResponse({"status": "already_confirmed"})
@@ -898,7 +899,7 @@ def register_all_routes(app: FastAPI) -> None:
             set_edit_status(edit_id, "confirmed")
 
             # Sync the confirmed preset to workspace so refreshPipeline() finds it
-            pipeline_name = _edit_pipelines.get(edit_id)
+            pipeline_name = get_edit_pipeline_name(edit_id)
             if pipeline_name:
                 base = Path(__file__).resolve().parent.parent.parent
                 preset_path = base / "userdata" / "presets" / f"{pipeline_name}.pipeline.yaml"
@@ -930,6 +931,11 @@ def register_all_routes(app: FastAPI) -> None:
             return JSONResponse({"status": "error", "error": "edit_id is required"}, status_code=400)
 
         try:
+            from tools.edit_pipeline import (
+                delete_checkpoint, get_checkpoint_path,
+                get_edit_status, set_edit_status,
+                get_edit_pipeline_name,
+            )
             status = get_edit_status(edit_id)
             if status == "confirmed":
                 return JSONResponse({"status": "error", "error": "already_confirmed"}, status_code=409)
@@ -954,7 +960,7 @@ def register_all_routes(app: FastAPI) -> None:
             preset_path.write_text(original, encoding="utf-8")
 
             # Sync the reverted preset to workspace
-            pipeline_name = _edit_pipelines.get(edit_id)
+            pipeline_name = get_edit_pipeline_name(edit_id)
             if pipeline_name:
                 base = Path(__file__).resolve().parent.parent.parent
                 ws_dir = base / "userdata" / "workspaces" / pipeline_name

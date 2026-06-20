@@ -40,6 +40,12 @@ def build_graph(steps: list[StepDef]) -> dict[str, Any]:
     name_to_key: dict[str, str] = {}
     all_keys: set[str] = set()
     for step in steps:
+        if step.name in name_to_key:
+            logger.warning(
+                "Step '%s' has duplicate name (key=%s, previous_key=%s) — "
+                "dependencies on the first occurrence may break",
+                step.name, step.key, name_to_key[step.name],
+            )
         name_to_key[step.name] = step.key
         all_keys.add(step.key)
 

@@ -200,8 +200,7 @@ async def _run_swimlane_agent(
         "failed" if agent reported failure or budget exhausted,
         None if the swimlane should be skipped (no llm_call).
     """
-    from engine._harness.conversation_loop import run_preset_loop, ConversationResult
-    from engine._harness.iteration_budget import IterationBudget
+    from engine._harness import run_preset_loop, ConversationResult, IterationBudget
 
     if llm_call is None:
         return None

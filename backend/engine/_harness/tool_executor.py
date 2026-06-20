@@ -17,10 +17,6 @@ from utils.logging import get_logger
 
 from engine._harness.tool_guardrails import ToolCallGuardrailState
 from engine._harness.iteration_budget import IterationBudget
-from engine.scratchpad import get as get_scratchpad
-from engine.scratchpad import store as store_scratchpad
-from engine.scratchpad import store_raw_html as scratchpad_store_raw_html
-from engine.scratchpad import sync_element_map as scratchpad_sync_element_map
 from prompts._loader import load_prompt
 
 logger = get_logger(__name__)
@@ -577,6 +573,8 @@ execute_tool_calls = execute_tool_calls_sequential
 
 
 async def _auto_refresh_highlights(cdp_helpers: object) -> None:
+    """Refresh DOM highlights periodically — background guard."""
+    from engine.scratchpad import sync_element_map as scratchpad_sync_element_map
     if not hasattr(cdp_helpers, "add_dom_highlights"):
         return
     try:
@@ -597,6 +595,9 @@ def _apply_heavy_data_filter(
     fn_args: dict,
     result_dict: dict,
 ) -> None:
+    from engine.scratchpad import get as get_scratchpad
+    from engine.scratchpad import store as store_scratchpad
+    from engine.scratchpad import store_raw_html as scratchpad_store_raw_html
     """Extract heavy data from browser_snapshot/browser_source results.
 
     Writes large payloads (HTML, elements, screenshots) to scratchpad and
@@ -698,6 +699,7 @@ def _normalize_ref(ref: str) -> str:
 
 
 def _try_scratchpad_element_lookup(fn_args: dict) -> dict | None:
+    from engine.scratchpad import get as get_scratchpad
     """Try to resolve browser_get_element_by_number from scratchpad cache.
 
     Returns a result dict if found, None to fall through to CDP.
@@ -744,6 +746,7 @@ def _try_scratchpad_element_lookup(fn_args: dict) -> dict | None:
 
 
 def _try_scratchpad_source_read() -> dict | None:
+    from engine.scratchpad import get as get_scratchpad
     """Try to read browser_source from scratchpad cache.
 
     Returns a result dict with cached HTML length, or None to fall through to CDP.

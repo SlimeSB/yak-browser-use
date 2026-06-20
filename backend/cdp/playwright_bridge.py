@@ -289,7 +289,7 @@ class PlaywrightBridge:
     @staticmethod
     def _schedule(coro):
         task = asyncio.ensure_future(coro)
-        task.add_done_callback(lambda t: t.exception() and logger.debug("_schedule: background task failed", exc_info=t.exception()))
+        task.add_done_callback(lambda t: t.exception() and logger.warning("_schedule: background task failed", exc_info=t.exception()))
         return task
 
     async def start(self) -> None:
@@ -358,7 +358,7 @@ class PlaywrightBridge:
         """Auto-inject highlight JS and page ID when a new tab/page opens."""
         page.on("load", lambda pg=page: self._schedule(self._on_page_load(pg)))
         page.on("framenavigated", lambda f, pg=page: self._schedule(self._on_frame_navigated(f, pg)))
-        page.on("close", lambda: self._schedule(self._on_page_closed(page)))
+        page.on("close", lambda pg=page: self._schedule(self._on_page_closed(pg)))
         try:
             page_id = str(uuid.uuid4())[:8]
             await page.evaluate(f"window.__ybu_page_id = '{page_id}';")

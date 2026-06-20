@@ -67,8 +67,7 @@ async def start_chat_agent(
     Returns:
         Dict with response, status, messages, budget.
     """
-    from engine._harness.conversation_loop import run_conversation_loop
-    from engine._harness.tools import get_all_tools
+    from engine._harness import run_conversation_loop, get_all_tools
     from prompts._loader import build_system_prompt
 
     if messages is None:

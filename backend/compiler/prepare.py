@@ -15,16 +15,11 @@ def prepare_steps(content: str, pipeline_path: Path) -> tuple[Any, list[dict]]:
 
     Returns (parsed_frontmatter_plus, steps_data).
     """
-    from compiler.context import resolve_context
     from compiler.graph import build_graph, get_execution_order, validate_file_refs
     from compiler.parser import parse_pipeline
     from compiler.resolver import resolve
 
     parsed = parse_pipeline(content)
-    context = resolve_context(parsed.frontmatter, pipeline_path)
-    if context:
-        for step in parsed.steps:
-            step.system_prompt = context
 
     dag = build_graph(parsed.steps)
     validate_file_refs(parsed.steps)

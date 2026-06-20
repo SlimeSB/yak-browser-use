@@ -312,7 +312,5 @@ class Service:
                     pass
 
         # Register edit for confirm/revert
-        from tools.edit_pipeline import _checkpoints, _processed_edits, _edit_status
-        _checkpoints[edit_id] = checkpoint_path
-        _processed_edits.add(edit_id)
-        _edit_status[edit_id] = "pending"
+        from tools.edit_pipeline import register_edit
+        register_edit(edit_id, checkpoint_path, pipeline_name, status="pending")

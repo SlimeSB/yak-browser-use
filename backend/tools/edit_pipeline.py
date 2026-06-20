@@ -164,3 +164,26 @@ def delete_checkpoint(edit_id: str) -> bool:
         os.remove(str(cp))
         return True
     return False
+
+
+def get_edit_pipeline_name(edit_id: str) -> str | None:
+    """Get the pipeline name associated with an edit_id, or None."""
+    return _edit_pipelines.get(edit_id)
+
+
+def register_edit(
+    edit_id: str,
+    checkpoint_path: Path,
+    pipeline_name: str,
+    status: str = "pending",
+) -> None:
+    """Register an edit in the shared edit tracking state.
+
+    Sets up checkpoint path, marks edit as processed, and sets its status.
+    Replaces direct access to _checkpoints / _processed_edits / _edit_status.
+    """
+    _checkpoints[edit_id] = checkpoint_path
+    _processed_edits.add(edit_id)
+    _edit_status[edit_id] = status
+    if pipeline_name:
+        _edit_pipelines[edit_id] = pipeline_name

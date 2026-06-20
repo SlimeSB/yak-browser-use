@@ -11,6 +11,7 @@ from .launcher import (
 )
 from .daemon import CDPDaemon, ensure_daemon
 from .playwright_bridge import PlaywrightBridge
+from .helpers import CDPHelpers
 from .profiles import (
     list_user_data_dirs,
     list_chrome_profiles,
@@ -29,6 +30,7 @@ __all__ = [
     "CDPDaemon",
     "ensure_daemon",
     "PlaywrightBridge",
+    "CDPHelpers",
     "list_user_data_dirs",
     "list_chrome_profiles",
     "get_chrome_user_data_dir",

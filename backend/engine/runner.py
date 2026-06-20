@@ -89,9 +89,7 @@ async def _ensure_browser_connected() -> object:
 
     Returns a CDPHelpers instance for browser operations.
     """
-    from cdp.playwright_bridge import PlaywrightBridge
-    from cdp.helpers import CDPHelpers
-    from cdp.discover import discover_ws_url
+    from cdp import PlaywrightBridge, CDPHelpers, discover_ws_url
 
     try:
         ws_url = await discover_ws_url()
