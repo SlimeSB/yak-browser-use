@@ -39,7 +39,7 @@ Two modes:
 - **Chat Mode** — natural language conversational control, Agent browses while chatting
 - **Preset Mode** — replay recorded pipelines, Agent executes pre-defined steps autonomously
 
-Built on [Playwright](https://playwright.dev/) `connect_over_cdp()` and the [browser-use](https://github.com/browser-use/browser-use) LLM toolchain.
+Built on [Playwright](https://playwright.dev/) `connect_over_cdp()` and an OpenAI-compatible LLM client.
 
 ---
 
@@ -216,8 +216,8 @@ yak-browser-use/
 │   │   └── turn_context.py        # Per-turn context (retry counters, etc.)
 │   │
 │   └── _lifecycle/           # Pipeline lifecycle management
-│       ├── guardian.py       # Approval gate
-│       └── tool_runner.py    # Tool lifecycle
+│       ├── guardian.py       # Approval gate + circuit breaker
+│       └── compensation.py   # Rollback / undo support
 │
 ├── cdp/                      # Chrome DevTools Protocol layer
 │   ├── playwright_bridge.py  # Playwright unified driver
@@ -227,17 +227,20 @@ yak-browser-use/
 │   └── launcher.py           # Chrome launch
 │
 ├── compiler/                 # Pipeline compilation
+│   ├── schema.py             # YAML model (PipelineYaml / StepYaml)
 │   ├── parser.py             # YAML parser
 │   ├── graph.py              # DAG builder
 │   └── resolver.py           # Dependency resolver
 │
-├── tools/                    # Custom tool scripts
+├── tools/                    # Tool registry + implementations
+│   ├── registry.py           # Tool registration & schema
+│   ├── captcha.py            # CAPTCHA recognition (ddddocr)
 │   ├── file_read.py          # File reading tool
 │   ├── file_write.py         # File writing tool
 │   ├── format_convert.py     # Format conversion (CSV/JSON/Excel)
 │   ├── extract.py / data.py  # Data processing tools
-│   ├── schemas.py            # Tool schema registry
-│   └── edit_pipeline.py      # Pipeline editing tools
+│   ├── todo.py / todo_store.py  # Todo list management
+│   └── record_step.py        # Pipeline step recording
 │
 ├── prompts/                  # Prompt templates (Markdown)
 │   ├── chat/system.md        # Chat mode system prompt

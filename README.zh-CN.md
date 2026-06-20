@@ -40,7 +40,7 @@
 - **Chat 模式** — 自然语言对话式操控，Agent 边聊边操作浏览器
 - **Preset 模式** — 预设 Pipeline 回放，Agent 按编排步骤自动执行
 
-技术底座基于 [Playwright](https://playwright.dev/) `connect_over_cdp()` 和 [browser-use](https://github.com/browser-use/browser-use) 的 LLM 工具链。
+技术底座基于 [Playwright](https://playwright.dev/) `connect_over_cdp()` 和 OpenAI-compatible LLM 客户端。
 
 ---
 
@@ -217,8 +217,8 @@ yak-browser-use/
 │   │   └── turn_context.py        # 每轮次上下文管理
 │   │
 │   └── _lifecycle/           # Pipeline 生命周期
-│       ├── guardian.py       # 审核门控
-│       └── tool_runner.py    # 工具生命周期
+│       ├── guardian.py       # 审核门控 + 熔断器
+│       └── compensation.py   # 回滚/撤销支持
 │
 ├── cdp/                      # Chrome DevTools Protocol 层
 │   ├── playwright_bridge.py  # Playwright 统一驱动
@@ -228,17 +228,20 @@ yak-browser-use/
 │   └── launcher.py           # Chrome 启动
 │
 ├── compiler/                 # Pipeline 编译
+│   ├── schema.py             # YAML 模型（PipelineYaml / StepYaml）
 │   ├── parser.py             # YAML 解析
 │   ├── graph.py              # DAG 构建
 │   └── resolver.py           # 依赖解析
 │
-├── tools/                    # 自定义工具脚本
+├── tools/                    # 工具注册 + 实现
+│   ├── registry.py           # 工具注册中心
+│   ├── captcha.py            # 验证码识别（ddddocr）
 │   ├── file_read.py          # 文件读取工具
 │   ├── file_write.py         # 文件写入工具
 │   ├── format_convert.py     # 格式转换（CSV/JSON/Excel）
 │   ├── extract.py / data.py  # 数据处理工具
-│   ├── schemas.py            # 工具 schema 注册
-│   └── edit_pipeline.py      # Pipeline 编辑
+│   ├── todo.py / todo_store.py  # 待办事项管理
+│   └── record_step.py        # Pipeline 步骤录制
 │
 ├── prompts/                  # Prompt 模板（Markdown）
 │   ├── chat/system.md        # Chat 模式系统提示
