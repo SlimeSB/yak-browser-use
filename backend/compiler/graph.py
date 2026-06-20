@@ -87,7 +87,11 @@ def build_graph(steps: list[StepDef]) -> dict[str, Any]:
         })
 
     if nodes:
-        start_node = nodes[0]["key"]
+        depended_nodes = {dst for _, dst in edges}
+        start_node = next(
+            (n["key"] for n in nodes if n["key"] not in depended_nodes),
+            nodes[0]["key"],
+        )
 
     return {
         "nodes": nodes,

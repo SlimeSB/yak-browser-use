@@ -7,6 +7,7 @@ and provides merge logic for incorporating extra operations.
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import uuid
 from datetime import datetime, timezone
@@ -20,6 +21,16 @@ LEARN_DIR = Path("logs") / "learn"
 
 
 # ── Selector matching ──
+
+
+def _extract_identifier(op: dict) -> str:
+    """Extract the best identifier from an op regardless of field name.
+
+    Prefers ``selector`` over ``value``; both fields represent the same
+    semantic concept (a CSS selector, URL, label text, etc.) and may be
+    used interchangeably between agent and original ops.
+    """
+    return op.get("selector") or op.get("value") or ""
 
 
 def _selector_matches(agent_sel: str, orig_sel: str) -> bool:
@@ -65,11 +76,10 @@ def diff_ops(agent_ops: list[dict], original_ops: list[dict]) -> tuple[list[dict
     for idx, agent_op in enumerate(agent_ops):
         agent_op["_index"] = idx
         agent_type = agent_op.get("type", "")
-        agent_value = agent_op.get("value", "")
+        agent_id = _extract_identifier(agent_op)
         agent_selectors = agent_op.get("selectors", [])
-        if not agent_selectors and agent_value:
-            agent_selectors = [agent_value]
-        agent_selector_val = agent_op.get("selector", agent_value)
+        if not agent_selectors and agent_id:
+            agent_selectors = [agent_id]
 
         matched = False
         for j, orig_op in enumerate(original_ops):
@@ -78,18 +88,17 @@ def diff_ops(agent_ops: list[dict], original_ops: list[dict]) -> tuple[list[dict
             if orig_op.get("type", "") != agent_type:
                 continue
 
-            orig_value = orig_op.get("value", "")
-            orig_selector = orig_op.get("selector", orig_value)
+            orig_id = _extract_identifier(orig_op)
 
-            if agent_selector_val and orig_selector:
-                if _selector_matches(agent_selector_val, orig_selector):
+            if agent_id and orig_id:
+                if _selector_matches(agent_id, orig_id):
                     matched = True
-            elif agent_selectors and orig_selector:
-                if _selector_lists_match(agent_selectors, [orig_selector]):
+            elif agent_selectors and orig_id:
+                if _selector_lists_match(agent_selectors, [orig_id]):
                     matched = True
-            elif agent_value and orig_value and agent_value == orig_value:
+            elif agent_id and not orig_id and agent_id == str(orig_op.get("value", "")):
                 matched = True
-            elif not orig_value and not agent_value and agent_type == orig_op.get("type"):
+            elif not orig_id and not agent_id and agent_type == orig_op.get("type"):
                 matched = True
 
             if matched:
@@ -129,18 +138,31 @@ def filter_rejected(pipeline_name: str, ops: list[dict]) -> list[dict]:
         logger.warning("Failed to read rejected.json for '%s'", pipeline_name)
         return ops
 
-    blocked_keys: set[tuple[str, str]] = set()
+    blocked_keys: set[tuple[str, str, str]] = set()
     for item in blocked:
-        key = (item.get("selector", ""), item.get("type", ""))
-        blocked_keys.add(key)
+        selector = item.get("selector", "")
+        op_type = item.get("type", "")
+        if selector:
+            blocked_keys.add((selector, op_type, ""))
+        else:
+            op_hash = item.get("op_hash", "")
+            blocked_keys.add((op_type, "", op_hash))
 
     filtered: list[dict] = []
     for op in ops:
-        op_key = (op.get("value", op.get("selector", "")), op.get("type", ""))
+        sel = op.get("value") or op.get("selector") or ""
+        op_type = op.get("type", "")
+        if sel:
+            op_key = (sel, op_type, "")
+        else:
+            op_hash = hashlib.md5(
+                json.dumps(op, sort_keys=True).encode()
+            ).hexdigest()[:12]
+            op_key = (op_type, "", op_hash)
         if op_key not in blocked_keys:
             filtered.append(op)
         else:
-            logger.debug("Filtered rejected op: type=%s selector=%s", op.get("type"), op_key[0])
+            logger.debug("Filtered rejected op: type=%s selector=%s", op_type, sel)
 
     return filtered
 
@@ -177,13 +199,17 @@ def add_to_rejected(pipeline_name: str, ops: list[dict], rejected_by: str) -> No
         if not reason or not isinstance(reason, str) or not reason.strip():
             reason = "rejected"
 
-        entry = {
+        entry: dict = {
             "selector": selector,
             "type": op_type,
             "rejected_by": rejected_by,
             "reason": reason,
             "rejected_at": now,
         }
+        if not selector:
+            entry["op_hash"] = hashlib.md5(
+                json.dumps(op, sort_keys=True).encode()
+            ).hexdigest()[:12]
         existing["blocked"].append(entry)
 
     rejected_path.write_text(
@@ -240,6 +266,14 @@ def save_suggestions(
     if interrupt_reason:
         entry["interrupt_reason"] = interrupt_reason
 
+    # Dedup: skip if identical entry already exists
+    for existing_entry in existing:
+        if (existing_entry.get("status") == status
+                and existing_entry.get("extra_ops") == ops
+                and existing_entry.get("reason") == reason):
+            logger.debug("Skipping duplicate suggestion for '%s'", pipeline_name)
+            return existing_entry["id"]
+
     existing.append(entry)
     sug_path.write_text(
         json.dumps(existing, ensure_ascii=False, indent=2),
@@ -252,7 +286,7 @@ def save_suggestions(
 # ── Merge logic ──
 
 
-def merge_extra_ops(matched: list[dict], extra: list[dict], original: list[dict]) -> list[dict]:
+def merge_extra_ops(matched: list[dict], extra: list[dict]) -> list[dict]:
     """Insert extra_ops into matched_ops preserving the agent execution order.
 
     Uses the '_index' field (added by diff_ops) to interleave extras at the
@@ -261,7 +295,6 @@ def merge_extra_ops(matched: list[dict], extra: list[dict], original: list[dict]
     Args:
         matched: Ops that matched the original definition.
         extra: New ops discovered during execution.
-        original: The original ops from pipeline.yaml (used as base structure).
 
     Returns:
         Combined list of ops sorted by execution order.

@@ -33,5 +33,11 @@ async def file_write(
         p.parent.mkdir(parents=True, exist_ok=True)
         p.write_text(content, encoding=encoding)
         return {"ok": True, "result": f"已写入 {len(content)} 字符到 {path}"}
+    except PermissionError:
+        return {"ok": False, "error": f"权限不足，无法写入文件: {path}"}
+    except OSError as e:
+        return {"ok": False, "error": f"文件写入失败（操作系统错误）: {e}"}
+    except UnicodeEncodeError as e:
+        return {"ok": False, "error": f"编码错误（{encoding}）: {e}"}
     except Exception as e:
         return {"ok": False, "error": f"写入失败 — {e}"}

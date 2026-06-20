@@ -188,11 +188,13 @@ def _model_action_to_op(action) -> dict | None:
     return None
 
 
-def _build_click_op(params: dict, action) -> dict:
+def _build_click_op(params: dict, action) -> dict | None:
     el = _get_interacted_element(action)
     selectors = extract_selectors(el)
+    if not selectors:
+        return None
     bounds = _get_bounds(el)
-    op: dict = {"type": "click", "value": selectors[0] if selectors else "", "selectors": selectors}
+    op: dict = {"type": "click", "value": selectors[0], "selectors": selectors}
     if bounds:
         op["bounds"] = bounds
     return op

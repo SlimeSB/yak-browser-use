@@ -414,6 +414,4 @@ def resume_conversation(
     if interrupt_state.budget:
         budget = IterationBudget.from_dict(interrupt_state.budget)
 
-    build_turn_context()
-
     return messages, budget, interrupt_state.error_info

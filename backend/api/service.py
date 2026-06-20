@@ -115,13 +115,11 @@ class Service:
 
             if self._active_session is None:
                 self.create_session(pipeline_name)
-                created = self._active_session
-                if created:
-                    logger.info("Session created: %s", created.session_id)
 
             session = self._active_session
             if session is None:
                 return {"ok": False, "error": "No active session"}
+            logger.info("Session created: %s", session.session_id)
 
             logger.info("Chat [%s] user: %s", session.session_id, message[:120])
 

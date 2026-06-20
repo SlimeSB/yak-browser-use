@@ -119,14 +119,17 @@ async def filter_data(
             if bool(compiled.search(str(r.get(field, "")))) != exclude
         ]
 
+    filter_errors: list[str] = []
+
     if min_val is not None:
         try:
             filtered = [
                 r for r in filtered
                 if float(r.get(field or "price", 0)) >= min_val
             ]
-        except (ValueError, TypeError):
-            pass
+        except (ValueError, TypeError) as exc:
+            logger.warning("min filter skipped: %s", exc)
+            filter_errors.append(f"min filter skipped: {exc}")
 
     if max_val is not None:
         try:
@@ -134,8 +137,9 @@ async def filter_data(
                 r for r in filtered
                 if float(r.get(field or "price", 0)) <= max_val
             ]
-        except (ValueError, TypeError):
-            pass
+        except (ValueError, TypeError) as exc:
+            logger.warning("max filter skipped: %s", exc)
+            filter_errors.append(f"max filter skipped: {exc}")
 
     if key_field and key_values:
         filtered = [
@@ -145,6 +149,8 @@ async def filter_data(
 
     out_path = _save_records(filtered, output_dir, "filtered.json")
     print(f"filter_data: {len(all_records)} -> {len(filtered)} records written to {out_path}")
+    if filter_errors:
+        return {"filter_errors": filter_errors}
 
 
 # ── sort_data ──

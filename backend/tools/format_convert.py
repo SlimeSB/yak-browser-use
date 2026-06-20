@@ -87,10 +87,21 @@ def _xlsx_to_csv(src: Path, tgt: Path) -> None:
     try:
         ws = wb.active
         tgt.parent.mkdir(parents=True, exist_ok=True)
-        with open(tgt, "w", encoding="utf-8-sig", newline="") as f:
-            writer = csv.writer(f)
-            for row in ws.iter_rows(values_only=True):
-                writer.writerow(row)
+        fd, tmp_name = tempfile.mkstemp(
+            suffix=".csv", prefix=f"_xlsx_to_csv_{tgt.stem}_", dir=str(tgt.parent)
+        )
+        os.close(fd)
+        tmp = Path(tmp_name)
+        try:
+            with open(tmp, "w", encoding="utf-8-sig", newline="") as f:
+                writer = csv.writer(f)
+                for row in ws.iter_rows(values_only=True):
+                    writer.writerow(row)
+            os.replace(str(tmp), str(tgt))
+        except BaseException:
+            if tmp.exists():
+                tmp.unlink()
+            raise
     finally:
         wb.close()
 
@@ -116,7 +127,18 @@ def _csv_to_xlsx(src: Path, tgt: Path) -> None:
         rows = _read_csv(src)
         for row in rows:
             ws.append(row)
-        wb.save(tgt)
+        fd, tmp_name = tempfile.mkstemp(
+            suffix=".xlsx", prefix=f"_csv_to_xlsx_{tgt.stem}_", dir=str(tgt.parent)
+        )
+        os.close(fd)
+        tmp = Path(tmp_name)
+        try:
+            wb.save(str(tmp))
+            os.replace(str(tmp), str(tgt))
+        except BaseException:
+            if tmp.exists():
+                tmp.unlink()
+            raise
     finally:
         wb.close()
 

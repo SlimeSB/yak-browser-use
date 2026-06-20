@@ -450,7 +450,7 @@ def register_all_routes(app: FastAPI) -> None:
 
             await _inject_initial_highlights()
 
-            return JSONResponse({"connected": True, "ws_url": str(actual_ws)[:80]})
+            return JSONResponse({"connected": True, "ws_url": actual_ws[:80]})
         except Exception as exc:
             logger.exception("Chrome restart failed")
             raise ServerError(str(exc))

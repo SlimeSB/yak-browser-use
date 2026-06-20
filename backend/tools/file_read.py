@@ -10,7 +10,9 @@ from tools._path_utils import validate_path
 _BINARY_EXTENSIONS = frozenset({
     ".xlsx", ".xls", ".png", ".jpg", ".jpeg", ".gif", ".bmp",
     ".pdf", ".zip", ".tar", ".gz", ".exe", ".dll", ".so",
-    ".mp3", ".mp4", ".avi", ".mov", ".webp", ".ico",
+    ".mp3", ".mp4", ".avi", ".mov", ".webp", ".ico", ".svg",
+    ".doc", ".docx", ".ppt", ".pptx", ".xlsm", ".7z", ".rar",
+    ".wav", ".flac", ".mkv", ".woff", ".woff2", ".ttf", ".eot",
 })
 
 

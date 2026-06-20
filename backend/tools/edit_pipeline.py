@@ -24,6 +24,18 @@ _processed_edits: set[str] = set()
 _edit_status: dict[str, str] = {}  # 'pending' | 'confirmed' | 'reverted'
 _edit_pipelines: dict[str, str] = {}  # edit_id -> pipeline_name
 
+MAX_DICT_SIZE = 1000
+
+
+def _trim_oldest() -> None:
+    """Remove the oldest edit from tracking dicts when they exceed MAX_DICT_SIZE."""
+    while len(_checkpoints) > MAX_DICT_SIZE:
+        oldest = next(iter(_checkpoints))
+        _checkpoints.pop(oldest, None)
+        _processed_edits.discard(oldest)
+        _edit_status.pop(oldest, None)
+        _edit_pipelines.pop(oldest, None)
+
 
 async def edit_pipeline(
     pipeline_name: str,
@@ -71,6 +83,7 @@ async def edit_pipeline(
         _processed_edits.add(edit_id)
         _edit_status[edit_id] = "pending"
         _edit_pipelines[edit_id] = safe_name
+        _trim_oldest()
 
     preset_path.write_text(content, encoding="utf-8")
     logger.debug("Pipeline %s updated, edit_id=%s", safe_name, edit_id)
@@ -187,3 +200,4 @@ def register_edit(
     _edit_status[edit_id] = status
     if pipeline_name:
         _edit_pipelines[edit_id] = pipeline_name
+    _trim_oldest()

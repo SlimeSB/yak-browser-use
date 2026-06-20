@@ -25,6 +25,7 @@ logger = get_logger(__name__)
 _user_chrome_process: Any = None
 _playwright_instance: Any = None
 _playwright_browser: Any = None
+_launched_pids: set[int] = set()
 
 # Base directory for isolated profiles
 _ISO_PROFILES_DIR = Path.home() / ".yak-browser-use" / "profiles"
@@ -94,6 +95,14 @@ async def launch_user_chrome(profile_name: str | None = None) -> str | None:
     """
     global _user_chrome_process
 
+    # Terminate any previously launched user Chrome process
+    if _user_chrome_process is not None:
+        try:
+            _user_chrome_process.terminate()
+            await _user_chrome_process.wait()
+        except Exception:
+            pass
+
     port = 9222
 
     # Check if a browser is already listening on port 9222
@@ -131,12 +140,17 @@ async def launch_user_chrome(profile_name: str | None = None) -> str | None:
     except Exception as e:
         raise RuntimeError(f"Failed to launch Chrome: {e}") from e
 
+    if _user_chrome_process.pid:
+        _launched_pids.add(_user_chrome_process.pid)
+
     for i in range(30):
         logger.debug("launch_user_chrome: retry %d/30", i + 1)
 
         returncode = _user_chrome_process.returncode
         if returncode is not None:
             logger.info("Chrome exited early (code=%d)", returncode)
+            if _user_chrome_process.pid:
+                _launched_pids.discard(_user_chrome_process.pid)
             _user_chrome_process = None
             return None
 
@@ -149,7 +163,14 @@ async def launch_user_chrome(profile_name: str | None = None) -> str | None:
         await asyncio.sleep(0.5)
 
     logger.warning("launch_user_chrome: timed out waiting for debug port")
-    _user_chrome_process = None
+    if _user_chrome_process is not None:
+        try:
+            _user_chrome_process.terminate()
+        except Exception:
+            pass
+        if _user_chrome_process.pid:
+            _launched_pids.discard(_user_chrome_process.pid)
+        _user_chrome_process = None
     return None
 
 
@@ -169,16 +190,44 @@ async def launch_isolated_chrome(
 
     exe = _find_chrome_exe()
 
-    # Pick a random available port
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        s.bind(("127.0.0.1", 0))
-        port = s.getsockname()[1]
+    # Pick a random available port and keep it bound until browser starts
+    port_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    try:
+        port_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        port_sock.bind(("127.0.0.1", 0))
+        port = port_sock.getsockname()[1]
+    except Exception:
+        port_sock.close()
+        raise
 
     if profile_name:
         user_data_dir = str(get_isolated_profile_dir(profile_name))
         os.makedirs(user_data_dir, exist_ok=True)
     else:
         user_data_dir = tempfile.mkdtemp(prefix="ybu_chrome_")
+
+    # Terminate any previously launched process before overwriting
+    if _user_chrome_process is not None:
+        try:
+            if _user_chrome_process.pid:
+                _launched_pids.discard(_user_chrome_process.pid)
+            _user_chrome_process.terminate()
+            await _user_chrome_process.wait()
+        except Exception:
+            pass
+        _user_chrome_process = None
+    if _playwright_browser is not None:
+        try:
+            await _playwright_browser.close()
+        except Exception:
+            pass
+        _playwright_browser = None
+    if _playwright_instance is not None:
+        try:
+            await _playwright_instance.stop()
+        except Exception:
+            pass
+        _playwright_instance = None
 
     if exe and "msedge" in exe.lower():
         logger.info("Launching Edge via subprocess with profile: %s", user_data_dir)
@@ -195,7 +244,10 @@ async def launch_isolated_chrome(
                 stdout=asyncio.subprocess.DEVNULL,
                 stderr=asyncio.subprocess.DEVNULL,
             )
+            if _user_chrome_process.pid:
+                _launched_pids.add(_user_chrome_process.pid)
         except Exception as e:
+            port_sock.close()
             raise RuntimeError(f"Failed to launch Edge: {e}") from e
     else:
         logger.info("No Edge detected, falling back to Playwright bundled Chromium")
@@ -203,22 +255,27 @@ async def launch_isolated_chrome(
         try:
             from playwright.async_api import async_playwright
         except ImportError:
+            port_sock.close()
             raise RuntimeError(
                 "Cannot find or launch Chrome. "
                 "Ensure Chrome is running, or install playwright "
                 "(`uv add playwright && playwright install chromium`)."
             )
 
-        _playwright_instance = await async_playwright().start()
-        _playwright_browser = await _playwright_instance.chromium.launch(
-            headless=False,
-            channel=None,
-            args=[
-                f"--remote-debugging-port={port}",
-                f"--user-data-dir={user_data_dir}",
-                f"--lang={_detect_lang()}",
-            ],
-        )
+        try:
+            _playwright_instance = await async_playwright().start()
+            _playwright_browser = await _playwright_instance.chromium.launch(
+                headless=False,
+                channel=None,
+                args=[
+                    f"--remote-debugging-port={port}",
+                    f"--user-data-dir={user_data_dir}",
+                    f"--lang={_detect_lang()}",
+                ],
+            )
+        except Exception as e:
+            port_sock.close()
+            raise RuntimeError(f"Failed to launch Playwright browser: {e}") from e
 
     from .discover import _fetch_json
 
@@ -229,9 +286,11 @@ async def launch_isolated_chrome(
         )
         if data and "webSocketDebuggerUrl" in data:
             logger.info("launch_isolated_chrome: ready on port %d", port)
+            port_sock.close()
             return data["webSocketDebuggerUrl"]
         await asyncio.sleep(0.5)
 
+    port_sock.close()
     raise RuntimeError(
         "Cannot obtain isolated browser WS URL (browser launch timed out)."
     )
@@ -263,40 +322,52 @@ async def restart_user_chrome() -> str:
     exe_lower = exe.lower()
     proc_name = "msedge.exe" if "edge" in exe_lower else "chrome.exe"
 
-    logger.info("Killing existing %s process", proc_name)
-    try:
-        if platform.system() == "Windows":
-            await asyncio.to_thread(
-                subprocess.run, ["taskkill", "/F", "/IM", proc_name],
-                capture_output=True, timeout=10,
-            )
+    logger.info("Killing existing browser processes (PIDs: %s)", _launched_pids)
+    killed_pids = list(_launched_pids)
+    for pid in killed_pids:
+        try:
+            if platform.system() == "Windows":
+                await asyncio.to_thread(
+                    subprocess.run, ["taskkill", "/F", "/PID", str(pid)],
+                    capture_output=True, timeout=10,
+                )
+            else:
+                await asyncio.to_thread(
+                    subprocess.run, ["kill", "-9", str(pid)], timeout=10,
+                )
+        except Exception:
+            logger.debug("Failed to kill PID %d", pid, exc_info=True)
+    _launched_pids.clear()
+
+    # Also kill crashpad handler helper
+    if platform.system() == "Windows":
+        try:
             await asyncio.to_thread(
                 subprocess.run, ["taskkill", "/F", "/IM", "chrome_crashpad_handler.exe"],
                 capture_output=True, timeout=5,
             )
-        else:
-            await asyncio.to_thread(
-                subprocess.run, ["pkill", "-9", proc_name.replace(".exe", "")], timeout=10,
-            )
-    except Exception:
-        logger.debug("restart_user_chrome: first kill attempt failed", exc_info=True)
+        except Exception:
+            logger.debug("Failed to kill chrome_crashpad_handler", exc_info=True)
 
     await asyncio.sleep(3.0)
 
-    if platform.system() == "Windows":
+    # Verify killed PIDs are gone; retry if any still alive
+    if platform.system() == "Windows" and killed_pids:
         try:
             result = await asyncio.to_thread(
                 subprocess.run,
-                ["tasklist", "/FI", f"IMAGENAME eq {proc_name}", "/NH"],
+                ["tasklist", "/NH"],
                 capture_output=True, text=True, errors="replace", timeout=5,
             )
-            if proc_name.lower() in result.stdout.lower():
-                logger.info("Chrome still alive after first kill, retrying")
-                await asyncio.to_thread(
-                    subprocess.run, ["taskkill", "/F", "/IM", proc_name],
-                    capture_output=True, timeout=10,
-                )
-                await asyncio.sleep(2.0)
+            for pid in killed_pids:
+                if str(pid) in result.stdout:
+                    logger.info("Chrome (PID %d) still alive, retrying kill", pid)
+                    await asyncio.to_thread(
+                        subprocess.run, ["taskkill", "/F", "/PID", str(pid)],
+                        capture_output=True, timeout=10,
+                    )
+                    await asyncio.sleep(2.0)
+                    break
         except Exception:
             logger.debug("restart_user_chrome: second kill attempt failed", exc_info=True)
 
@@ -317,13 +388,20 @@ async def restart_user_chrome() -> str:
     except Exception as e:
         raise RuntimeError(f"Failed to launch {proc_name}: {e}") from e
 
+    if _user_chrome_process.pid:
+        _launched_pids.add(_user_chrome_process.pid)
+
     async def _log_stderr() -> None:
         try:
             if _user_chrome_process is not None and _user_chrome_process.stderr is not None:
-                err = await _user_chrome_process.stderr.read()
+                err = await asyncio.wait_for(
+                    _user_chrome_process.stderr.read(), timeout=5.0
+                )
                 if err:
                     text = err.decode("utf-8", errors="replace")[:1000]
                     logger.warning("Chrome stderr on startup: %s", text)
+        except asyncio.TimeoutError:
+            logger.debug("stderr read timed out (expected while Chrome is running)")
         except Exception:
             logger.debug("restart_user_chrome: failed to read Chrome stderr", exc_info=True)
 
@@ -341,6 +419,8 @@ async def restart_user_chrome() -> str:
                 "Chrome exited early (code=%d), falling back to isolated",
                 returncode,
             )
+            if _user_chrome_process.pid:
+                _launched_pids.discard(_user_chrome_process.pid)
             _user_chrome_process = None
             return await launch_isolated_chrome()
 
@@ -354,7 +434,14 @@ async def restart_user_chrome() -> str:
         await asyncio.sleep(0.5)
 
     stderr_task.cancel()
-    _user_chrome_process = None
+    if _user_chrome_process is not None:
+        try:
+            _user_chrome_process.terminate()
+        except Exception:
+            pass
+        if _user_chrome_process.pid:
+            _launched_pids.discard(_user_chrome_process.pid)
+        _user_chrome_process = None
 
     logger.warning("User Chrome restart timed out, falling back to isolated")
     return await launch_isolated_chrome()
@@ -386,3 +473,5 @@ async def cleanup_isolated() -> None:
         except Exception:
             logger.debug("cleanup_isolated: failed to stop Playwright instance", exc_info=True)
         _playwright_instance = None
+
+    _launched_pids.clear()

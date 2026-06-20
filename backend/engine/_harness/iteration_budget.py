@@ -90,7 +90,7 @@ class IterationBudget:
 
     @classmethod
     def from_dict(cls, d: dict) -> IterationBudget:
-        budget = cls(max_total=d["max_total"])
+        budget = cls(max_total=d.get("max_total", 50))
         budget._used = d["used"]
         budget._paused = d.get("paused", False)
         return budget

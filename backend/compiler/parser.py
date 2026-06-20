@@ -81,6 +81,9 @@ def inject_params_to_pipeline(yaml_text: str, params: dict | None) -> str:
     Replaces template placeholders at the YAML structure level (after parsing),
     avoiding YAML injection risks that text-level str.replace would introduce.
 
+    If YAML parsing fails, falls back to direct string replacement so that
+    partially-formed templates are still usable.
+
     Args:
         yaml_text: Raw pipeline.yaml text containing {{param}} placeholders.
         params: Dict of parameter name to value mappings.
@@ -91,13 +94,32 @@ def inject_params_to_pipeline(yaml_text: str, params: dict | None) -> str:
     if not params:
         return yaml_text
 
-    data = yaml.safe_load(yaml_text)
-    if data is None:
-        return yaml_text
+    try:
+        data = yaml.safe_load(yaml_text)
+        if data is None:
+            return yaml_text
+        _inject_recursive(data, params)
+        return yaml.dump(data, default_flow_style=False, allow_unicode=True, sort_keys=False)
+    except yaml.YAMLError:
+        logger.warning(
+            "YAML parse failed during param injection, falling back to string replacement"
+        )
+        return _PH_PATTERN.sub(lambda m: str(params.get(m.group(1), m.group(0))), yaml_text)
 
-    _inject_recursive(data, params)
 
-    return yaml.dump(data, default_flow_style=False, allow_unicode=True, sort_keys=False)
+_PH_PATTERN = re.compile(r"\{\{(\w+)\}\}")
+
+
+def _replace_placeholders(text: str, params: dict) -> str:
+    """Replace all {{key}} placeholders in text with param values."""
+    def _replacer(m: re.Match) -> str:
+        key = m.group(1)
+        if key in params:
+            return str(params[key])
+        logger.warning("Placeholder '{{%s}}' has no matching parameter, keeping as-is", key)
+        return m.group(0)
+
+    return _PH_PATTERN.sub(_replacer, text)
 
 
 def _inject_recursive(node, params: dict) -> None:
@@ -114,18 +136,3 @@ def _inject_recursive(node, params: dict) -> None:
                 node[i] = _replace_placeholders(val, params)
             elif isinstance(val, (dict, list)):
                 _inject_recursive(val, params)
-
-
-_PH_PATTERN = re.compile(r"\{\{(\w+)\}\}")
-
-
-def _replace_placeholders(text: str, params: dict) -> str:
-    """Replace all {{key}} placeholders in text with param values."""
-    def _replacer(m: re.Match) -> str:
-        key = m.group(1)
-        if key in params:
-            return str(params[key])
-        logger.warning("Placeholder '{{%s}}' has no matching parameter, keeping as-is", key)
-        return m.group(0)
-
-    return _PH_PATTERN.sub(_replacer, text)

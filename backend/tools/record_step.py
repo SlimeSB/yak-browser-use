@@ -79,7 +79,10 @@ async def record_step(
 
     if op_type is not None:
         if op_type == "goal_run":
-            step_entry["goal_description"] = op_args.get("description", description) if op_args else description
+            if op_args:
+                step_entry["goal_description"] = op_args.get("description", description)
+            else:
+                step_entry["goal_description"] = description
         else:
             browser_op: dict
             if op_args and "value" in op_args and len(op_args) == 1:
@@ -112,16 +115,14 @@ async def record_step(
 def _push_edit_event(pipeline_name: str, original: str, modified: str, step_name: str, explanation: str) -> None:
     """Push a pipeline.edit event to WebSocket clients. Reuses edit_id across
     multiple record_step calls so the frontend accumulates diffs as a batch."""
-    import difflib
-
     from api.state import engine_state
-    from tools.edit_pipeline import _checkpoints, _processed_edits, _edit_status
+    from tools.edit_pipeline import get_checkpoint_path, get_edit_status, register_edit
 
     existing_edit_id = _pipeline_edit_id.get(pipeline_name)
 
-    if existing_edit_id and _edit_status.get(existing_edit_id) == "pending":
+    if existing_edit_id and get_edit_status(existing_edit_id) == "pending":
         edit_id = existing_edit_id
-        cp = _checkpoints.get(edit_id)
+        cp = get_checkpoint_path(edit_id)
         if cp and cp.exists():
             original = cp.read_text(encoding="utf-8")
     else:
@@ -129,23 +130,24 @@ def _push_edit_event(pipeline_name: str, original: str, modified: str, step_name
         checkpoint_path = PRESETS_DIR / f"{pipeline_name}.pipeline.yaml.{edit_id}.orig"
         checkpoint_path.write_text(original, encoding="utf-8")
         logger.debug("Saved checkpoint: %s", checkpoint_path)
-        _checkpoints[edit_id] = checkpoint_path
-        _processed_edits.add(edit_id)
-        _edit_status[edit_id] = "pending"
+        register_edit(edit_id, checkpoint_path, pipeline_name)
         _pipeline_edit_id[pipeline_name] = edit_id
 
-    diff_lines = list(difflib.unified_diff(
+    import difflib
+
+    raw_diff = list(difflib.unified_diff(
         original.splitlines(keepends=True),
         modified.splitlines(keepends=True),
         fromfile="original", tofile="modified", lineterm="",
     ))
+    diff_lines = [l for l in raw_diff if not l.startswith("---") and not l.startswith("+++")]
 
     event = {
         "type": "pipeline.edit",
         "edit_id": edit_id,
         "original": original,
         "modified": modified,
-        "diff_lines": [l for l in diff_lines if not l.startswith("---") and not l.startswith("+++")],
+        "diff_lines": diff_lines,
         "explanation": explanation,
         "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S"),
     }

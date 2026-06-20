@@ -9,6 +9,8 @@ three tiers:
 """
 from __future__ import annotations
 
+import asyncio
+import concurrent.futures
 from pathlib import Path
 from typing import Callable
 
@@ -92,6 +94,21 @@ def _load_handler_from_file(file_path: Path) -> Callable | None:
     return None
 
 
+def _run_async(coro):
+    """Safely run a coroutine from synchronous code.
+
+    If called from inside an existing event loop, runs the coroutine in a
+    separate thread to avoid ``RuntimeError: This event loop is already running``.
+    """
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        return asyncio.run(coro)
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+        return pool.submit(asyncio.run, coro).result()
+
+
 def resolve_with_generator(
     step_def: StepDef,
     pipeline_name: str,
@@ -113,6 +130,8 @@ def resolve_with_generator(
         return handler
 
     if generate_fn:
+        if asyncio.iscoroutinefunction(generate_fn):
+            return _run_async(generate_fn(step_def, pipeline_name))
         return generate_fn(step_def, pipeline_name)
 
     return None

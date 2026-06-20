@@ -22,31 +22,40 @@ logger = get_logger(__name__)
 _DDDDOCR: Any = None
 _OCR: Any = None
 _SLIDE: Any = None
+_ocr_lock = asyncio.Lock()
+_slide_lock = asyncio.Lock()
+_ddddocr_lock = asyncio.Lock()
 
 _ALLOWED_EXTENSIONS = {".png", ".jpg", ".jpeg", ".bmp", ".webp"}
 
 
-def _get_ddddocr():
+async def _get_ddddocr():
     global _DDDDOCR
     if _DDDDOCR is None:
-        import ddddocr
-        _DDDDOCR = ddddocr
+        async with _ddddocr_lock:
+            if _DDDDOCR is None:
+                import ddddocr
+                _DDDDOCR = ddddocr
     return _DDDDOCR
 
 
-def _get_ocr():
+async def _get_ocr():
     global _OCR
     if _OCR is None:
-        ddddocr = _get_ddddocr()
-        _OCR = ddddocr.DdddOcr(show_ad=False)
+        async with _ocr_lock:
+            if _OCR is None:
+                ddddocr = await _get_ddddocr()
+                _OCR = ddddocr.DdddOcr(show_ad=False)
     return _OCR
 
 
-def _get_slide():
+async def _get_slide():
     global _SLIDE
     if _SLIDE is None:
-        ddddocr = _get_ddddocr()
-        _SLIDE = ddddocr.DdddOcr(det=False, ocr=False, show_ad=False)
+        async with _slide_lock:
+            if _SLIDE is None:
+                ddddocr = await _get_ddddocr()
+                _SLIDE = ddddocr.DdddOcr(det=False, ocr=False, show_ad=False)
     return _SLIDE
 
 
@@ -103,7 +112,7 @@ async def captcha(
 
     if type == "ocr":
         try:
-            ocr = _get_ocr()
+            ocr = await _get_ocr()
             text = await asyncio.to_thread(ocr.classification, img)
         except Exception as e:
             logger.debug("captcha ocr failed: %s", e)
@@ -123,14 +132,14 @@ async def captcha(
             return {"ok": False, "error": str(e)}
 
         try:
-            slide = _get_slide()
+            slide = await _get_slide()
             res = await asyncio.to_thread(slide.slide_match, img, bg)
         except Exception as e:
             logger.debug("captcha slide_match failed: %s", e)
             return {"ok": False, "error": f"滑块缺口检测失败: {e}"}
 
         target = res.get("target")
-        if not target or len(target) != 4:
+        if not isinstance(target, (list, tuple)) or len(target) != 4:
             return {"ok": False, "error": f"滑块缺口检测返回异常数据: {res}"}
 
         x1, y1, x2, y2 = target

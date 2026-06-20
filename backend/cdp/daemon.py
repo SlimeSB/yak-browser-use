@@ -22,6 +22,8 @@ logger = get_logger(__name__)
 
 # Module-level session store (simple dict, no SessionManager class).
 _sessions: dict[str, dict[str, Any]] = {}
+_sessions_lock = asyncio.Lock()
+_MAX_SESSIONS = 16
 
 
 class CDPDaemon:
@@ -96,7 +98,7 @@ class CDPDaemon:
     # CDP command / send
     # ------------------------------------------------------------------
 
-    async def _send(self, method: str, params: dict | None = None, *, session_id: str | None = None) -> Any:
+    async def _send(self, method: str, params: dict | None = None, *, session_id: str | None = None, timeout: float = 30.0) -> Any:
         """Send a CDP command and wait for its result.
 
         This is the interface that :class:`cdp.helpers.CDPHelpers` calls.
@@ -117,7 +119,11 @@ class CDPDaemon:
         self._pending[msg_id] = future
 
         await self._ws.send(json.dumps(payload))  # type: ignore[reportOptionalMemberAccess]
-        return await asyncio.wait_for(future, timeout=30.0)
+        try:
+            return await asyncio.wait_for(future, timeout=timeout)
+        except asyncio.TimeoutError:
+            self._pending.pop(msg_id, None)
+            raise
 
     async def drain_events(self) -> list[dict]:
         """Drain all buffered CDP events from the internal queue."""
@@ -204,6 +210,12 @@ class CDPDaemon:
                 await self.attach_first_page()
                 await self.enable_default_domains()
 
+                if self._listen_task and not self._listen_task.done():
+                    self._listen_task.cancel()
+                    try:
+                        await self._listen_task
+                    except (asyncio.CancelledError, Exception):
+                        pass
                 self._listen_task = asyncio.create_task(self._listen())
 
                 logger.info(
@@ -336,14 +348,14 @@ async def ensure_daemon(name: str = "yak-browser-use") -> CDPDaemon:
         DeprecationWarning,
         stacklevel=2,
     )
-    # Check if a session already exists
-    existing = _sessions.get(name)
-    if existing and existing.get("ws_url"):
-        daemon = CDPDaemon(existing["ws_url"])
-        await daemon.start()
-        await daemon.attach_first_page()
-        await daemon.enable_default_domains()
-        return daemon
+    async with _sessions_lock:
+        existing = _sessions.get(name)
+        if existing and existing.get("ws_url"):
+            daemon = CDPDaemon(existing["ws_url"])
+            await daemon.start()
+            await daemon.attach_first_page()
+            await daemon.enable_default_domains()
+            return daemon
 
     from .discover import discover_ws_url
 
@@ -353,5 +365,10 @@ async def ensure_daemon(name: str = "yak-browser-use") -> CDPDaemon:
     await daemon.attach_first_page()
     await daemon.enable_default_domains()
 
-    _sessions[name] = {"ws_url": ws_url}
+    async with _sessions_lock:
+        _sessions[name] = {"ws_url": ws_url}
+        if len(_sessions) > _MAX_SESSIONS:
+            keys = list(_sessions.keys())
+            for k in keys[:len(keys) - _MAX_SESSIONS]:
+                del _sessions[k]
     return daemon

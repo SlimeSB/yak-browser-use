@@ -15,6 +15,7 @@ import re
 import shutil
 import time
 import traceback
+from copy import deepcopy
 from pathlib import Path
 
 from engine.events import EventSink
@@ -73,10 +74,14 @@ def _collect_input_files(input_ref, run_dir: Path) -> dict[str, str]:
     return _resolve_input_files(input_ref, run_dir)
 
 
-def _resolve_step_urls(steps: list[dict], url_aliases: dict[str, str]) -> None:
-    """Replace {key} URL placeholders in steps with actual URLs from aliases."""
+def _resolve_step_urls(steps: list[dict], url_aliases: dict[str, str]) -> list[dict]:
+    """Replace {key} URL placeholders in steps with actual URLs from aliases.
+    
+    Returns a new list of step dicts without mutating the caller's list.
+    """
     _alias_pattern = re.compile(r"\{([\w-]+)\}")
-    for step in steps:
+    result = deepcopy(steps)
+    for step in result:
         if step.get("goal_description"):
             step["goal_description"] = _alias_pattern.sub(
                 lambda m: url_aliases.get(m.group(1), m.group(0)),
@@ -88,6 +93,7 @@ def _resolve_step_urls(steps: list[dict], url_aliases: dict[str, str]) -> None:
                     lambda m: url_aliases.get(m.group(1), m.group(0)),
                     op["value"],
                 )
+    return result
 
 
 def _setup_run_logger(run_dir: Path) -> logging.Handler | None:
@@ -394,7 +400,7 @@ async def run_pipeline(
     # ── URL alias resolution ──
     url_aliases = (frontmatter or {}).get("url_aliases", {})
     if url_aliases:
-        _resolve_step_urls(steps, url_aliases)
+        steps = _resolve_step_urls(steps, url_aliases)
 
     events.emit_run_start(pipeline_name, ctx.run_id, ver or "0")
 

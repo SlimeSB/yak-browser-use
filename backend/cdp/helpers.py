@@ -35,9 +35,8 @@ def _build_element_info(el: dict) -> dict:
 class CDPHelpers:
     """Wraps a PlaywrightBridge for common browser operations."""
 
-    def __init__(self, bridge: PlaywrightBridge, *, session_id: str | None = None):
+    def __init__(self, bridge: PlaywrightBridge):
         self._bridge = bridge
-        self._session_id = session_id
         self._ref_map: dict[str, dict] = {}
 
     @property

@@ -19,6 +19,19 @@ from utils.logging import get_logger
 
 logger = get_logger(__name__)
 
+# Reusable aiohttp session (lazily created).
+_session: "aiohttp.ClientSession | None" = None
+
+
+async def _get_session() -> "aiohttp.ClientSession":
+    """Return the shared aiohttp ClientSession, creating it if needed."""
+    global _session
+    import aiohttp
+
+    if _session is None or _session.closed:
+        _session = aiohttp.ClientSession()
+    return _session
+
 
 # ---------------------------------------------------------------------------
 # Internal helpers
@@ -27,14 +40,12 @@ logger = get_logger(__name__)
 async def _fetch_json(url: str, timeout: float = 3.0) -> dict | None:
     """HTTP GET a JSON endpoint. Returns parsed dict or None."""
     try:
-        import aiohttp
-
-        async with aiohttp.ClientSession() as session:
-            async with session.get(
-                url, timeout=aiohttp.ClientTimeout(total=timeout)
-            ) as resp:
-                if resp.status == 200:
-                    return await resp.json()
+        session = await _get_session()
+        async with session.get(
+            url, timeout=aiohttp.ClientTimeout(total=timeout)
+        ) as resp:
+            if resp.status == 200:
+                return await resp.json()
     except Exception:
         logger.debug("_fetch_json exception for url=%s", url, exc_info=True)
     logger.debug("_fetch_json failed for url=%s", url)
@@ -150,6 +161,21 @@ async def discover_ws_url(
     RuntimeError
         If all 6 discovery levels fail.
     """
+    # Overall timeout applied to levels 5-6 (browser launch)
+    # Levels 1-4 have internal timeouts and should complete quickly
+    try:
+        ws_url = await asyncio.wait_for(
+            _discover_inner(profile_name), timeout=timeout
+        )
+        return ws_url
+    except asyncio.TimeoutError:
+        raise RuntimeError(
+            f"Chrome discovery timed out after {timeout}s"
+        )
+
+
+async def _discover_inner(profile_name: str | None) -> str:
+    """Inner discovery logic (no timeout)."""
     # Level 1: YBU_CDP_URL → query /json/version
     cdp_url = os.environ.get("YBU_CDP_URL", "").strip()
     if cdp_url:

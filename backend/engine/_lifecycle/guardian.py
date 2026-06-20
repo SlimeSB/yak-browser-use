@@ -1,8 +1,10 @@
 """Guardian — approval gate, circuit breaker, and tool output validation."""
 from __future__ import annotations
 
+import asyncio
 import csv
 import json
+import re
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -135,6 +137,11 @@ class Guardian:
         review_enabled: bool = False,
         versions_dir: str | Path | None = None,
     ) -> None:
+        if circuit_breaker_threshold <= 0:
+            raise ValueError(
+                f"circuit_breaker_threshold must be positive, got {circuit_breaker_threshold}"
+            )
+        self._lock = asyncio.Lock()
         self._failure_counts: dict[str, int] = {}
         self.approval_steps = approval_steps or []
         self.circuit_breaker_threshold = circuit_breaker_threshold
@@ -203,12 +210,12 @@ class Guardian:
 
     # ── STALE tracking ──
 
-    def record_failure(self, pipeline_name: str) -> int:
+    async def record_failure(self, pipeline_name: str) -> int:
         """Record a failure and return the accumulated failure count.
 
         Delegates to ``circuit_breaker`` to avoid double-counting.
         """
-        self.circuit_breaker(pipeline_name, recent_success=False)
+        await self.circuit_breaker(pipeline_name, recent_success=False)
         return self._failure_counts.get(pipeline_name, 0)
 
     def is_stale(self, pipeline_name: str) -> bool:
@@ -255,7 +262,7 @@ class Guardian:
 
         return True
 
-    def circuit_breaker(self, pipeline_name: str, recent_success: bool) -> bool:
+    async def circuit_breaker(self, pipeline_name: str, recent_success: bool) -> bool:
         """Track consecutive failures and signal STALE when threshold exceeded.
 
         When STALE triggers:
@@ -269,13 +276,14 @@ class Guardian:
         Returns:
             True if circuit is closed (safe to proceed), False if open.
         """
-        if recent_success:
-            self._failure_counts.pop(pipeline_name, None)
-            self._clear_stale_marker(pipeline_name)
-            return True
+        async with self._lock:
+            if recent_success:
+                self._failure_counts.pop(pipeline_name, None)
+                self._clear_stale_marker(pipeline_name)
+                return True
 
-        count = self._failure_counts.get(pipeline_name, 0) + 1
-        self._failure_counts[pipeline_name] = count
+            count = self._failure_counts.get(pipeline_name, 0) + 1
+            self._failure_counts[pipeline_name] = count
         logger.warning(
             "guardian: %s failure count = %d/%d",
             pipeline_name,
@@ -304,10 +312,14 @@ class Guardian:
             logger.warning("guardian: wrote STALE marker for %s (%s)", pipeline_name, stale_file.name)
 
     def _clear_stale_marker(self, pipeline_name: str) -> None:
-        """Remove all STALE marker files for this pipeline."""
+        """Remove STALE marker files for this pipeline."""
         if self._versions_dir:
+            pattern = re.compile(rf"^pipeline:\s*{re.escape(pipeline_name)}\s*$", re.MULTILINE)
             for stale_file in self._versions_dir.glob("STALE*"):
                 try:
+                    content = stale_file.read_text(encoding="utf-8")
+                    if not pattern.search(content):
+                        continue
                     stale_file.unlink()
                     logger.info("guardian: cleared STALE marker: %s", stale_file.name)
                 except OSError:
@@ -329,7 +341,7 @@ class Guardian:
                 content = marker.read_text(encoding="utf-8").strip()
                 if not pipeline_name:
                     return content
-                if f"pipeline: {pipeline_name}" in content:
+                if re.search(rf"^pipeline:\s*{re.escape(pipeline_name)}\s*$", content, re.MULTILINE):
                     return content
                 # Backward compat: old-format files match any pipeline
                 if "pipeline:" not in content:

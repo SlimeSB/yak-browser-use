@@ -12,8 +12,8 @@ class StepDef:
     name: str
     description: str = ""
     browser_ops: list[dict] = field(default_factory=list)
-    input_schema: dict[str, str] = field(default_factory=dict)
-    output_schema: dict[str, str] = field(default_factory=dict)
+    input_schema: dict[str, str] | list | str | None = field(default_factory=dict)
+    output_schema: dict[str, str] | list | str | None = field(default_factory=dict)
     depends_on: list[str] = field(default_factory=list)
     raw_content: str = ""
     system_prompt: str = ""

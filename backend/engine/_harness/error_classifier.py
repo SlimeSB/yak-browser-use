@@ -131,7 +131,10 @@ def classify_api_error(
         elif "auth" in msg_lower or "permission" in msg_lower:
             reason = FailoverReason.AUTH_ERROR
             retryable = False
-        elif "context" in msg_lower or "token" in msg_lower or "length" in msg_lower:
+        elif "context length" in msg_lower or "maximum length" in msg_lower or "token limit" in msg_lower:
+            reason = FailoverReason.CONTEXT_LENGTH
+            retryable = False
+        elif ("context" in msg_lower and ("length" in msg_lower or "limit" in msg_lower or "window" in msg_lower or "size" in msg_lower or "exceed" in msg_lower)):
             reason = FailoverReason.CONTEXT_LENGTH
             retryable = False
 

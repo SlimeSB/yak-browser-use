@@ -121,13 +121,17 @@ def _convert_browser_op(op: dict) -> dict:
     
     Passes through extra top-level keys (retry, optional, etc.) alongside type/value.
     """
+    if "type" in op:
+        return {k: v for k, v in op.items()}
     for key, val in op.items():
+        if key == "type":
+            continue
         if isinstance(val, dict):
             result = {"type": key, **val}
         else:
             result = {"type": key, "value": val}
         for k, v in op.items():
-            if k != key:
+            if k != key and k != "type":
                 result[k] = v
         return result
     return {}

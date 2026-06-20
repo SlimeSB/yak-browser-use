@@ -303,13 +303,16 @@ async def _execute_single_tool_call(
                 if budget is not None and budget.is_paused:
                     if bridge_restarted:
                         budget.resume()
-                if reconnect_attempts >= _CDP_RECONNECT_MAX and stream_callback:
-                    stream_callback({
-                        "type": EVENT_ERROR,
-                        "message": "浏览器连接丢失，请检查 Chrome 是否运行",
-                    })
+                    else:
+                        budget.resume()
+                        budget.exhaust()
                 timeout_retried = False
                 continue
+            if _is_cdp_disconnect(e) and reconnect_attempts >= _CDP_RECONNECT_MAX and stream_callback:
+                stream_callback({
+                    "type": EVENT_ERROR,
+                    "message": "浏览器连接丢失，请检查 Chrome 是否运行",
+                })
             raise
 
 

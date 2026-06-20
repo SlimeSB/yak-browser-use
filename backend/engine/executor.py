@@ -440,7 +440,7 @@ async def execute_tool(
         if asyncio.iscoroutinefunction(tool_func):
             ret = await tool_func(**kwargs)
         else:
-            loop = asyncio.get_event_loop()
+            loop = asyncio.get_running_loop()
             ret = await loop.run_in_executor(None, partial(tool_func, **kwargs))
         result["result"] = ret
     except Exception as e:
@@ -627,7 +627,7 @@ async def execute_browser_step(
         op_type = op.get("type", "")
         value = op.get("value", "")
         op_params = {k: v for k, v in op.items() if k != "type"}
-        registry.register_op(op_type, op_params)
+        await registry.register_op(op_type, op_params)
 
         op_record: dict = {"type": op_type, "ok": True, "duration_ms": 0}
 
@@ -781,7 +781,7 @@ async def execute_browser_step(
                 result["ops"].append(op_record)
                 result["duration_ms"] = int((time.time() - start) * 1000)
                 result["compensation_history"] = registry.to_list()
-                result["suggest_rollback"] = registry.suggest_rollback(len(registry._ops) - 1)
+                result["suggest_rollback"] = await registry.suggest_rollback(len(registry._ops) - 1)
                 return result
         elif op_type == "wait_for_network":
             op_start = time.time()

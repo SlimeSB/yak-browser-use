@@ -1,5 +1,6 @@
 """Jittered exponential-backoff delay for LLM API retries."""
 
+import asyncio
 import random
 import time
 
@@ -24,6 +25,13 @@ def jittered_backoff(
 
 def sleep_jittered(attempt: int, base_ms: float = 1000,
                    max_ms: float = 30000) -> None:
-    """Block for jittered_backoff milliseconds."""
+    """Block for jittered_backoff milliseconds. Prefer async_sleep_jittered in async code."""
     delay_s = jittered_backoff(attempt, base_ms, max_ms) / 1000.0
     time.sleep(max(0, delay_s))
+
+
+async def async_sleep_jittered(attempt: int, base_ms: float = 1000,
+                                max_ms: float = 30000) -> None:
+    """Non-blocking version of sleep_jittered for async contexts."""
+    delay_s = jittered_backoff(attempt, base_ms, max_ms) / 1000.0
+    await asyncio.sleep(max(0, delay_s))

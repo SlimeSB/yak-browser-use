@@ -36,6 +36,7 @@ class _EngineState:
         self.ws_clients: list[asyncio.Queue] = []
         self._service: object | None = None
         self._service_lock = asyncio.Lock()
+        self._connect_lock = asyncio.Lock()
         self.pipeline_lock = asyncio.Lock()
 
     # ── Chrome connection  ──────────────────────────────────────────
@@ -52,25 +53,26 @@ class _EngineState:
         -------
         The connected CDP URL (truncated for logging).
         """
-        if self.bridge is not None:
-            raise RuntimeError("Chrome is already connected")
+        async with self._connect_lock:
+            if self.bridge is not None:
+                raise RuntimeError("Chrome is already connected")
 
-        self.current_state = "connecting"
+            self.current_state = "connecting"
 
-        if ws_url is None:
-            from cdp.discover import discover_ws_url
-            ws_url = await discover_ws_url()
+            if ws_url is None:
+                from cdp.discover import discover_ws_url
+                ws_url = await discover_ws_url()
 
-        if ws_url is None:
-            raise RuntimeError("Cannot discover Chrome debug URL — is Chrome running with --remote-debugging-port?")
+            if ws_url is None:
+                raise RuntimeError("Cannot discover Chrome debug URL — is Chrome running with --remote-debugging-port?")
 
-        bridge = PlaywrightBridge(ws_url)
-        await bridge.start()
+            bridge = PlaywrightBridge(ws_url)
+            await bridge.start()
 
-        self.bridge = bridge
-        self.current_state = "connected"
-        logger.info("Chrome connected via %s ...", ws_url[:60])
-        return ws_url
+            self.bridge = bridge
+            self.current_state = "connected"
+            logger.info("Chrome connected via %s ...", ws_url[:60])
+            return ws_url
 
     async def disconnect_chrome(self) -> None:
         """Disconnect from Chrome and reset state."""

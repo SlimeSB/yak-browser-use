@@ -145,7 +145,7 @@ def _create_chat_llm_call(
         nonlocal _streaming_active
 
         request_summary = {
-            "model": llm.model,
+            "model": getattr(llm, "model", ""),
             "messages_count": len(messages),
             "tools_count": len(tools) if tools else 0,
         }
@@ -201,26 +201,26 @@ def _create_chat_llm_call(
         client = llm.get_client()
 
         model_params: dict = {}
-        if llm.temperature is not None:
-            model_params["temperature"] = llm.temperature
-        if llm.frequency_penalty is not None:
-            model_params["frequency_penalty"] = llm.frequency_penalty
-        if llm.max_completion_tokens is not None:
-            model_params["max_completion_tokens"] = llm.max_completion_tokens
-        if llm.top_p is not None:
-            model_params["top_p"] = llm.top_p
-        if llm.seed is not None:
-            model_params["seed"] = llm.seed
+        if getattr(llm, "temperature", None) is not None:
+            model_params["temperature"] = getattr(llm, "temperature", None)
+        if getattr(llm, "frequency_penalty", None) is not None:
+            model_params["frequency_penalty"] = getattr(llm, "frequency_penalty", None)
+        if getattr(llm, "max_completion_tokens", None) is not None:
+            model_params["max_completion_tokens"] = getattr(llm, "max_completion_tokens", None)
+        if getattr(llm, "top_p", None) is not None:
+            model_params["top_p"] = getattr(llm, "top_p", None)
+        if getattr(llm, "seed", None) is not None:
+            model_params["seed"] = getattr(llm, "seed", None)
 
-        if llm.reasoning_models and any(
-            str(m).lower() in str(llm.model).lower() for m in llm.reasoning_models
+        if getattr(llm, "reasoning_models", None) and any(
+            str(m).lower() in str(getattr(llm, "model", "")).lower() for m in getattr(llm, "reasoning_models", [])
         ):
-            model_params["reasoning_effort"] = llm.reasoning_effort
+            model_params["reasoning_effort"] = getattr(llm, "reasoning_effort", None)
             model_params.pop("temperature", None)
             model_params.pop("frequency_penalty", None)
 
         create_kwargs: dict = {
-            "model": llm.model,
+            "model": getattr(llm, "model", ""),
             "messages": openai_messages,
             "stream": True,
             **model_params,
@@ -345,7 +345,7 @@ def create_pipeline_llm_call(persist_id: str = ""):
 
     async def _call(messages: list[dict], tools: list[dict]) -> object:
         request_summary = {
-            "model": llm.model,
+            "model": getattr(llm, "model", ""),
             "messages_count": len(messages),
             "tools_count": len(tools) if tools else 0,
         }

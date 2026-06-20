@@ -2,10 +2,27 @@
 
 from __future__ import annotations
 
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from utils.logging import get_logger
 
 logger = get_logger(__name__)
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Application lifespan: startup setup and shutdown cleanup."""
+    from tools.registry import build_registry
+
+    logger.info("Yak Browser-Use API starting …")
+    build_registry()
+    logger.info("Tool registry built")
+    yield
+    from api.state import engine_state
+
+    await engine_state.cleanup()
+    logger.info("Yak Browser-Use API stopped")
 
 
 def create_app() -> FastAPI:
@@ -14,11 +31,11 @@ def create_app() -> FastAPI:
     from fastapi.middleware.cors import CORSMiddleware
     from api.routes import register_all_routes
     from api.errors import register_error_handlers
-    from api.state import engine_state
 
     app = FastAPI(
         title="Yak Browser-Use API",
         version="0.1.0",
+        lifespan=lifespan,
     )
 
     # ── CORS ────────────────────────────────────────────────────────
@@ -29,20 +46,6 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
-
-    # ── Lifecycle events ────────────────────────────────────────────
-
-    @app.on_event("startup")
-    async def startup() -> None:
-        logger.info("Yak Browser-Use API starting …")
-        from tools.registry import build_registry
-        build_registry()
-        logger.info("Tool registry built")
-
-    @app.on_event("shutdown")
-    async def shutdown() -> None:
-        await engine_state.cleanup()
-        logger.info("Yak Browser-Use API stopped")
 
     # ── Routes & error handlers ────────────────────────────────────
     register_all_routes(app)

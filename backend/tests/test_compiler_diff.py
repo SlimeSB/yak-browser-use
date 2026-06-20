@@ -282,7 +282,7 @@ class TestMergeExtraOps:
     def test_simple_merge(self):
         matched = [{"type": "goto", "_index": 0}]
         extra = [{"type": "click", "_index": 1}]
-        merged = merge_extra_ops(matched, extra, [])
+        merged = merge_extra_ops(matched, extra)
         assert len(merged) == 2
         assert merged[0]["type"] == "goto"
         assert merged[1]["type"] == "click"
@@ -290,16 +290,16 @@ class TestMergeExtraOps:
     def test_interleaved_by_index(self):
         matched = [{"type": "goto", "_index": 0}, {"type": "click", "_index": 2}]
         extra = [{"type": "fill", "_index": 1}]
-        merged = merge_extra_ops(matched, extra, [])
+        merged = merge_extra_ops(matched, extra)
         assert len(merged) == 3
         assert [op["type"] for op in merged] == ["goto", "fill", "click"]
 
     def test_empty_matched(self):
-        merged = merge_extra_ops([], [{"type": "click", "_index": 0}], [])
+        merged = merge_extra_ops([], [{"type": "click", "_index": 0}])
         assert len(merged) == 1
 
     def test_all_empty(self):
-        assert merge_extra_ops([], [], []) == []
+        assert merge_extra_ops([], []) == []
 
 
 # ── extract_summary ───────────────────────────────────────────

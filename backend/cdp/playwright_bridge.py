@@ -281,6 +281,7 @@ class PlaywrightBridge:
         self._element_map: dict[str, Any] = {}
         self._last_highlight_elements: list[dict] = []
         self._highlight_guard_task: asyncio.Task | None = None
+        self._stop_event = asyncio.Event()
 
     # ------------------------------------------------------------------
     # Lifecycle
@@ -289,7 +290,15 @@ class PlaywrightBridge:
     @staticmethod
     def _schedule(coro):
         task = asyncio.ensure_future(coro)
-        task.add_done_callback(lambda t: t.exception() and logger.warning("_schedule: background task failed", exc_info=t.exception()))
+
+        def _done(t: asyncio.Task) -> None:
+            if t.cancelled():
+                return
+            exc = t.exception()
+            if exc:
+                logger.warning("_schedule: background task failed", exc_info=exc)
+
+        task.add_done_callback(_done)
         return task
 
     async def start(self) -> None:
@@ -327,6 +336,7 @@ class PlaywrightBridge:
     async def stop(self) -> None:
         """Release Playwright resources. Does NOT close Chrome."""
         logger.info("PlaywrightBridge stopping")
+        self._stop_event.set()
         if self._highlight_guard_task is not None:
             self._highlight_guard_task.cancel()
             self._highlight_guard_task = None
@@ -361,7 +371,7 @@ class PlaywrightBridge:
         page.on("close", lambda pg=page: self._schedule(self._on_page_closed(pg)))
         try:
             page_id = str(uuid.uuid4())[:8]
-            await page.evaluate(f"window.__ybu_page_id = '{page_id}';")
+            await page.evaluate("(id) => { window.__ybu_page_id = id }", page_id)
             await page.wait_for_load_state("domcontentloaded")
             if self._last_highlight_elements:
                 elements_json = _json.dumps(self._last_highlight_elements)
@@ -448,7 +458,7 @@ class PlaywrightBridge:
         """
 
         async def _guard() -> None:
-            while self._page is not None:
+            while self._page is not None and not self._stop_event.is_set():
                 await asyncio.sleep(2.0)
                 try:
                     # 如果当前页已被用户关闭，自动切到其他页
@@ -597,7 +607,7 @@ class PlaywrightBridge:
     async def tab_new(self, url: str = "about:blank") -> dict:
         new_page = await self._context.new_page()
         page_id = str(uuid.uuid4())[:8]
-        await new_page.evaluate(f"window.__ybu_page_id = '{page_id}';")
+        await new_page.evaluate("(id) => { window.__ybu_page_id = id }", page_id)
         if url and url != "about:blank":
             await new_page.goto(url, wait_until="domcontentloaded")
         self._page = new_page
@@ -605,7 +615,7 @@ class PlaywrightBridge:
 
     async def tab_switch(self, target_id: str) -> dict:
         for p in self._context.pages:
-            pid = await p.evaluate("() => window.__ybu_page_id || ''")
+            pid = await asyncio.wait_for(p.evaluate("() => window.__ybu_page_id || ''"), timeout=5.0)
             if pid == target_id:
                 await p.bring_to_front()
                 self._page = p
@@ -619,7 +629,7 @@ class PlaywrightBridge:
 
     async def tab_close(self, target_id: str) -> dict:
         for p in self._context.pages:
-            pid = await p.evaluate("() => window.__ybu_page_id || ''")
+            pid = await asyncio.wait_for(p.evaluate("() => window.__ybu_page_id || ''"), timeout=5.0)
             if pid == target_id:
                 await p.close()
                 if self._page == p:
