@@ -596,6 +596,7 @@ async def execute_browser_step(
     bridge: object,
     step_dir: Path,
     run_dir: Path,
+    shared_store: dict | None = None,
 ) -> dict:
     """Execute a browser step: run ops via PlaywrightBridge, write step.json + artifacts.
 
@@ -604,6 +605,8 @@ async def execute_browser_step(
     """
     import base64
     import json as _json
+
+    from engine._param_resolver import resolve_params
 
     ops = step.get("browser_ops", [])
     registry = CompensationRegistry()
@@ -692,6 +695,8 @@ async def execute_browser_step(
                     core_params = {k: v for k, v in op.items() if k != "type"}
             else:
                 core_params = {k: v for k, v in op.items() if k != "type"}
+
+            core_params, _ = resolve_params(core_params, shared_store)
 
             retry = op.get("retry", 0)
             optional = op.get("optional", False)
@@ -805,6 +810,7 @@ async def execute_tool_step(
     step_dir: Path,
     run_dir: Path,
     cdp_helpers: object | None = None,
+    shared_store: dict | None = None,
 ) -> dict:
     """Execute a tool step: import the tool module, call its function, validate output.
 
@@ -843,18 +849,35 @@ async def execute_tool_step(
         **params,
     }
 
+    from engine._param_resolver import resolve_params
     from tools.registry import registry, ToolContext as RegistryToolContext
+
+    resolved_params, resolve_errors = resolve_params(core_params, shared_store)
 
     ctx = RegistryToolContext(
         cdp_helpers=cdp_helpers,
         tools_dir=tools_dir,
+        shared_store=shared_store,
     )
-    dispatch_result = await registry.dispatch(tool_name, core_params, ctx)
+    dispatch_result = await registry.dispatch(tool_name, resolved_params, ctx)
 
     if dispatch_result.get("ok") is False and dispatch_result.get("error", "").startswith("Unknown tool:"):
-        core_result = await execute_tool(tool_name, core_params, tools_dir, cdp_helpers)
+        core_result = await execute_tool(tool_name, resolved_params, tools_dir, cdp_helpers)
     else:
         core_result = dispatch_result
+
+    if resolve_errors:
+        warning = f"⚠️ 参数模板解析失败: {resolve_errors}"
+        if core_result.get("ok"):
+            existing = core_result.get("result", "")
+            if isinstance(existing, str):
+                core_result["result"] = warning + "\n\n" + existing
+            else:
+                core_result["result"] = warning
+        else:
+            existing = core_result.get("error", "")
+            core_result["error"] = warning + "\n\n" + existing
+
     result["duration_ms"] = core_result.get("duration_ms", 0)
 
     if not core_result["ok"]:
@@ -890,6 +913,7 @@ async def execute_goal_step(
     pipeline_name: str,
     frontmatter: dict | None = None,
     pipeline_path: Path | None = None,
+    shared_store: dict | None = None,
 ) -> dict:
     """Execute a goal step — returns placeholder (goals execute via todo + browser_*).
 

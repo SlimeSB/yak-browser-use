@@ -94,6 +94,7 @@ class Agent:
         stream_callback: Callable[[dict], None] | None = None,
         guardrail_config: object | None = None,
         preset_mode: bool = False,
+        shared_store: dict | None = None,
     ):
         self._llm_call = llm_call
         self._system_prompt = system_prompt
@@ -107,6 +108,7 @@ class Agent:
         self._on_event = stream_callback
         self._guardrail_config = guardrail_config
         self._preset_mode = preset_mode
+        self._shared_store = shared_store or {}
 
         self._guardrail_state = ToolCallGuardrailState()
         self._state = AgentRunState()
@@ -213,6 +215,7 @@ class Agent:
                     interrupt_check=self._interrupt_check,
                     stream_callback=self._on_event,
                     llm_call=self._llm_call,
+                    shared_store=self._shared_store,
                 )
             except UnrecoverableError as e:
                 logger.error("conversation_loop: unrecoverable error, stopping: %s", e)
@@ -266,6 +269,7 @@ async def run_conversation_loop(
     stream_callback: Callable[[dict], None] | None = None,
     guardrail_config: object | None = None,
     preset_mode: bool = False,
+    shared_store: dict | None = None,
 ) -> ConversationResult:
     agent = Agent(
         llm_call=llm_call,
@@ -280,6 +284,7 @@ async def run_conversation_loop(
         stream_callback=stream_callback,
         guardrail_config=guardrail_config,
         preset_mode=preset_mode,
+        shared_store=shared_store,
     )
     return await agent.run()
 

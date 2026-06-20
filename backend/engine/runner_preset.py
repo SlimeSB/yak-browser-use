@@ -122,6 +122,7 @@ async def _execute_tool_step_with_guardian(
     events: EventSink,
     pg: PathGuard,
     cdp_helpers=None,
+    shared_store: dict | None = None,
 ) -> dict:
     """Execute a tool step with path validation and guardian checks."""
     input_files = _collect_input_files(step_def.get("input", {}), run_dir)
@@ -130,7 +131,7 @@ async def _execute_tool_step_with_guardian(
 
     pg.validate_output_dir(str(step_dir))
 
-    result = await execute_tool_step(step_def, tools_dir, step_dir, run_dir, cdp_helpers=cdp_helpers)
+    result = await execute_tool_step(step_def, tools_dir, step_dir, run_dir, cdp_helpers=cdp_helpers, shared_store=shared_store)
     return result
 
 
@@ -427,6 +428,27 @@ async def run_pipeline(
     final_status = "completed"
     planner_failures = 0
 
+    shared_store: dict = {}
+
+    if resume_from_index > 0:
+        # Rebuild shared_store from completed step.json snapshots so that
+        # template references (${step_name.data.field}) in subsequent steps
+        # resolve correctly after resume.
+        for i in range(resume_from_index):
+            step_def = steps[i]
+            step_name = step_def.get("name", f"step_{i}")
+            step_dir = run_dir / _safe_dirname(step_name)
+            step_json = step_dir / "step.json"
+            if step_json.exists():
+                try:
+                    data = json.loads(step_json.read_text(encoding="utf-8"))
+                    shared_store[step_name] = {
+                        "ok": data.get("status") == "completed",
+                        "data": data,
+                    }
+                except (json.JSONDecodeError, OSError):
+                    pass
+
     try:
         while not machine.is_done:
             if wm.get_status(run_dir) == "cancelled":
@@ -496,6 +518,7 @@ async def run_pipeline(
                 else:
                     step_result = await execute_browser_step(
                         step_def, bridge, step_dir, run_dir,
+                        shared_store=shared_store,
                     )
             elif step_type == "goal":
                 step_result = await execute_goal_step(
@@ -507,6 +530,7 @@ async def run_pipeline(
                     pipeline_name=pipeline_name,
                     frontmatter=frontmatter,
                     pipeline_path=pipeline_path,
+                    shared_store=shared_store,
                 )
             else:
                 step_result = await _execute_tool_step_with_guardian(
@@ -518,6 +542,7 @@ async def run_pipeline(
                     events,
                     pg,
                     cdp_helpers=cdp_helpers,
+                    shared_store=shared_store,
                 )
 
             # ── Programmatic check (non-goal steps only) ──
@@ -540,6 +565,11 @@ async def run_pipeline(
                         }
 
             write_step_json(step_dir, sanitize_result(step_result))
+
+            shared_store[ctx.current_step] = {
+                "ok": step_result["status"] == "completed",
+                "data": step_result,
+            }
 
             # ── Success path ──
             if step_result["status"] == "completed":

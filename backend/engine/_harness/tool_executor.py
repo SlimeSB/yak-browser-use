@@ -66,6 +66,7 @@ async def execute_tool_calls_sequential(
     interrupt_check: Callable[[], bool] | None = None,
     stream_callback: Callable[[dict], None] | None = None,
     llm_call: Callable | None = None,
+    shared_store: dict | None = None,
 ) -> None:
     """Execute tool calls one at a time, sequentially.
 
@@ -121,6 +122,7 @@ async def execute_tool_calls_sequential(
                 stream_callback=stream_callback,
                 llm_call=llm_call,
                 interrupt_check=interrupt_check,
+                shared_store=shared_store,
             )
         except UnrecoverableError:
             raise
@@ -185,6 +187,7 @@ async def _execute_single_tool_call(
     stream_callback: Callable[[dict], None] | None = None,
     llm_call: Callable | None = None,
     interrupt_check: Callable[[], bool] | None = None,
+    shared_store: dict | None = None,
 ) -> dict:
     """Route a single tool call to the correct executor core function.
 
@@ -192,8 +195,10 @@ async def _execute_single_tool_call(
     - TimeoutError 1x retry
     - CDP reconnect with 3x exponential backoff
     - Unrecoverable error detection
+    - Parameter template resolution via shared_store
     """
     from engine.executor import execute_tool
+    from engine._param_resolver import resolve_params
     from tools.registry import registry, ToolContext as RegistryToolContext
 
     reconnect_attempts = 0
@@ -212,6 +217,9 @@ async def _execute_single_tool_call(
                 if cached_result is not None:
                     return cached_result
 
+            # ── Resolve parameter templates ──────────────────────────
+            resolved_args, resolve_errors = resolve_params(fn_args, shared_store)
+
             # ── Dispatch via registry ────────────────────────────────
             ctx = RegistryToolContext(
                 cdp_helpers=cdp_helpers,
@@ -221,17 +229,42 @@ async def _execute_single_tool_call(
                 llm_call=llm_call,
                 interrupt_check=interrupt_check,
                 stream_callback=stream_callback,
+                shared_store=shared_store,
             )
 
-            result = await registry.dispatch(fn_name, fn_args, ctx)
+            result = await registry.dispatch(fn_name, resolved_args, ctx)
 
             if result.get("ok") is False and result.get("error", "").startswith("Unknown tool:"):
-                return await execute_tool(
+                result = await execute_tool(
                     tool_name=fn_name,
-                    params=fn_args,
+                    params=resolved_args,
                     tools_dir=tools_dir or Path("."),
                     cdp_helpers=cdp_helpers,
                 )
+
+            # ── Write to shared_store if source_key specified ────────
+            # Use fn_args (original) not resolved_args: source_key is a routing
+            # param, not a data param — template resolver won't touch it, but
+            # reading from fn_args makes the intent explicit.
+            source_key = fn_args.get("source_key")
+            if source_key and shared_store is not None and fn_name != "eval_agent":
+                shared_store[source_key] = {
+                    "ok": result.get("ok", False),
+                    "data": result,
+                }
+
+            # ── Prepend resolve errors to tool result ────────────────
+            if resolve_errors:
+                warning = f"⚠️ 参数模板解析失败: {resolve_errors}"
+                if result.get("ok"):
+                    existing = result.get("result", "")
+                    if isinstance(existing, str):
+                        result["result"] = warning + "\n\n" + existing
+                    else:
+                        result["result"] = warning
+                else:
+                    existing = result.get("error", "")
+                    result["error"] = warning + "\n\n" + existing
 
             return result
 
@@ -292,6 +325,7 @@ async def _handle_eval_agent(
     interrupt_check: Callable[[], bool] | None,
     stream_callback: Callable[[dict], None] | None,
     pipeline_name: str = "",
+    shared_store: dict | None = None,
 ) -> dict:
     """Handle eval_agent tool call: launch subagent with restricted tools."""
     if llm_call is None:
@@ -326,6 +360,7 @@ async def _handle_eval_agent(
         budget=eval_budget,
         interrupt_check=interrupt_check,
         stream_callback=stream_callback,
+        shared_store=shared_store,
     )
 
     try:
@@ -347,7 +382,16 @@ async def _handle_eval_agent(
     _write_eval_csv(output_dir, purpose, success=True, result=final_text)
     _append_eval_to_pipeline(pipeline_name, purpose, final_text)
 
-    return {"ok": True, "result": final_text}
+    eval_result = {"ok": True, "result": final_text}
+
+    source_key = fn_args.get("source_key")
+    if source_key and shared_store is not None:
+        shared_store[source_key] = {
+            "ok": True,
+            "data": eval_result,
+        }
+
+    return eval_result
 
 
 def _extract_eval_summary(messages: list[dict]) -> str:

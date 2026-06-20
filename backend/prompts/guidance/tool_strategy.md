@@ -37,3 +37,19 @@ Typical scenarios:
 
 ### When to ask the user
 If the user's instruction is ambiguous or has multiple valid interpretations, ask for clarification before acting.
+
+### 工具间数据传递 (shared_store)
+部分工具支持通过 `source_key` 和 `_source_key` 在工具之间传递数据，避免大数据绕经 LLM 上下文：
+
+**Producer（写入）：** 调用 `eval_agent` 时传 `source_key` 参数，结果会自动存入 shared_store：
+- `eval_agent(purpose="提取表格", snapshot="...", source_key="table_data")`
+- 子 Agent 完成后的完整结果存入 `shared_store["table_data"]`
+
+**Consumer（读取）：** 在 `file_write` 等工具的 content 参数中使用 `_source_key` 引用：
+- `file_write(path="output.csv", content={"_source_key": "table_data"})`
+- `_source_key` 会被自动替换为 shared_store 中的实际数据，LLM 无需在上下文中携带大数据
+
+**注意：**
+- `_source_key` 引用的是 shared_store 中 `{key}.data` 的值（即 producer 的原始返回数据）
+- 如果引用的 key 不存在，会替换为 `__RESOLVE_FAILED__` 占位符，可重试纠正
+- 不要在同一 tool call 中同时使用 `_source_key` 和直接传数据，`_source_key` 会覆盖整个参数值

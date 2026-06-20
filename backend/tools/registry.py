@@ -77,6 +77,7 @@ class ToolContext:
     llm_call: Callable | None = None
     interrupt_check: Callable[[], bool] | None = None
     stream_callback: Callable[[dict], None] | None = None
+    shared_store: dict | None = None
 
 
 class ToolRegistry:
@@ -566,7 +567,7 @@ def _build_registry_impl() -> None:
     }, _file_read_handler)
 
     registry.register("file_write", {
-        "description": "将文本内容写入文件，自动创建父目录。",
+        "description": "将文本内容写入文件，自动创建父目录。content 支持 _source_key 引用：content: {\"_source_key\": \"key\"} 可从 shared_store 读取其他 tool 的输出数据，避免大数据绕经 LLM 上下文。",
         "parameters": {
             "type": "object",
             "properties": {
@@ -683,6 +684,7 @@ def _build_registry_impl() -> None:
                 "purpose": {"type": "string", "description": "eval agent 的任务目标描述"},
                 "snapshot": {"type": "string", "description": "当前页面的 simplified snapshot 文本"},
                 "max_attempts": {"type": "integer", "description": "最大 eval 尝试次数（默认 3）"},
+                "source_key": {"type": "string", "description": "可选，指定结果存入 shared_store 的 key。设置后子 Agent 的结果可通过其他 tool 的 _source_key 引用，避免大数据绕经 LLM 上下文。"},
             },
             "required": ["purpose", "snapshot"],
         },
@@ -827,4 +829,5 @@ async def _eval_agent_handler(args: dict, ctx: ToolContext) -> dict:
         interrupt_check=ctx.interrupt_check,
         stream_callback=ctx.stream_callback,
         pipeline_name=ctx.pipeline_name,
+        shared_store=ctx.shared_store,
     )
