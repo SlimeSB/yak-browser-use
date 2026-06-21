@@ -370,6 +370,7 @@ def register_all_routes(app: FastAPI) -> None:
 
             if engine_state.bridge:
                 engine_state.bridge.set_highlight_config(highlight_mode)
+                await engine_state.bridge.ensure_highlights()
             await _inject_initial_highlights()
 
             return JSONResponse({"connected": True, "ws_url": actual_ws[:80]})
@@ -451,6 +452,7 @@ def register_all_routes(app: FastAPI) -> None:
             raise APIError(f"Invalid mode: {mode!r}, must be a11y/progressive/off")
         if engine_state.bridge:
             engine_state.bridge.set_highlight_config(mode)
+            await engine_state.bridge.ensure_highlights()
             logger.info("Highlight mode set to %s", mode)
         return JSONResponse({"ok": True, "mode": mode})
 

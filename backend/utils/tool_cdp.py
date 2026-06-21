@@ -45,18 +45,11 @@ class ToolCDPHelpers:
         self._fail_count = 0
         return result
 
-    async def fill_credential(self, selector: str, param_ref: object) -> None:
-        from params.manager import resolve_param
-        text = resolve_param(param_ref)
-        await self.fill_input(selector, text)
-
     async def wait(self, seconds: float = 1.0) -> None:
         await asyncio.sleep(seconds)
 
-    async def snapshot(self, mode: str = "", query: str = "", in_viewport: bool = False) -> dict:
+    async def snapshot(self, mode: str = "a11y", query: str = "", in_viewport: bool = False) -> dict:
         self._check_failures()
-        if not mode:
-            mode = getattr(self._bridge, "_highlight_mode", "a11y")
         if mode == "a11y":
             result = await self._bridge.a11y_snapshot()
         elif mode == "progressive":

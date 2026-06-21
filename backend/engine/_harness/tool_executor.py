@@ -243,11 +243,8 @@ async def _execute_single_tool_call(
             # param, not a data param — template resolver won't touch it, but
             # reading from fn_args makes the intent explicit.
             source_key = fn_args.get("source_key")
-            if source_key and shared_store is not None and fn_name != "eval_agent":
-                shared_store[source_key] = {
-                    "ok": result.get("ok", False),
-                    "data": result,
-                }
+            if source_key and shared_store is not None:
+                shared_store[source_key] = result
 
             # ── Prepend resolve errors to tool result ────────────────
             if resolve_errors:
@@ -381,16 +378,7 @@ async def _handle_eval_agent(
     _write_eval_csv(output_dir, purpose, success=True, result=final_text)
     _append_eval_to_pipeline(pipeline_name, purpose, final_text)
 
-    eval_result = {"ok": True, "result": final_text}
-
-    source_key = fn_args.get("source_key")
-    if source_key and shared_store is not None:
-        shared_store[source_key] = {
-            "ok": True,
-            "data": eval_result,
-        }
-
-    return eval_result
+    return {"ok": True, "result": final_text}
 
 
 def _extract_eval_summary(messages: list[dict]) -> str:
@@ -610,7 +598,7 @@ def _apply_heavy_data_filter(
         return
 
     if fn_name == "browser_snapshot":
-        mode = fn_args.get("mode", "") or "a11y"
+        mode = fn_args.get("mode", "a11y")
 
         if mode == "simplified":
             result_payload = result_dict.get("result", {})

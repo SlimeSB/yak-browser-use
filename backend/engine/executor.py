@@ -164,7 +164,7 @@ async def execute_browser_op(
                 result["result"] = {"selector": selector}
 
             elif op_type == "snapshot":
-                mode = params.get("mode", "") or getattr(bridge, "_highlight_mode", "a11y")
+                mode = params.get("mode", "a11y")
                 query = params.get("query", "")
                 in_viewport = params.get("in_viewport", False)
                 if mode == "a11y":

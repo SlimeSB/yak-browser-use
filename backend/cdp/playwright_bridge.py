@@ -20,7 +20,7 @@ import base64
 import json as _json
 import logging
 import uuid
-from typing import Any
+from typing import Any, Callable
 
 from playwright.async_api import async_playwright, Browser, BrowserContext, Page
 
@@ -749,6 +749,7 @@ class PlaywrightBridge:
         self._branch_index: dict[str, list[str]] = {}
         self._highlight_enabled: bool = True
         self._highlight_mode: str = "a11y"
+        self._on_disconnect_cb: Callable[[], Any] | None = None
 
     # ------------------------------------------------------------------
     # Lifecycle
@@ -781,6 +782,7 @@ class PlaywrightBridge:
         else:
             self._page = await self._context.new_page()
 
+        self._browser.on("disconnected", lambda: self._schedule(self._on_browser_disconnected()))
         self._context.on("page", self._on_new_page)
         for p in self._context.pages:
             p.on("load", lambda pg=p: self._schedule(self._on_page_load(pg)))
@@ -840,12 +842,13 @@ class PlaywrightBridge:
             page_id = str(uuid.uuid4())[:8]
             await page.evaluate("(id) => { window.__ybu_page_id = id }", page_id)
             await page.wait_for_load_state("domcontentloaded")
-            if self._last_highlight_elements:
-                elements_json = _json.dumps(self._last_highlight_elements)
-                await page.evaluate(
-                    f"window.__ybu_last_elements = {elements_json};"
-                )
-            await page.evaluate(_HIGHLIGHT_BOOTSTRAP)
+            if self._highlight_enabled:
+                if self._last_highlight_elements:
+                    elements_json = _json.dumps(self._last_highlight_elements)
+                    await page.evaluate(
+                        f"window.__ybu_last_elements = {elements_json};"
+                    )
+                await page.evaluate(_HIGHLIGHT_BOOTSTRAP)
         except Exception:
             logger.debug("_on_new_page highlight injection failed", exc_info=True)
         # 新标签页自动设为活动页并扫描（让用户点链接后马上看到高亮）
@@ -874,6 +877,27 @@ class PlaywrightBridge:
         else:
             self._page = None
 
+    async def _on_browser_disconnected(self) -> None:
+        """Called when the remote Chrome disconnects (closed/crashed).
+
+        Stops the guard and notifies the engine state so it can properly
+        clean up and update status.
+        """
+        logger.warning("Remote Chrome disconnected")
+        self._stop_event.set()
+        if self._highlight_guard_task is not None:
+            self._highlight_guard_task.cancel()
+            self._highlight_guard_task = None
+        self._page = None
+        self._context = None
+        self._browser = None
+        cb = self._on_disconnect_cb
+        if cb:
+            try:
+                await cb()
+            except Exception:
+                logger.exception("_on_browser_disconnected: callback failed")
+
     async def _is_highlight_enabled(self) -> bool:
         """Check whether highlight rendering is enabled (sync, no CDP round-trip)."""
         return self._highlight_enabled
@@ -892,11 +916,27 @@ class PlaywrightBridge:
         renders highlights.  For inactive pages, only ensures the bootstrap
         framework is present — never writes stale element data so highlights
         on other tabs stay clean.
+
+        When ``_highlight_enabled`` is ``False``, clears overlay and skips.
         """
         pg = page or self._page
         if not pg:
             return
         try:
+            if not self._highlight_enabled:
+                # 清除旧 stamp 和 overlay
+                await pg.evaluate("""
+                    (function() {
+                        var c = document.getElementById('ybu-highlights');
+                        if (c) c.remove();
+                        document.querySelectorAll('[data-ybu-ref]').forEach(function(el) {
+                            el.removeAttribute('data-ybu-ref');
+                        });
+                        window.__ybu_last_elements = [];
+                    })()
+                """)
+                return
+
             is_active = pg is self._page
             if is_active:
                 await pg.evaluate(
@@ -1054,7 +1094,8 @@ class PlaywrightBridge:
                         else:
                             self._page = None
                             return
-                    await self.ensure_highlights()
+                    if self._highlight_enabled:
+                        await self.ensure_highlights()
                 except asyncio.CancelledError:
                     raise
                 except Exception:
