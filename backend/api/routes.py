@@ -456,6 +456,44 @@ def register_all_routes(app: FastAPI) -> None:
             logger.info("Highlight mode set to %s", mode)
         return JSONResponse({"ok": True, "mode": mode})
 
+    @app.post("/api/prog-label")
+    async def api_prog_label(request: dict) -> JSONResponse:
+        """Resolve a ref or prog_label to full element details.
+
+        Request body: ``{"id": "p_175"}`` or ``{"id": "0-2-175"}
+
+        Returns {ref, prog_label, selector, tag, text, role} or error.
+        """
+        rid = request.get("id", "")
+        if not rid:
+            raise APIError("missing 'id' field")
+        bridge = engine_state.bridge
+        if not bridge or not bridge.page:
+            raise APIError("browser not connected")
+
+        ref = None
+        # Try direct ref lookup
+        if rid.startswith("p_") or rid.startswith("a_"):
+            ref = f"@{rid}"
+        elif rid.startswith("@"):
+            ref = rid
+
+        el = bridge._ref_map.get(ref) if ref else None
+        # Fallback: scan _ref_map for matching prog_label
+        if not el and "-" in rid:
+            for r, e in bridge._ref_map.items():
+                if e.get("_prog_label") == rid:
+                    el = e
+                    ref = r
+                    break
+
+        if not el:
+            return JSONResponse({"ok": False, "error": f"{rid} not found in current snapshot"})
+
+        pub = {k: v for k, v in el.items() if not k.startswith("_")}
+        pub["prog_label"] = el.get("_prog_label", ref.lstrip("@"))
+        return JSONResponse({"ok": True, **pub})
+
     @app.get("/api/chrome/isolated-profiles")
     async def api_list_isolated_profiles() -> JSONResponse:
         """List all isolated Chrome profile directories."""

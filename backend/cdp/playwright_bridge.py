@@ -244,16 +244,23 @@ def _build_selector_from_node_progressive(node: dict) -> str:
     return _build_selector_from_attrs_progressive(tag, attrs)
 
 
-def _build_selector_from_attrs_progressive(tag: str, attrs: dict[str, str]) -> str:
-    """Build CSS selector from tag + attrs. Priority: id > data-testid > class > tag."""
+def _build_selector_from_attrs_progressive(tag: str, attrs: dict[str, str], nth: int = 1) -> str:
+    """Build CSS selector from tag + attrs. Add :nth-of-type for disambiguation.
+
+    nth-of-type is only appended when nth > 1 (elements after the first of
+    their type).  Singleton selectors (id, data-testid) are unique without it.
+    """
     if attrs.get("id"):
         return f'{tag}#{attrs["id"]}'
     if attrs.get("data-testid"):
         return f'{tag}[data-testid="{attrs["data-testid"]}"]'
+    sel = tag
     if attrs.get("class"):
         cls = ".".join(attrs["class"].split()[:3])
-        return f"{tag}.{cls}"
-    return tag
+        sel = f"{tag}.{cls}"
+    if nth > 1:
+        sel = f"{sel}:nth-of-type({nth})"
+    return sel
 
 
 class CollectState:
@@ -265,6 +272,7 @@ class CollectState:
         self._ref_map = ref_map
         self._stack: list[str] = []
         self._counter = 0
+        self._real_nth_counter: dict[str, int] = {}
 
     def walk(self, node: dict, depth: int = 0) -> None:
         ckey = None
@@ -297,13 +305,18 @@ class CollectState:
                         or attrs.get("value", "")
                         or attrs.get("placeholder", "")
                         or _extract_text_from_children(node))
+                nth = self._real_nth_counter.get(tag, 1)
+                prog_label_parts = [ckey.split("_", 1)[1] for ckey in self._stack] + [bid]
+                prog_label = "-".join(prog_label_parts)
                 el = {
                     "ref": ref, "tag": tag,
                     "backendNodeId": bid,
-                    "selector": _build_selector_from_attrs_progressive(tag, attrs),
+                    "selector": _build_selector_from_attrs_progressive(tag, attrs, nth),
                     "text": text,
                     "role": attrs.get("role", ""),
                     "_containers": list(self._stack),
+                    "_prog_label": prog_label,
+                    "prog_label": prog_label,
                     "_whitelist": (tag in _ALWAYS_FULL_TAGS or
                                    attrs.get("role", "").lower() in _ALWAYS_FULL_ROLES),
                     "_in_view": False,
@@ -317,8 +330,15 @@ class CollectState:
                     if el["_whitelist"]:
                         s["whitelist_count"] += 1
 
+        # nth-of-type is per-parent — save/restore counter at each level
+        old_nth_counter = self._real_nth_counter
+        self._real_nth_counter = {}
         for child in node.get("children", []):
+            if child.get("nodeType") == 1:
+                ct = child.get("nodeName", "").lower()
+                self._real_nth_counter[ct] = self._real_nth_counter.get(ct, 0) + 1
             self.walk(child, depth + 1)
+        self._real_nth_counter = old_nth_counter
 
         if ckey and self._stack:
             self._stack.pop()
@@ -550,6 +570,7 @@ _HIGHLIGHT_BOOTSTRAP = """
                             var target = all[si];
                             target.style.outline = '2px dashed #3b82f6';
                             target.style.outlineOffset = '0px';
+                            var lbl = el.prog_label || el.ref;
                             target.setAttribute('data-ybu-outlined', el.ref);
                             var rect = target.getBoundingClientRect();
                             var badgeDiv = document.createElement('div');
@@ -558,7 +579,7 @@ _HIGHLIGHT_BOOTSTRAP = """
                             badgeDiv.style.cssText = 'position:fixed;pointer-events:none;will-change:transform;';
                             badgeDiv.style.transform = 'translate3d(' + rect.left + 'px,' + Math.max(0, rect.top - 14) + 'px,0)';
                             var badge = document.createElement('span');
-                            badge.textContent = el.ref;
+                            badge.textContent = lbl;
                             badge.style.cssText = 'background:#3b82f6;color:#fff;font-size:10px;font-family:Arial,sans-serif;padding:1px 4px;border-radius:2px;line-height:1.2;white-space:nowrap;';
                             badgeDiv.appendChild(badge);
                             container.appendChild(badgeDiv);
@@ -576,8 +597,9 @@ _HIGHLIGHT_BOOTSTRAP = """
                 box.setAttribute('data-ybu-oy', Math.round(el.y));
                 box.style.cssText = 'position:fixed;width:' + el.width + 'px;height:' + el.height + 'px;border:2px dashed #3b82f6;border-radius:2px;pointer-events:none;will-change:transform;';
                 box.style.transform = 'translate3d(' + (el.x - sx) + 'px,' + (el.y - sy) + 'px,0)';
+                var lbl = el.prog_label || el.ref;
                 var fb = document.createElement('span');
-                fb.textContent = el.ref;
+                fb.textContent = lbl;
                 fb.style.cssText = 'position:absolute;top:-12px;left:-2px;background:#3b82f6;color:#fff;font-size:10px;font-family:Arial,sans-serif;padding:1px 4px;border-radius:2px;line-height:1.2;white-space:nowrap;pointer-events:none;';
                 box.appendChild(fb);
                 container.appendChild(box);
@@ -1134,115 +1156,11 @@ class PlaywrightBridge:
         return {"selector": selector}
 
     # ------------------------------------------------------------------
-    # Ref-based interaction (a11y / progressive mode)
+    # Ref-based interaction (a11y / progressive mode) — REMOVED
+    #
+    # Ops now accept selector only (CSS / role= / text= …).
+    # Ref is used internally for DOM stamping + badge display.
     # ------------------------------------------------------------------
-
-    async def _locator_by_ref(self, ref: str):
-        """Resolve an a11y ref (@a_N) to a Playwright locator."""
-        el = self._ref_map.get(ref)
-        if not el:
-            raise ValueError(f"{ref} not found in _ref_map")
-        if not ref.startswith(A11Y_REF_PREFIX):
-            raise ValueError(f"{ref}: not an a11y ref")
-        locator = self._page.get_by_role(el["role"], name=el["name"], exact=True)
-        locator = locator.nth(el.get("nth", 0))
-        return locator
-
-    async def _backend_node_by_ref(self, ref: str) -> int:
-        """Resolve a progressive ref (@p_<backendNodeId>) to a CDP backendNodeId."""
-        el = self._ref_map.get(ref)
-        if not el:
-            raise ValueError(f"{ref} not found in _ref_map")
-        if not ref.startswith(PROGRESSIVE_REF_PREFIX):
-            raise ValueError(f"{ref}: not a progressive ref")
-        return int(el["backendNodeId"])
-
-    async def _click_backend_node(self, backend_node_id: int) -> None:
-        """Click an element via CDP backendNodeId (bypasses selector uniqueness issues)."""
-        cdp = await self._context.new_cdp_session(self._page)
-        try:
-            result = await cdp.send("DOM.resolveNode", {"backendNodeId": backend_node_id})
-            object_id = result["object"]["objectId"]
-            await cdp.send("DOM.scrollIntoViewIfNeeded", {"objectId": object_id})
-            box = await cdp.send("DOM.getBoxModel", {"objectId": object_id})
-            quad = box["model"]["content"]
-            x = (quad[0] + quad[4]) / 2
-            y = (quad[1] + quad[5]) / 2
-            await self._page.mouse.click(x, y)
-        finally:
-            await cdp.detach()
-
-    async def _type_backend_node(self, backend_node_id: int, text: str) -> None:
-        """Type text into an element via CDP backendNodeId."""
-        cdp = await self._context.new_cdp_session(self._page)
-        try:
-            result = await cdp.send("DOM.resolveNode", {"backendNodeId": backend_node_id})
-            object_id = result["object"]["objectId"]
-            await cdp.send("DOM.scrollIntoViewIfNeeded", {"objectId": object_id})
-            await cdp.send("Runtime.callFunctionOn", {
-                "objectId": object_id,
-                "functionDeclaration": "function() { this.focus(); this.select(); }",
-            })
-            await self._page.keyboard.type(text)
-        finally:
-            await cdp.detach()
-
-    async def click_ref(self, ref: str) -> dict:
-        """Click an element by ref (@a_N or @p_<backendNodeId>)."""
-        if ref.startswith(A11Y_REF_PREFIX):
-            locator = await self._locator_by_ref(ref)
-            await locator.click()
-        elif ref.startswith(PROGRESSIVE_REF_PREFIX):
-            bid = await self._backend_node_by_ref(ref)
-            await self._click_backend_node(bid)
-        else:
-            raise ValueError(f"{ref}: unknown ref prefix")
-        return {"ref": ref}
-
-    async def fill_ref(self, ref: str, text: str) -> dict:
-        """Fill an input by ref (@a_N or @p_<backendNodeId>)."""
-        if ref.startswith(A11Y_REF_PREFIX):
-            locator = await self._locator_by_ref(ref)
-            await locator.fill(text)
-        elif ref.startswith(PROGRESSIVE_REF_PREFIX):
-            bid = await self._backend_node_by_ref(ref)
-            await self._type_backend_node(bid, text)
-        else:
-            raise ValueError(f"{ref}: unknown ref prefix")
-        return {"ref": ref}
-
-    async def type_ref(self, ref: str, text: str) -> dict:
-        """Type text by ref (@a_N or @p_<backendNodeId>)."""
-        if ref.startswith(A11Y_REF_PREFIX):
-            locator = await self._locator_by_ref(ref)
-            await locator.type(text)
-        elif ref.startswith(PROGRESSIVE_REF_PREFIX):
-            bid = await self._backend_node_by_ref(ref)
-            await self._type_backend_node(bid, text)
-        else:
-            raise ValueError(f"{ref}: unknown ref prefix")
-        return {"ref": ref}
-
-    async def press_key_ref(self, ref: str, key: str) -> dict:
-        """Press a key on an element by ref."""
-        if ref.startswith(A11Y_REF_PREFIX):
-            locator = await self._locator_by_ref(ref)
-            await locator.press(key)
-        elif ref.startswith(PROGRESSIVE_REF_PREFIX):
-            bid = await self._backend_node_by_ref(ref)
-            cdp = await self._context.new_cdp_session(self._page)
-            try:
-                result = await cdp.send("DOM.resolveNode", {"backendNodeId": bid})
-                await cdp.send("Runtime.callFunctionOn", {
-                    "objectId": result["object"]["objectId"],
-                    "functionDeclaration": "function() { this.focus(); }",
-                })
-                await self._page.keyboard.press(key)
-            finally:
-                await cdp.detach()
-        else:
-            raise ValueError(f"{ref}: unknown ref prefix")
-        return {"ref": ref}
 
     async def fill(self, selector: str, text: str) -> dict:
         await self._page.locator(selector).fill(text)
@@ -1646,6 +1564,10 @@ class PlaywrightBridge:
 
             el["ref"] = ref
             el["nth"] = nth
+            el["prog_label"] = ref.lstrip("@")
+            # Build Playwright-compatible locator selector
+            safe_name = name.replace('\\', '\\\\').replace('"', '\\"')
+            el["selector"] = f'role={el["role"]}[name="{safe_name}"]' if name else f'role={el["role"]}'
 
             locator = self._page.get_by_role(el["role"], name=el["name"], exact=True)
             locator = locator.nth(nth)
@@ -1660,12 +1582,16 @@ class PlaywrightBridge:
 
             self._ref_map[ref] = {
                 "ref": ref, "role": el["role"], "name": el["name"], "nth": nth,
+                "selector": el["selector"],
             }
 
         self._last_highlight_elements = list(elements)
         await self.ensure_highlights()
+
+        # Strip ref from public elements
+        public_elements = [{k: v for k, v in el.items() if k != "ref"} for el in elements]
         return {
-            "elements": elements, "mode": "a11y",
+            "elements": public_elements, "mode": "a11y",
             "url": self._page.url,
             "title": await self._page.title(),
         }
@@ -1728,7 +1654,10 @@ class PlaywrightBridge:
                         await cdp_stamp.send("Runtime.callFunctionOn", {
                             "objectId": result["object"]["objectId"],
                             "functionDeclaration": (
-                                f'function() {{ this.setAttribute("data-ybu-ref", {_json.dumps(el["ref"])}); }}'
+                                f'function() {{'
+                                f' this.setAttribute("data-ybu-ref", {_json.dumps(el["ref"])});'
+                                f' this.setAttribute("data-ybu-prog-label", {_json.dumps(el["_prog_label"])});'
+                                f'}}'
                             ),
                         })
                     except Exception:
@@ -1741,9 +1670,15 @@ class PlaywrightBridge:
         self._per_page_elements[id(self._page)] = list(view_elements)
         await self.ensure_highlights()
 
-        # Strip private fields before returning to LLM
-        public_elements = [{k: v for k, v in el.items() if not k.startswith("_")}
-                           for el in view_elements]
+        # Strip private fields AND ref before returning to LLM
+        public_elements = []
+        for el in view_elements:
+            pub = {}
+            for k, v in el.items():
+                if k.startswith("_") or k == "ref":
+                    continue
+                pub[k] = v
+            public_elements.append(pub)
         public_folded = [{k: v for k, v in f.items() if not k.startswith("_")}
                          for f in folded]
 
@@ -1772,7 +1707,7 @@ class PlaywrightBridge:
             el = self._ref_map.get(idx)
             if not el:
                 continue
-            page.append({k: v for k, v in el.items() if not k.startswith("_")})
+            page.append({k: v for k, v in el.items() if not k.startswith("_") and k != "ref"})
         return {
             "elements": page, "total": total, "returned": len(page),
             "offset": offset, "has_more": (offset + len(page)) < total,

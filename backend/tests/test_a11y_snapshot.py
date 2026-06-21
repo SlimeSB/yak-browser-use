@@ -176,18 +176,6 @@ class MockBridge:
     async def ensure_highlights(self, page=None):
         pass
 
-    async def _locator_by_ref(self, ref: str):
-        from cdp.playwright_bridge import PlaywrightBridge
-        return await PlaywrightBridge._locator_by_ref(self, ref)
-
-    async def _backend_node_by_ref(self, ref: str) -> int:
-        from cdp.playwright_bridge import PlaywrightBridge
-        return await PlaywrightBridge._backend_node_by_ref(self, ref)
-
-    async def _click_backend_node(self, backend_node_id: int) -> None:
-        from cdp.playwright_bridge import PlaywrightBridge
-        return await PlaywrightBridge._click_backend_node(self, backend_node_id)
-
 
 @pytest.fixture
 def mock_bridge():
@@ -211,17 +199,12 @@ async def test_a11y_snapshot_returns_elements(a11y_snapshot_fn, mock_bridge):
 
 
 @pytest.mark.asyncio
-async def test_a11y_snapshot_refs_have_prefix(a11y_snapshot_fn, mock_bridge):
+async def test_a11y_snapshot_uses_selector(a11y_snapshot_fn, mock_bridge):
     result = await a11y_snapshot_fn()
     for el in result["elements"]:
-        assert el["ref"].startswith(A11Y_REF_PREFIX)
-
-
-@pytest.mark.asyncio
-async def test_a11y_snapshot_refs_are_sequential(a11y_snapshot_fn, mock_bridge):
-    result = await a11y_snapshot_fn()
-    refs = [el["ref"] for el in result["elements"]]
-    assert refs == [f"{A11Y_REF_PREFIX}{i}" for i in range(6)]
+        assert "ref" not in el
+        assert "selector" in el
+        assert el["selector"].startswith("role=")
 
 
 @pytest.mark.asyncio
@@ -298,121 +281,13 @@ async def test_a11y_snapshot_no_stamp_when_highlight_off(a11y_snapshot_fn, mock_
 
 
 @pytest.mark.asyncio
-async def test_a11y_snapshot_ref_map_has_semantic_only(a11y_snapshot_fn, mock_bridge):
-    """_ref_map stores only semantic identity, no coordinates."""
-    await a11y_snapshot_fn()
-    for ref, el in mock_bridge._ref_map.items():
-        assert "ref" in el
-        assert "role" in el
-        assert "name" in el
-        assert "nth" in el
-        assert "x" not in el
-        assert "y" not in el
-        assert "selector" not in el
-
-
-# ── _locator_by_ref ────────────────────────────────────────────
-
-
-@pytest.fixture
-def locator_fn(mock_bridge):
-    from cdp.playwright_bridge import PlaywrightBridge
-    return PlaywrightBridge._locator_by_ref.__get__(mock_bridge, PlaywrightBridge)
-
-
-@pytest.mark.asyncio
-async def test_locator_by_ref_a11y(locator_fn, mock_bridge):
-    mock_bridge._ref_map["@a_0"] = {"ref": "@a_0", "role": "button", "name": "Submit", "nth": 0}
-    locator = await locator_fn("@a_0")
-    mock_bridge._page.get_by_role.assert_called_with("button", name="Submit", exact=True)
-
-
-@pytest.mark.asyncio
-async def test_locator_by_ref_rejects_progressive(locator_fn, mock_bridge):
-    mock_bridge._ref_map["@p_123"] = {"ref": "@p_123", "backendNodeId": "123"}
-    with pytest.raises(ValueError, match="not an a11y ref"):
-        await locator_fn("@p_123")
-
-
-@pytest.mark.asyncio
-async def test_locator_by_ref_missing_ref(locator_fn, mock_bridge):
-    with pytest.raises(ValueError, match="not found"):
-        await locator_fn("@a_999")
-
-
-# ── _backend_node_by_ref ───────────────────────────────────────
-
-
-@pytest.fixture
-def backend_fn(mock_bridge):
-    from cdp.playwright_bridge import PlaywrightBridge
-    return PlaywrightBridge._backend_node_by_ref.__get__(mock_bridge, PlaywrightBridge)
-
-
-@pytest.mark.asyncio
-async def test_backend_node_by_ref(backend_fn, mock_bridge):
-    mock_bridge._ref_map["@p_123"] = {"ref": "@p_123", "backendNodeId": "123"}
-    bid = await backend_fn("@p_123")
-    assert bid == 123
-
-
-@pytest.mark.asyncio
-async def test_backend_node_by_ref_rejects_a11y(backend_fn, mock_bridge):
-    mock_bridge._ref_map["@a_0"] = {"ref": "@a_0", "role": "button", "name": "Submit"}
-    with pytest.raises(ValueError, match="not a progressive ref"):
-        await backend_fn("@a_0")
-
-
-# ── click_ref / fill_ref ───────────────────────────────────────
-
-
-@pytest.fixture
-def click_ref_fn(mock_bridge):
-    from cdp.playwright_bridge import PlaywrightBridge
-    return PlaywrightBridge.click_ref.__get__(mock_bridge, PlaywrightBridge)
-
-
-@pytest.fixture
-def fill_ref_fn(mock_bridge):
-    from cdp.playwright_bridge import PlaywrightBridge
-    return PlaywrightBridge.fill_ref.__get__(mock_bridge, PlaywrightBridge)
-
-
-@pytest.mark.asyncio
-async def test_click_ref_a11y(click_ref_fn, mock_bridge):
-    mock_bridge._ref_map["@a_0"] = {"ref": "@a_0", "role": "button", "name": "Submit", "nth": 0}
-    result = await click_ref_fn("@a_0")
-    assert result["ref"] == "@a_0"
-    mock_bridge._page._mock_locator.click.assert_called_once()
-
-
-@pytest.mark.asyncio
-async def test_click_ref_progressive(click_ref_fn, mock_bridge):
-    mock_bridge._ref_map["@p_123"] = {"ref": "@p_123", "backendNodeId": "123"}
-    cdp = mock_bridge._context.new_cdp_session.return_value
-    cdp.send.side_effect = [
-        {"object": {"objectId": "obj-1"}},          # DOM.resolveNode
-        {},                                          # DOM.scrollIntoViewIfNeeded
-        {"model": {"content": [10, 20, 30, 20, 30, 40, 10, 40]}},  # DOM.getBoxModel
-    ]
-    result = await click_ref_fn("@p_123")
-    assert result["ref"] == "@p_123"
-    # Verify CDP was used (not Playwright locator)
-    assert cdp.send.call_count >= 3
-
-
-@pytest.mark.asyncio
-async def test_fill_ref_a11y(fill_ref_fn, mock_bridge):
-    mock_bridge._ref_map["@a_0"] = {"ref": "@a_0", "role": "textbox", "name": "Search", "nth": 0}
-    result = await fill_ref_fn("@a_0", "hello")
-    assert result["ref"] == "@a_0"
-    mock_bridge._page._mock_locator.fill.assert_called_once_with("hello")
-
-
-@pytest.mark.asyncio
-async def test_click_ref_unknown_prefix(click_ref_fn, mock_bridge):
-    with pytest.raises(ValueError, match="unknown ref prefix"):
-        await click_ref_fn("@x_0")
+async def test_a11y_snapshot_has_selector(a11y_snapshot_fn, mock_bridge):
+    """a11y elements include role=... selector, not ref."""
+    result = await a11y_snapshot_fn()
+    for el in result["elements"]:
+        assert "selector" in el
+        assert "ref" not in el
+        assert el["selector"].startswith("role=")
 
 
 # ── Invariant I5: _in_view consistency ─────────────────────────

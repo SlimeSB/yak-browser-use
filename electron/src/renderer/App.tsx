@@ -748,7 +748,6 @@ export default function App() {
           onHighlightModeChange={(mode) => {
             setHighlightMode(mode);
             try { localStorage.setItem('highlight-mode', mode); } catch { /* ok */ }
-            window.electronAPI.setHighlightConfig(mode);
           }}
         />
       </div>

@@ -138,13 +138,7 @@ async def execute_browser_op(
                 if not selector:
                     raise ValueError("click op missing selector")
                 selector = await _resolve_element_ref(selector, element_map, bridge)
-                if selector.startswith("@a_") or selector.startswith("@p_"):
-                    if hasattr(bridge, "click_ref"):
-                        await bridge.click_ref(selector)
-                    else:
-                        await bridge.click(selector, click_count)
-                else:
-                    await bridge.click(selector, click_count)
+                await bridge.click(selector, click_count)
                 result["result"] = {"selector": selector}
 
             elif op_type == "fill":
@@ -154,13 +148,7 @@ async def execute_browser_op(
                     from params.manager import resolve_param
                     text = resolve_param(text["param_key"])
                 selector = await _resolve_element_ref(selector, element_map, bridge)
-                if selector.startswith("@a_") or selector.startswith("@p_"):
-                    if hasattr(bridge, "fill_ref"):
-                        await bridge.fill_ref(selector, text)
-                    else:
-                        await bridge.fill(selector, text)
-                else:
-                    await bridge.fill(selector, text)
+                await bridge.fill(selector, text)
                 result["result"] = {"selector": selector}
 
             elif op_type == "snapshot":
@@ -372,12 +360,7 @@ async def _resolve_element_ref(selector: str, element_map: dict | None, bridge: 
     """Resolve @eN element references to CSS selectors using the element map.
 
     In chat mode (element_map is None), falls back to bridge.get_element_by_index().
-
-    Returns the original ref unchanged if it starts with @a_ or @p_ — those are
-    resolved at click time via bridge.click_ref() / bridge.fill_ref().
     """
-    if selector.startswith("@a_") or selector.startswith("@p_"):
-        return selector
     if selector.startswith("@e"):
         if element_map:
             resolved = element_map.get(selector)
