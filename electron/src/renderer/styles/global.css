@@ -1893,8 +1893,11 @@ body {
   color: #e6edf3;
   font-size: 13px;
   font-family: inherit;
-  resize: none;
+  resize: vertical;
+  max-height: 300px;
+  min-height: 54px;
   outline: none;
+  overflow-y: auto;
 }
 
 .chat-input:focus {

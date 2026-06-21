@@ -38,6 +38,7 @@ export default function ChatTab({
   const [diffError, setDiffError] = useState('');
   const scrollRef = useRef<HTMLDivElement>(null);
   const bodyRef = useRef<HTMLDivElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const draggingRef = useRef(false);
   const [expandedThinks, setExpandedThinks] = useState<Set<number>>(new Set());
   const cancelledRef = useRef(false);
@@ -85,10 +86,26 @@ export default function ChatTab({
     document.addEventListener('mouseup', onUp);
   };
 
+  const autoResize = () => {
+    const el = textareaRef.current;
+    if (el) {
+      el.style.height = 'auto';
+      el.style.height = Math.min(el.scrollHeight, 300) + 'px';
+    }
+  };
+
+  const resetTextarea = () => {
+    const el = textareaRef.current;
+    if (el) {
+      el.style.height = '';
+    }
+  };
+
   const handleSend = async () => {
     const text = input.trim();
     if (!text || sending) return;
     setInput('');
+    resetTextarea();
     setSending(true);
     setSessionStatus('running');
 
@@ -321,9 +338,10 @@ export default function ChatTab({
 
           <div className="chat-input-area">
             <textarea
+              ref={textareaRef}
               className="chat-input"
               value={input}
-              onChange={e => setInput(e.target.value)}
+              onChange={e => { setInput(e.target.value); autoResize(); }}
               onKeyDown={handleKeyDown}
               placeholder={connected ? t('chat.placeholder') : t('chat.placeholderDisconnected')}
               disabled={!connected || sending}

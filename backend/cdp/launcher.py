@@ -472,3 +472,12 @@ async def cleanup_isolated() -> None:
         _playwright_instance = None
 
     _launched_pids.clear()
+
+
+def get_launched_process() -> Any | None:
+    """Return the currently tracked browser subprocess, if any.
+
+    Returns ``None`` when no subprocess was spawned (e.g. connecting to
+    an already-running browser) or after the process has been cleaned up.
+    """
+    return _user_chrome_process

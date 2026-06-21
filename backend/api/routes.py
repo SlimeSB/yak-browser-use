@@ -368,6 +368,14 @@ def register_all_routes(app: FastAPI) -> None:
 
             actual_ws = await engine_state.connect_chrome(ws_url)
 
+            # 监控 ybu 自己启动的浏览器进程（isolated mode），Edge 关窗口后进程可能
+            # 留在后台，但只要进程最终退出就能触发断开
+            if mode == "isolated":
+                from cdp.launcher import get_launched_process
+                proc = get_launched_process()
+                if proc and engine_state.bridge:
+                    engine_state.bridge.watch_process(proc)
+
             if engine_state.bridge:
                 engine_state.bridge.set_highlight_config(highlight_mode)
                 await engine_state.bridge.ensure_highlights()

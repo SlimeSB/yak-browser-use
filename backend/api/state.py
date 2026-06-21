@@ -69,6 +69,7 @@ class _EngineState:
             bridge = PlaywrightBridge(ws_url)
             bridge._on_disconnect_cb = self._on_bridge_disconnected
             await bridge.start()
+            bridge.start_health_check()
 
             self.bridge = bridge
             self.current_state = "connected"

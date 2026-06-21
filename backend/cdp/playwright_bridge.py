@@ -767,6 +767,9 @@ class PlaywrightBridge:
         self._highlight_enabled: bool = True
         self._highlight_mode: str = "a11y"
         self._on_disconnect_cb: Callable[[], Any] | None = None
+        self._health_check_task: asyncio.Task | None = None
+        self._process_watch_task: asyncio.Task | None = None
+        self._disconnected: bool = False
 
     # ------------------------------------------------------------------
     # Lifecycle
@@ -819,6 +822,11 @@ class PlaywrightBridge:
         """Release Playwright resources. Does NOT close Chrome."""
         logger.info("PlaywrightBridge stopping")
         self._stop_event.set()
+        self._disconnected = True
+        self._stop_health_check()
+        if self._process_watch_task is not None:
+            self._process_watch_task.cancel()
+            self._process_watch_task = None
         if self._highlight_guard_task is not None:
             self._highlight_guard_task.cancel()
             self._highlight_guard_task = None
@@ -890,23 +898,117 @@ class PlaywrightBridge:
     async def _on_browser_disconnected(self) -> None:
         """Called when the remote Chrome disconnects (closed/crashed).
 
-        Stops the guard and notifies the engine state so it can properly
-        clean up and update status.
+        Stops all background tasks, clears references, and notifies the
+        engine state via the disconnect callback. Idempotent — guarded by
+        ``_disconnected`` flag.
         """
+        if self._disconnected:
+            return
+        self._disconnected = True
         logger.warning("Remote Chrome disconnected")
         self._stop_event.set()
+        self._stop_health_check()
+        if self._process_watch_task is not None:
+            self._process_watch_task.cancel()
+            self._process_watch_task = None
         if self._highlight_guard_task is not None:
             self._highlight_guard_task.cancel()
             self._highlight_guard_task = None
         self._page = None
         self._context = None
         self._browser = None
+        await self._fire_disconnect_cb()
+
+    async def _fire_disconnect_cb(self) -> None:
+        """Fire the disconnect callback to notify EngineState."""
         cb = self._on_disconnect_cb
         if cb:
             try:
                 await cb()
             except Exception:
-                logger.exception("_on_browser_disconnected: callback failed")
+                logger.exception("_fire_disconnect_cb: callback failed")
+
+    # ------------------------------------------------------------------
+    # Health check — periodic CDP heartbeat
+    # ------------------------------------------------------------------
+
+    def start_health_check(self, interval: float = 3.0) -> None:
+        """Start a background task that periodically verifies browser is alive.
+
+        Sends a trivial CDP command (``page.evaluate("1+1")``). If it
+        fails twice in a row the browser is considered dead and
+        ``_on_browser_disconnected`` is called.
+        """
+        if self._health_check_task is not None:
+            self._stop_health_check()
+        self._health_check_task = asyncio.create_task(
+            self._health_check_loop(interval)
+        )
+
+    def _stop_health_check(self) -> None:
+        if self._health_check_task is not None:
+            self._health_check_task.cancel()
+            self._health_check_task = None
+
+    async def _health_check_loop(self, interval: float) -> None:
+        """CDP heartbeat: evaluate a trivial expression on a timer."""
+        while not self._stop_event.is_set():
+            try:
+                await asyncio.sleep(interval)
+                if self._disconnected:
+                    break
+                if self._page is None:
+                    continue
+                await self._page.evaluate("1+1")
+            except asyncio.CancelledError:
+                break
+            except Exception:
+                logger.warning(
+                    "Health check failed, retrying once in 2 s…"
+                )
+                try:
+                    await asyncio.sleep(2)
+                    if self._page is not None:
+                        await self._page.evaluate("1+1")
+                except asyncio.CancelledError:
+                    break
+                except Exception:
+                    logger.error(
+                        "Health check failed twice — browser unreachable, "
+                        "triggering disconnect"
+                    )
+                    await self._on_browser_disconnected()
+                    break
+
+    # ------------------------------------------------------------------
+    # Process watcher — monitor spawned subprocess
+    # ------------------------------------------------------------------
+
+    def watch_process(self, proc: asyncio.subprocess.Process) -> None:
+        """Monitor a spawned browser subprocess.
+
+        When the process exits (Edge window closed, crash, kill) the
+        bridge is disconnected automatically.  This covers the case where
+        Edge lingers as a background process but later exits (e.g.
+        ``taskkill`` or system shutdown).
+        """
+        if self._process_watch_task is not None:
+            self._process_watch_task.cancel()
+
+        async def _watcher() -> None:
+            try:
+                await proc.wait()
+                if not self._disconnected:
+                    logger.warning(
+                        "Spawned browser process exited (code=%s), "
+                        "triggering disconnect",
+                        proc.returncode,
+                    )
+                    await self._on_browser_disconnected()
+            except Exception:
+                logger.exception("Process watcher failed")
+
+        self._process_watch_task = asyncio.create_task(_watcher())
 
     async def _is_highlight_enabled(self) -> bool:
         """Check whether highlight rendering is enabled (sync, no CDP round-trip)."""
