@@ -178,9 +178,9 @@ def _build_registry_impl() -> None:
         },
         "snapshot": {
             "description": "Capture page snapshot. a11y（默认）通过 Accessibility Tree 获取可交互元素，轻量快速；"
-                           "progressive 通过 CDP DOM 深度扫描 + 密度自适应，用于复杂长列表页面；"
-                           "simplified 纯文本概览。推荐用法：先调无参 snapshot()，"
-                           "元素不够用时换 snapshot(mode='progressive')。",
+                           "progressive 通过 CDP DOM 深度扫描 + 密度自适应 + 分层抽样（最多 200 个元素，8 个区域等额分配），"
+                           "密集容器自动折叠为 folded_containers，可用 expand_branch 展开浏览；"
+                           "simplified 纯文本概览。推荐用法：简单表单用 a11y，复杂列表/商品页用 progressive。",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -241,10 +241,10 @@ def _build_registry_impl() -> None:
             },
         },
         "get_element_by_number": {
-            "description": "Get detailed information about an interactive element by its reference number (e.g. @e_12345). Looks up from the most recent browser_snapshot cache first, falls back to CDP if not found. Use this to check element details (tag, text, selector) before clicking or filling.",
+            "description": "Get detailed information about an interactive element by its prog_label (hierarchical path like '0-2-175') or ref number. The badge on the page shows the prog_label; use it to look up element details (selector, tag, text) before clicking or filling.",
             "parameters": {
                 "type": "object",
-                "properties": {"ref": {"type": "string", "description": "Element reference, e.g. '@e_12345', 'e_12345', '12345' (stable CDP backend_node_id)."}},
+                "properties": {"ref": {"type": "string", "description": "Element prog_label (e.g. '0-2-175' shown on badge) or numeric ref."}},
                 "required": ["ref"],
             },
         },

@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, Menu, dialog } from 'electron';
+import { app, BrowserWindow, globalShortcut, ipcMain, Menu, dialog } from 'electron';
 import { execSync } from 'child_process';
 import { PythonBackend } from './backend';
 import path from 'path';
@@ -452,6 +452,34 @@ app.whenReady().then(async () => {
   });
 
   await createWindow();
+
+  // F8: save current page HTML + screenshot for debugging
+  globalShortcut.register('F8', async () => {
+    logger.info('F8 pressed — saving page...');
+    try {
+      const result = await _safeFetch('/api/chrome/save-page', { method: 'POST' });
+      if (result.ok && result.data?.path) {
+        logger.info('Page saved to %s', result.data.path);
+        dialog.showMessageBox(mainWindow!, {
+          type: 'info', title: 'Page Saved',
+          message: `Page saved to:\n${result.data.path}`,
+          buttons: ['OK'],
+        });
+      } else {
+        dialog.showMessageBox(mainWindow!, {
+          type: 'error', title: 'Save Failed',
+          message: result.error || 'Unknown error',
+          buttons: ['OK'],
+        });
+      }
+    } catch (e) {
+      dialog.showMessageBox(mainWindow!, {
+        type: 'error', title: 'Save Failed',
+        message: String(e),
+        buttons: ['OK'],
+      });
+    }
+  });
 }).catch((e) => {
   logger.error('App startup failed: %s', (e as Error).message);
   dialog.showErrorBox('Startup Failed', `Application startup error:\n${(e as Error).message}`);
@@ -478,6 +506,7 @@ app.on('before-quit', () => {
 });
 
 app.on('will-quit', () => {
+  globalShortcut.unregisterAll();
   if (!_stopping) {
     _stopping = true;
     try { require('../utils/logRelay').stopLogRelay(); } catch { /* ignore */ }

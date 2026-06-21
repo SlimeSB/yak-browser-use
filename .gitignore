@@ -46,6 +46,9 @@ userdata/provider.json
 userdata/presets/*.pipeline.yaml
 !userdata/presets/.gitkeep
 
+# Debug dumps (F8)
+debug-page/
+
 # Hermes / tooling
 .hermes/
 .tasks/

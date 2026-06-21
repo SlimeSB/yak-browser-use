@@ -411,6 +411,46 @@ def register_all_routes(app: FastAPI) -> None:
             logger.exception("POST /api/chrome/disconnect failed")
             raise ServerError(str(exc))
 
+    @app.post("/api/chrome/save-page")
+    async def api_chrome_save_page() -> JSONResponse:
+        """Debug: save current page HTML + screenshot (all elements visible), overwriting previous dump."""
+        if engine_state.bridge is None or not engine_state.bridge._page:
+            raise APIError("No Chrome connected", status_code=400)
+        import base64, json as _json
+        bridge = engine_state.bridge
+        page = bridge._page
+        # Push ALL elements to page (bypass ensure_highlights cap), render, capture, then restore capped view
+        full_list = list(bridge._last_highlight_elements)
+        try:
+            await page.evaluate(
+                f"window.__ybu_last_elements = {_json.dumps(full_list)};"
+            )
+            await page.evaluate("window.__ybu_run && window.__ybu_run();")
+            await asyncio.sleep(0.05)
+        except Exception:
+            logger.warning("save-page: pre-render failed", exc_info=True)
+
+        debug_dir = Path(__file__).resolve().parent.parent.parent / "debug-page"
+        debug_dir.mkdir(parents=True, exist_ok=True)
+        try:
+            html = await page.content()
+            (debug_dir / "page.html").write_text(html, encoding="utf-8")
+        except Exception as e:
+            logger.warning("save-page html failed: %s", e)
+        try:
+            png = await bridge.screenshot()
+            (debug_dir / "screenshot.png").write_bytes(base64.b64decode(png))
+        except Exception as e:
+            logger.warning("save-page screenshot failed: %s", e)
+        logger.info("Page saved to %s", debug_dir)
+
+        # Restore capped view
+        try:
+            await bridge.ensure_highlights()
+        except Exception:
+            logger.warning("save-page: restore highlights failed", exc_info=True)
+        return JSONResponse({"ok": True, "path": str(debug_dir)})
+
     @app.post("/api/chrome/restart")
     async def api_chrome_restart() -> JSONResponse:
         """Restart the user Chrome browser and reconnect."""

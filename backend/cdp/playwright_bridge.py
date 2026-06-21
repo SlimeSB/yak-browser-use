@@ -442,44 +442,27 @@ def build_llm_view(state: CollectState) -> tuple[list[dict], list[dict], dict[st
                 if el["ref"] not in branch_index[ckey]:
                     branch_index[ckey].append(el["ref"])
 
-    # 4. MAX_LLM_ELEMENTS hard cap — round-robin across containers
+    # 4. MAX_LLM_ELEMENTS hard cap — equal quota per DOM region
     view_elements = [el for el in state.elements_all if el["_in_view"]]
     if len(view_elements) > MAX_LLM_ELEMENTS:
-        # Group elements by their deepest dense container
-        grouped: dict[str, list[dict]] = {}
-        for e in view_elements:
-            containers = e.get("_containers", [])
-            # Walk reversed to find the deepest dense container
-            key = "_root"
-            for c in reversed(containers):
-                if c in dense_containers:
-                    key = c
-                    break
-            grouped.setdefault(key, []).append(e)
+        # Split walk order into N equal bands so every major layout
+        # section gets representation regardless of container detection.
+        REGION_COUNT = 8
+        groups: list[list[dict]] = [[] for _ in range(REGION_COUNT)]
+        for i, e in enumerate(view_elements):
+            groups[i * REGION_COUNT // len(view_elements)].append(e)
 
-        # Sort each group: whitelist first, then walk order (pre-existing)
-        for g in grouped.values():
+        # Whitlelist-first sort within each group
+        for g in groups:
             g.sort(key=lambda e: (0 if e["_whitelist"] else 1, state.elements_all.index(e)))
 
-        # Round-robin interleave across groups, largest containers first
-        group_order = sorted(grouped.keys(), key=lambda c: (
-            state.stats_map[c]["total_descendants"] if c != "_root" else 0
-        ), reverse=True)
-        iters = {c: iter(grouped[c]) for c in group_order}
-
-        result: list[dict] = []
-        while len(result) < MAX_LLM_ELEMENTS:
-            added = False
-            for c in list(iters.keys()):
-                try:
-                    result.append(next(iters[c]))
-                    added = True
-                    if len(result) >= MAX_LLM_ELEMENTS:
-                        break
-                except StopIteration:
-                    del iters[c]
-            if not added:
-                break
+        # Equal quota per group (remainder distributed to first N groups)
+        per_group = MAX_LLM_ELEMENTS // REGION_COUNT
+        extra = MAX_LLM_ELEMENTS - per_group * REGION_COUNT
+        result = []
+        for idx, g in enumerate(groups):
+            quota = per_group + (1 if idx < extra else 0)
+            result.extend(g[:quota])
 
         view_elements = result
         kept_refs = {e["ref"] for e in view_elements}
@@ -559,6 +542,8 @@ _HIGHLIGHT_BOOTSTRAP = """
             }
             container.innerHTML = '';
             var selIdx = {};
+            var vw = window.innerWidth;
+            var vh = window.innerHeight;
             for (var i = 0; i < els.length; i++) {
                 var el = els[i];
                 if (el.selector) {
@@ -568,11 +553,15 @@ _HIGHLIGHT_BOOTSTRAP = """
                         var all = document.querySelectorAll(el.selector);
                         if (all.length > si) {
                             var target = all[si];
+                            var rect = target.getBoundingClientRect();
+                            // Skip hidden / zero-size / offscreen elements
+                            if (rect.width === 0 || rect.height === 0) continue;
+                            if (rect.left + rect.width < 0 || rect.top + rect.height < 0) continue;
+                            if (rect.left > vw || rect.top > vh) continue;
                             target.style.outline = '2px dashed #3b82f6';
                             target.style.outlineOffset = '0px';
                             var lbl = el.prog_label || el.ref;
                             target.setAttribute('data-ybu-outlined', el.ref);
-                            var rect = target.getBoundingClientRect();
                             var badgeDiv = document.createElement('div');
                             badgeDiv.className = 'ybu-badge-sel';
                             badgeDiv.setAttribute('data-ybu-badge', el.ref);
@@ -590,13 +579,19 @@ _HIGHLIGHT_BOOTSTRAP = """
                 // Fallback: box + badge with stored original coords
                 var sx = window.pageXOffset || document.documentElement.scrollLeft || 0;
                 var sy = window.pageYOffset || document.documentElement.scrollTop || 0;
+                var fx = el.x - sx;
+                var fy = el.y - sy;
+                // Skip fallback boxes outside viewport
+                if (fx + (el.width || 0) < 0 || fy + (el.height || 0) < 0) continue;
+                if (fx > vw || fy > vh) continue;
+                if ((el.width || 0) === 0 && (el.height || 0) === 0) continue;
                 var box = document.createElement('div');
                 box.className = 'ybu-fb-box';
                 box.setAttribute('data-ybu-fb', el.ref);
                 box.setAttribute('data-ybu-ox', Math.round(el.x));
                 box.setAttribute('data-ybu-oy', Math.round(el.y));
                 box.style.cssText = 'position:fixed;width:' + el.width + 'px;height:' + el.height + 'px;border:2px dashed #3b82f6;border-radius:2px;pointer-events:none;will-change:transform;';
-                box.style.transform = 'translate3d(' + (el.x - sx) + 'px,' + (el.y - sy) + 'px,0)';
+                box.style.transform = 'translate3d(' + fx + 'px,' + fy + 'px,0)';
                 var lbl = el.prog_label || el.ref;
                 var fb = document.createElement('span');
                 fb.textContent = lbl;
@@ -816,11 +811,7 @@ class PlaywrightBridge:
             if p is not self._page:
                 await self.ensure_highlights(p)
         # 自动扫描当前页面，让开局就有高亮（不依赖 chat tool call）
-        try:
-            await self.simplify_dom()
-            logger.info("initial DOM scan complete: %d interactive elements", len(self._last_highlight_elements))
-        except Exception:
-            logger.warning("initial DOM scan failed, will retry via guard", exc_info=True)
+        await self._auto_scan()
         self._start_highlight_guard()
         logger.info("PlaywrightBridge connected (pages: %d)", len(self._context.pages))
 
@@ -875,10 +866,7 @@ class PlaywrightBridge:
             logger.debug("_on_new_page highlight injection failed", exc_info=True)
         # 新标签页自动设为活动页并扫描（让用户点链接后马上看到高亮）
         self._page = page
-        try:
-            await self.simplify_dom()
-        except Exception:
-            logger.debug("_on_new_page: auto-scan failed", exc_info=True)
+        await self._auto_scan()
 
     async def _on_page_closed(self, page: Page) -> None:
         """当页面被关闭时自动切换到其他可用页面。"""
@@ -961,30 +949,41 @@ class PlaywrightBridge:
 
             is_active = pg is self._page
             if is_active:
+                display_elements = self._last_highlight_elements[:200]
                 await pg.evaluate(
-                    f"window.__ybu_last_elements = {_json.dumps(self._last_highlight_elements)};"
+                    f"window.__ybu_last_elements = {_json.dumps(display_elements)};"
                 )
             else:
-                # 非活跃页使用各自的缓存数据，避免跨页污染
                 cached = self._per_page_elements.get(id(pg), [])
                 await pg.evaluate(
-                    f"window.__ybu_last_elements = {_json.dumps(cached)};"
+                    f"window.__ybu_last_elements = {_json.dumps(cached[:200])};"
                 )
             await pg.evaluate(_HIGHLIGHT_BOOTSTRAP)
             await pg.evaluate("window.__ybu_run && window.__ybu_run();")
         except Exception:
             logger.warning("ensure_highlights failed for %s", pg.url[:60] if pg.url else "(no url)", exc_info=True)
 
-    async def _on_page_load(self, page: Page) -> None:
-        """Page load / reload 后自动重注高亮 + 扫描新元素。"""
-        await self.ensure_highlights(page)
-        if page is self._page:
+    async def _auto_scan(self) -> None:
+        """Auto-scan current page with progressive snapshot (fallback to simplify_dom).
+
+        Sets ``_last_highlight_elements`` and calls ``ensure_highlights()``
+        internally via the snapshot method — no extra work needed here.
+        """
+        try:
+            await self._progressive_snapshot()
+        except Exception:
+            logger.debug("_auto_scan: progressive snapshot failed, fallback to simplify_dom", exc_info=True)
             try:
                 await self.simplify_dom()
             except Exception:
-                logger.debug("_on_page_load: auto-scan failed", exc_info=True)
+                logger.debug("_auto_scan: simplify_dom also failed", exc_info=True)
+
+    async def _on_page_load(self, page: Page) -> None:
+        """Page load / reload 后自动重注高亮 + 扫描。"""
+        await self.ensure_highlights(page)
+        if page is self._page:
+            await self._auto_scan()
         else:
-            # 非活跃页加载后也扫描并缓存，让切到时就有高亮
             await self._scan_and_cache_page(page)
 
     async def _on_frame_navigated(self, frame, page: Page | None = None) -> None:
@@ -994,10 +993,7 @@ class PlaywrightBridge:
             return
         await self.ensure_highlights(pg)
         if pg is self._page:
-            try:
-                await self.simplify_dom()
-            except Exception:
-                logger.debug("_on_frame_navigated: auto-scan failed", exc_info=True)
+            await self._auto_scan()
         else:
             await self._scan_and_cache_page(pg)
 
@@ -1035,7 +1031,8 @@ class PlaywrightBridge:
             ref = f"@e_{bid}"
             elem_type = attrs.get("type", "text") if tag == "input" else ""
             elements.append({
-                "ref": ref, "selector": selector, "tag": tag,
+                "ref": ref, "prog_label": str(bid),
+                "selector": selector, "tag": tag,
                 "type": elem_type, "text": "", "value": attrs.get("value", ""),
                 "role": attrs.get("role", ""),
                 "tentative": _is_tentative(tag, attrs),
@@ -1413,6 +1410,7 @@ class PlaywrightBridge:
             elem_type = attrs.get("type", "text") if tag == "input" else ""
             elements.append({
                 "ref": ref,
+                "prog_label": str(bid),
                 "selector": selector,
                 "tag": tag,
                 "type": elem_type,
@@ -1474,6 +1472,7 @@ class PlaywrightBridge:
             if ref:
                 self._ref_map[ref] = {
                     "ref": ref,
+                    "prog_label": el.get("prog_label", ""),
                     "tag": el.get("tag", ""),
                     "type": el.get("type", ""),
                     "text": el.get("text", ""),
