@@ -121,6 +121,9 @@ export default function MonacoYamlEditor({
     if (!hasDiff && currentValue !== value) {
       applyingDiffRef.current = true;
       modifiedModelRef.current.setValue(value);
+      if (originalModelRef.current) {
+        originalModelRef.current.setValue(value);
+      }
       applyingDiffRef.current = false;
     }
   }, [value, hasDiff]);

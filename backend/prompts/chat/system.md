@@ -89,6 +89,7 @@ When a complex task is set via `goal_run`:
 - If a step fails, do NOT record it — fix and retry instead.
 - For non-browser tools (e.g. captcha), call `pipeline_update_step` to set `params` such as `image_path` referencing a saved screenshot file — transient data like `image_bytes` must be replaced with a file reference for replay.
 - **反幻觉原则**：只记录你实际执行过的操作。不要"想象"一个 selector 或 URL 然后写入 pipeline —— 必须先通过 browser_snapshot / browser_source 确认页面状态，执行操作成功后再记录。
+- **导航合并优化**：如果一系列操作仅用于从当前页面导航到另一个有稳定 URL 的页面（例如点击"登录"按钮进入 xx/login），记录时可直接合并为一条 `browser_goto` 跳转到目标 URL。此优化不适用于包含填表、提交等业务操作的点击，也不适用于目标页面无稳定 URL 的情况。
 
 ## Credential Security
 When the user asks you to fill passwords, API keys, or other secrets:

@@ -166,7 +166,7 @@ export default function ChatTab({
 
   const editorPanel = (
     <div className="chat-pipeline-editor">
-      {pendingEdit ? (
+      {pendingEdit && (
         <>
           <div className="chat-diff-bar">
             <span className="chat-diff-explanation">
@@ -200,23 +200,15 @@ export default function ChatTab({
           {diffError && (
             <div className="chat-diff-error">{diffError}</div>
           )}
-          <MonacoYamlEditor
-            value={pipelineEditor}
-            original={pendingEdit.original}
-            modified={pendingEdit.modified}
-            onChange={onPipelineEditorChange}
-            theme={theme}
-          />
-        </>
-      ) : (
-        <>
-          <MonacoYamlEditor
-            value={pipelineEditor}
-            onChange={onPipelineEditorChange}
-            theme={theme}
-          />
         </>
       )}
+      <MonacoYamlEditor
+        value={pipelineEditor}
+        original={pendingEdit?.original}
+        modified={pendingEdit?.modified}
+        onChange={onPipelineEditorChange}
+        theme={theme}
+      />
     </div>
   );
 
