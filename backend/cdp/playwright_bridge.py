@@ -748,6 +748,7 @@ class PlaywrightBridge:
         # a11y / progressive mode state
         self._branch_index: dict[str, list[str]] = {}
         self._highlight_enabled: bool = True
+        self._highlight_mode: str = "a11y"
 
     # ------------------------------------------------------------------
     # Lifecycle
@@ -876,6 +877,13 @@ class PlaywrightBridge:
     async def _is_highlight_enabled(self) -> bool:
         """Check whether highlight rendering is enabled (sync, no CDP round-trip)."""
         return self._highlight_enabled
+
+    def set_highlight_config(self, mode: str) -> None:
+        """Set highlighting mode: ``"a11y"``, ``"progressive"``, or ``"off"``."""
+        if mode not in ("a11y", "progressive", "off"):
+            raise ValueError(f"Invalid highlight mode: {mode!r}")
+        self._highlight_mode = mode
+        self._highlight_enabled = mode != "off"
 
     async def ensure_highlights(self, page: Page | None = None) -> None:
         """Inject highlight bootstrap and push element data into the page.

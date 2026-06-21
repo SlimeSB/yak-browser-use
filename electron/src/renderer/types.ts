@@ -70,7 +70,7 @@ declare global {
       convert: (document: string) => Promise<{ agent_md?: string; error?: string }>;
       status: () => Promise<{ current_step?: string; step_index?: number; status?: string }>;
       chromeStatus: () => Promise<{ connected?: boolean; ws_url?: string }>;
-      connectBrowser: (mode: string, profileName?: string) => Promise<{ success: boolean; wsUrl?: string; error?: string | null; needsRestart?: boolean; browserName?: string }>;
+      connectBrowser: (mode: string, profileName?: string, highlightMode?: string) => Promise<{ success: boolean; wsUrl?: string; error?: string | null; needsRestart?: boolean; browserName?: string }>;
       restartBrowser: () => Promise<{ success: boolean; wsUrl?: string; error?: string | null }>;
       disconnectBrowser: () => Promise<{ success: boolean }>;
       listIsolatedProfiles: () => Promise<{ profiles: string[] }>;
@@ -105,6 +105,7 @@ declare global {
       setProviderConfig: (config: Record<string, unknown>) => Promise<{ ok: boolean }>;
       testProvider: (config: Record<string, string>) => Promise<{ ok: boolean; response?: string; error?: string }>;
       getProviderPresets: () => Promise<{ ok: boolean; presets?: PresetDefinition[]; error?: string }>;
+      setHighlightConfig: (mode: string) => Promise<{ ok: boolean; mode?: string }>;
     };
   }
 }

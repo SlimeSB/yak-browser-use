@@ -610,7 +610,7 @@ def _apply_heavy_data_filter(
         return
 
     if fn_name == "browser_snapshot":
-        mode = fn_args.get("mode", "a11y")
+        mode = fn_args.get("mode", "") or "a11y"
 
         if mode == "simplified":
             result_payload = result_dict.get("result", {})

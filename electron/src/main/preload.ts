@@ -8,12 +8,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // API
   run: (agentMd: string, params?: Record<string, string>) => ipcRenderer.invoke('api:run', { agentMd, params }),
-  convert: (document: string) => ipcRenderer.invoke('api:convert', document),
   chatConfirm: (editId: string) => ipcRenderer.invoke('api:chatConfirm', { edit_id: editId }),
   chatRevert: (editId: string) => ipcRenderer.invoke('api:chatRevert', { edit_id: editId }),
   status: () => ipcRenderer.invoke('api:status'),
   chromeStatus: () => ipcRenderer.invoke('api:chrome-status'),
-  connectBrowser: (mode: string, profileName?: string) => ipcRenderer.invoke('browser:connect', { mode, profileName }),
+  connectBrowser: (mode: string, profileName?: string, highlightMode?: string) => ipcRenderer.invoke('browser:connect', { mode, profileName, highlightMode }),
   restartBrowser: () => ipcRenderer.invoke('browser:restart'),
   disconnectBrowser: () => ipcRenderer.invoke('browser:disconnect'),
   listIsolatedProfiles: () => ipcRenderer.invoke('browser:isolated-profiles-list'),
@@ -54,6 +53,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   setProviderConfig: (config: Record<string, string>) => ipcRenderer.invoke('api:provider-config-set', config),
   testProvider: (config: Record<string, string>) => ipcRenderer.invoke('api:provider-test', config),
   getProviderPresets: () => ipcRenderer.invoke('api:provider-presets'),
+
+  // Highlight config
+  setHighlightConfig: (mode: string) => ipcRenderer.invoke('api:highlight-config', { mode }),
 
   // Dialogs
   showAlert: (message: string) => ipcRenderer.invoke('dialog:alert', message),

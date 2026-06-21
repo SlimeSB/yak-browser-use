@@ -136,28 +136,6 @@ def register_all_routes(app: FastAPI) -> None:
         return JSONResponse({"ok": True, "presets": presets})
 
     # =================================================================
-    # CONVERT
-    # =================================================================
-
-    @app.post("/api/convert")
-    async def api_convert(request: dict) -> JSONResponse:
-        """Convert a natural language document to pipeline.yaml format.
-
-        Request body: ``{"document": "...", "pipeline_name": "..."}``
-        """
-        from converter.convert import convert_document
-
-        document = request.get("document", "")
-        pipeline_name = request.get("pipeline_name")
-        logger.debug("POST /api/convert: document=%s...", document[:80])
-        try:
-            result = await convert_document(document, pipeline_name=pipeline_name)
-            return JSONResponse({"pipeline": result})
-        except Exception as exc:
-            logger.exception("POST /api/convert failed")
-            raise ServerError(str(exc))
-
-    # =================================================================
     # RUN
     # =================================================================
 
@@ -372,7 +350,8 @@ def register_all_routes(app: FastAPI) -> None:
         mode = request.get("mode", "user")
         profile_name = request.get("profile_name")
         ws_url = request.get("ws_url")
-        logger.info("Chrome connect requested: mode=%s profile=%s", mode, profile_name or "none")
+        highlight_mode = request.get("highlight_mode", "a11y")
+        logger.info("Chrome connect requested: mode=%s profile=%s highlight=%s", mode, profile_name or "none", highlight_mode)
 
         if engine_state.running_pipeline is not None:
             raise APIError("A pipeline is currently running — cannot connect Chrome", status_code=409)
@@ -389,6 +368,8 @@ def register_all_routes(app: FastAPI) -> None:
 
             actual_ws = await engine_state.connect_chrome(ws_url)
 
+            if engine_state.bridge:
+                engine_state.bridge.set_highlight_config(highlight_mode)
             await _inject_initial_highlights()
 
             return JSONResponse({"connected": True, "ws_url": actual_ws[:80]})
@@ -454,6 +435,24 @@ def register_all_routes(app: FastAPI) -> None:
         except Exception as exc:
             logger.exception("Chrome restart failed")
             raise ServerError(str(exc))
+
+    # =================================================================
+    # HIGHLIGHT CONFIG
+    # =================================================================
+
+    @app.post("/api/highlight-config")
+    async def api_highlight_config(request: dict) -> JSONResponse:
+        """Set highlight mode: ``"a11y"``, ``"progressive"``, or ``"off"``.
+
+        Request body: ``{"mode": "a11y|progressive|off"}``
+        """
+        mode = request.get("mode", "a11y")
+        if mode not in ("a11y", "progressive", "off"):
+            raise APIError(f"Invalid mode: {mode!r}, must be a11y/progressive/off")
+        if engine_state.bridge:
+            engine_state.bridge.set_highlight_config(mode)
+            logger.info("Highlight mode set to %s", mode)
+        return JSONResponse({"ok": True, "mode": mode})
 
     @app.get("/api/chrome/isolated-profiles")
     async def api_list_isolated_profiles() -> JSONResponse:

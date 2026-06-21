@@ -53,8 +53,10 @@ class ToolCDPHelpers:
     async def wait(self, seconds: float = 1.0) -> None:
         await asyncio.sleep(seconds)
 
-    async def snapshot(self, mode: str = "a11y", query: str = "", in_viewport: bool = False) -> dict:
+    async def snapshot(self, mode: str = "", query: str = "", in_viewport: bool = False) -> dict:
         self._check_failures()
+        if not mode:
+            mode = getattr(self._bridge, "_highlight_mode", "a11y")
         if mode == "a11y":
             result = await self._bridge.a11y_snapshot()
         elif mode == "progressive":

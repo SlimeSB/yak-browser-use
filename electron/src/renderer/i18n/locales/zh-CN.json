@@ -143,7 +143,15 @@
     "editorFirst": "编辑器左，对话右",
     "chatEditor": "对话 | 编辑器",
     "editorChat": "编辑器 | 对话",
-    "testPassed": "测试通过"
+    "testPassed": "测试通过",
+    "highlight": "高亮",
+    "highlightMode": "高亮模式",
+    "a11y": "a11y",
+    "progressive": "Progressive",
+    "highlightOff": "关闭",
+    "a11yDesc": "无障碍树（轻量，默认）",
+    "progressiveDesc": "CDP DOM 深度扫描（密集页面）",
+    "highlightOffDesc": "不高亮"
   },
   "log": {
     "title": "日志",

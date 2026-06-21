@@ -10,6 +10,8 @@ interface SettingsTabProps {
   onChatLayoutReversedChange: (v: boolean) => void;
   theme: string;
   onThemeChange: (t: 'dark' | 'light') => void;
+  highlightMode: string;
+  onHighlightModeChange: (mode: string) => void;
 }
 
 interface ProviderForm {
@@ -22,6 +24,7 @@ export default function SettingsTab({
   reviewMode, onReviewModeChange,
   chatLayoutReversed, onChatLayoutReversedChange,
   theme, onThemeChange,
+  highlightMode, onHighlightModeChange,
 }: SettingsTabProps) {
   const { t } = useTranslation();
   const [providerConfig, setProviderConfig] = useState<ProviderForm>({ model: '', api_key: '', api_base: '' });
@@ -160,6 +163,31 @@ export default function SettingsTab({
                 className={`btn btn-xs ${chatLayoutReversed ? 'btn-primary' : 'btn-secondary'}`}
                 onClick={() => onChatLayoutReversedChange(true)}
               >{t('settingsTab.editorChat')}</button>
+            </div>
+          </div>
+        </div>
+        <div className="set-group">
+          <div className="set-group-title">{t('settingsTab.highlight')}</div>
+          <div className="set-row">
+            <div>
+              <div className="set-label">{t('settingsTab.highlightMode')}</div>
+              <div className="set-desc">
+                {highlightMode === 'a11y' ? t('settingsTab.a11yDesc') : highlightMode === 'progressive' ? t('settingsTab.progressiveDesc') : t('settingsTab.highlightOffDesc')}
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: 4 }}>
+              <button
+                className={`btn btn-xs ${highlightMode === 'a11y' ? 'btn-primary' : 'btn-secondary'}`}
+                onClick={() => onHighlightModeChange('a11y')}
+              >{t('settingsTab.a11y')}</button>
+              <button
+                className={`btn btn-xs ${highlightMode === 'progressive' ? 'btn-primary' : 'btn-secondary'}`}
+                onClick={() => onHighlightModeChange('progressive')}
+              >{t('settingsTab.progressive')}</button>
+              <button
+                className={`btn btn-xs ${highlightMode === 'off' ? 'btn-primary' : 'btn-secondary'}`}
+                onClick={() => onHighlightModeChange('off')}
+              >{t('settingsTab.highlightOff')}</button>
             </div>
           </div>
         </div>

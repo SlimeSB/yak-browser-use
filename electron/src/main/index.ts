@@ -119,14 +119,6 @@ app.whenReady().then(async () => {
     }, 'api:run');
   });
 
-  ipcMain.handle('api:convert', async (_event, document: string) => {
-    logger.debug('IPC: api:convert called with %d chars', document.length);
-    return _apiFetch('/api/convert', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ document }),
-    }, 'api:convert');
-  });
-
   ipcMain.handle('api:chatConfirm', async (_event, { edit_id }: { edit_id: string }) => {
     logger.debug('IPC: api:chatConfirm edit_id=%s', edit_id);
     try {
@@ -173,12 +165,12 @@ app.whenReady().then(async () => {
     return _apiFetch('/api/chrome/status', {}, 'api:chrome-status');
   });
 
-  ipcMain.handle('browser:connect', async (_event, { mode, profileName }: { mode: string; profileName?: string }) => {
-    logger.info('IPC: browser:connect mode=%s profile=%s', mode, profileName || 'none');
+  ipcMain.handle('browser:connect', async (_event, { mode, profileName, highlightMode }: { mode: string; profileName?: string; highlightMode?: string }) => {
+    logger.info('IPC: browser:connect mode=%s profile=%s highlight=%s', mode, profileName || 'none', highlightMode || 'a11y');
     try {
       const result = await _safeFetch('/api/chrome/connect', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ mode, profile_name: profileName }),
+        body: JSON.stringify({ mode, profile_name: profileName, highlight_mode: highlightMode || 'a11y' }),
       });
       const data = result.data || {};
       if (!result.ok) throw new Error(result.error);
@@ -450,6 +442,13 @@ app.whenReady().then(async () => {
 
   ipcMain.handle('api:provider-presets', async () => {
     return _apiFetch('/api/provider-presets', { method: 'GET' }, 'api:provider-presets');
+  });
+
+  ipcMain.handle('api:highlight-config', async (_event, { mode }: { mode: string }) => {
+    return _apiFetch('/api/highlight-config', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mode }),
+    }, 'api:highlight-config');
   });
 
   await createWindow();

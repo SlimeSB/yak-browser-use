@@ -36,6 +36,9 @@ export default function App() {
   const [restartDialog, setRestartDialog] = useState<{ browserName: string } | null>(null);
   const [restarting, setRestarting] = useState(false);
   const [reviewMode, setReviewMode] = useState('none');
+  const [highlightMode, setHighlightMode] = useState(() => {
+    try { return localStorage.getItem('highlight-mode') || 'a11y'; } catch { return 'a11y'; }
+  });
   const [currentRunId, setCurrentRunId] = useState('');
   const [currentPipeline, setCurrentPipeline] = useState('');
   const [cancelling, setCancelling] = useState(false);
@@ -382,7 +385,7 @@ export default function App() {
   const handleConnect = useCallback(async (mode: 'user' | 'isolated', profile?: string) => {
     setConnectionError(null);
     try {
-      const resp = await window.electronAPI.connectBrowser(mode, profile);
+      const resp = await window.electronAPI.connectBrowser(mode, profile, highlightMode);
       if (resp.needsRestart) {
         setRestartDialog({ browserName: resp.browserName || 'Chrome' });
         return;
@@ -741,6 +744,12 @@ export default function App() {
             try { localStorage.setItem('chat-layout-reversed', String(v)); } catch { /* ok */ }
           }}
           theme={theme} onThemeChange={setThemePersist}
+          highlightMode={highlightMode}
+          onHighlightModeChange={(mode) => {
+            setHighlightMode(mode);
+            try { localStorage.setItem('highlight-mode', mode); } catch { /* ok */ }
+            window.electronAPI.setHighlightConfig(mode);
+          }}
         />
       </div>
 

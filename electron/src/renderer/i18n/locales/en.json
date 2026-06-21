@@ -143,7 +143,15 @@
     "editorFirst": "Editor left, Chat right",
     "chatEditor": "Chat | Editor",
     "editorChat": "Editor | Chat",
-    "testPassed": "Test passed"
+    "testPassed": "Test passed",
+    "highlight": "Highlight",
+    "highlightMode": "Highlight Mode",
+    "a11y": "a11y",
+    "progressive": "Progressive",
+    "highlightOff": "Off",
+    "a11yDesc": "Accessibility Tree (lightweight, default)",
+    "progressiveDesc": "CDP DOM depth scan (dense pages)",
+    "highlightOffDesc": "No highlighting overlay"
   },
   "log": {
     "title": "Log",

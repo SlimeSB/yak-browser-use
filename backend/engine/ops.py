@@ -132,7 +132,7 @@ class ToolContext:
 
     async def snapshot(
         self,
-        mode: str = "a11y",
+        mode: str = "",
         query: str = "",
         in_viewport: bool = False,
     ) -> dict:
@@ -148,6 +148,8 @@ class ToolContext:
         self._check_domain()
         self._check_failures()
         try:
+            if not mode:
+                mode = getattr(self._bridge, "_highlight_mode", "a11y")
             if mode == "a11y":
                 result = await self._bridge.a11y_snapshot()
             elif mode == "progressive":
