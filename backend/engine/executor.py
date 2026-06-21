@@ -16,9 +16,11 @@ import re
 import time
 from functools import partial
 from pathlib import Path
+from typing import Any
 
 from utils.logging import get_logger
 
+from cdp.protocols import BrowserBridge
 from engine._lifecycle.compensation import CompensationRegistry
 
 logger = get_logger(__name__)
@@ -103,7 +105,7 @@ def sanitize_result(data, sensitive_keys: frozenset = SENSITIVE_KEYS):
 async def execute_browser_op(
     op_type: str,
     params: dict,
-    bridge: object,
+    bridge: BrowserBridge,
     element_map: dict | None = None,
 ) -> dict:
     """Execute a single browser operation (goto/click/fill/snapshot/scroll/source/eval + new ops).
@@ -127,7 +129,7 @@ async def execute_browser_op(
                 url = params.get("url", "")
                 await bridge.goto(url)
                 if hasattr(bridge, "reset_ref_map"):
-                    bridge.reset_ref_map()
+                    await bridge.reset_ref_map()
                 else:
                     logger.debug("bridge has no reset_ref_map, skipping ref map reset")
                 result["result"] = {"url": url}
@@ -148,7 +150,7 @@ async def execute_browser_op(
                     from params.manager import resolve_param
                     text = resolve_param(text["param_key"])
                 selector = await _resolve_element_ref(selector, element_map, bridge)
-                await bridge.fill(selector, text)
+                await bridge.fill(selector, text)  # type: ignore[arg-type]
                 result["result"] = {"selector": selector}
 
             elif op_type == "snapshot":
@@ -266,7 +268,7 @@ async def execute_browser_op(
                     if isinstance(text, dict) and "param_key" in text:
                         from params.manager import resolve_param
                         text = resolve_param(text["param_key"])
-                    await bridge.keyboard_type(text)
+                    await bridge.keyboard_type(text)  # type: ignore[arg-type]
                 result["result"] = {"mode": mode}
 
             elif op_type == "press_key":
@@ -280,7 +282,7 @@ async def execute_browser_op(
                 if is_param:
                     from params.manager import resolve_param
                     text = resolve_param(text["param_key"])
-                await bridge.keyboard_type(text)
+                await bridge.keyboard_type(text)  # type: ignore[arg-type]
                 result["result"] = {"text": "***" if is_param else text}
 
             elif op_type == "navigate":
@@ -290,7 +292,7 @@ async def execute_browser_op(
 
             elif op_type == "wait":
                 mode = params.get("mode", "time")
-                await bridge.wait(mode=mode, **params)
+                await bridge.wait(**params)
                 result["result"] = {"mode": mode}
 
             elif op_type == "tab":
@@ -306,6 +308,8 @@ async def execute_browser_op(
                     r = await bridge.tab_close(tid)
                 elif action == "list":
                     r = await bridge.tab_list()
+                else:
+                    r = {"error": f"Unknown tab action: {action}"}
                 result["result"] = r
 
             elif op_type == "copy":
@@ -356,7 +360,7 @@ def _write_full_artifacts(core_result: dict, step_dir: Path, _base64, _time) -> 
         html_path.write_text(html_data, encoding="utf-8")
 
 
-async def _resolve_element_ref(selector: str, element_map: dict | None, bridge: object | None = None) -> str:
+async def _resolve_element_ref(selector: str, element_map: dict | None, bridge: BrowserBridge | None = None) -> str:
     """Resolve @eN element references to CSS selectors using the element map.
 
     In chat mode (element_map is None), falls back to bridge.get_element_by_index().
@@ -493,7 +497,7 @@ async def execute_goal(
 # ──────────────────────────────────────────────────────────────
 
 
-async def run_check(check_def: dict | None, bridge: object) -> dict:
+async def run_check(check_def: dict | None, bridge: BrowserBridge) -> dict:
     """Run programmatic checks against the current page state.
 
     Supports four check conditions:
@@ -610,7 +614,7 @@ def _json_dumps(s: str) -> str:
 
 async def execute_browser_step(
     step: dict,
-    bridge: object,
+    bridge: BrowserBridge,
     step_dir: Path,
     run_dir: Path,
     shared_store: dict | None = None,
