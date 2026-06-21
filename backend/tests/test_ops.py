@@ -31,9 +31,6 @@ class MockBridge:
     async def simplified_snapshot(self):
         return {"summary": "simplified"}
 
-    async def simplify_dom(self, query: str = "", in_viewport: bool = False):
-        return {"elements": []}
-
     async def screenshot(self):
         return "base64string"
 
@@ -100,12 +97,6 @@ async def test_snapshot_full(ctx, bridge):
 async def test_snapshot_simplified(ctx, bridge):
     result = await ctx.snapshot(mode="simplified")
     assert result == {"summary": "simplified"}
-
-
-@pytest.mark.asyncio
-async def test_snapshot_interactive(ctx, bridge):
-    result = await ctx.snapshot(mode="interactive", query="div", in_viewport=True)
-    assert result == {"elements": []}
 
 
 @pytest.mark.asyncio

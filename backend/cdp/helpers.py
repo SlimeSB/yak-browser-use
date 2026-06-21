@@ -77,33 +77,6 @@ class CDPHelpers:
     async def js(self, code: str) -> Any:
         return await self._bridge.evaluate(code)
 
-    async def capture_snapshot_interactive(self, query: str = "", in_viewport: bool = False) -> dict:
-        try:
-            result = await self._bridge.simplify_dom(query=query, in_viewport=in_viewport)
-            elements = result.get("elements", [])
-
-            for el in elements:
-                ref = el.get("ref", "")
-                if ref:
-                    if ref in self._ref_map:
-                        self._ref_map[ref].update({
-                            "x": el.get("x", 0), "y": el.get("y", 0),
-                            "width": el.get("width", 0), "height": el.get("height", 0),
-                        })
-                    else:
-                        self._ref_map[ref] = _build_element_info(el)
-
-            try:
-                await self.add_dom_highlights(elements)
-            except Exception:
-                logger.warning("auto-highlight after interactive snapshot failed", exc_info=True)
-
-            return result
-        except Exception:
-            logger.info("interactive snapshot degraded to full")
-            full = await self.capture_snapshot()
-            return {"elements": [], "mode": "interactive", **full}
-
     async def capture_snapshot_simplified(self) -> dict:
         try:
             raw = await self.js((

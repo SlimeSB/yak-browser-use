@@ -30,44 +30,11 @@ logger = logging.getLogger(__name__)
 # Interactive element detection heuristics
 # ---------------------------------------------------------------------------
 
-_INTERACTIVE_TAGS = frozenset({
-    "a", "button", "input", "select", "textarea", "details", "summary",
-    "option", "optgroup", "label", "datalist", "output", "fieldset",
-    "video", "audio",
-})
-_INTERACTIVE_ROLES = frozenset({
-    "button", "link", "checkbox", "radio", "switch", "tab",
-    "menuitem", "menuitemcheckbox", "menuitemradio", "option",
-    "combobox", "listbox", "textbox", "searchbox", "slider",
-    "spinbutton", "treeitem",
-})
-
-
-def _is_interactive(tag: str, attrs: dict[str, str]) -> bool:
-    if tag in _INTERACTIVE_TAGS:
-        if tag == "a" and not attrs.get("href"):
-            return False
-        if tag == "input" and attrs.get("type", "").lower() == "hidden":
-            return False
-        return True
-    if attrs.get("role", "").lower() in _INTERACTIVE_ROLES:
-        return True
-    if attrs.get("tabindex") is not None:
-        return True
-    if attrs.get("onclick"):
-        return True
-    cedit = attrs.get("contenteditable")
-    if cedit is not None and cedit.lower() in ("true", ""):
-        return True
-    if tag in ("div", "span", "li") and any(k.startswith("data-v-") or k.startswith("data-react-") for k in attrs):
-        return True
-    return False
-
 
 def _is_tentative(tag: str, attrs: dict[str, str]) -> bool:
-    if tag in _INTERACTIVE_TAGS:
+    if tag in _ALWAYS_FULL_TAGS:
         return False
-    if attrs.get("role", "").lower() in _INTERACTIVE_ROLES:
+    if attrs.get("role", "").lower() in _ALWAYS_FULL_ROLES:
         return False
     if attrs.get("tabindex") is not None:
         return False
@@ -175,9 +142,13 @@ _CONTAINER_CLASS_PATTERNS = frozenset({
     "category", "module", "layout",
 })
 
-_ALWAYS_FULL_TAGS = {"button", "input", "select", "textarea", "a"}
-_ALWAYS_FULL_ROLES = {"button", "link", "textbox", "combobox", "checkbox", "radio",
-                      "switch", "menuitem", "option", "tab"}
+_ALWAYS_FULL_TAGS = {"button", "input", "select", "textarea", "a",
+                     "details", "summary", "option", "optgroup", "label",
+                     "datalist", "output", "fieldset", "video", "audio"}
+_ALWAYS_FULL_ROLES = {"button", "link", "textbox", "combobox", "checkbox",
+                       "radio", "switch", "menuitem", "option", "tab",
+                       "menuitemcheckbox", "menuitemradio", "listbox",
+                       "searchbox", "slider", "spinbutton", "treeitem"}
 
 
 def _looks_like_container(node: dict) -> bool:
@@ -223,6 +194,8 @@ def _is_interactive_progressive(tag: str, attrs: dict[str, str]) -> bool:
     if role in _ALWAYS_FULL_ROLES:
         return True
     if attrs.get("onclick") or attrs.get("tabindex") or attrs.get("contenteditable"):
+        return True
+    if tag in ("div", "span", "li") and any(k.startswith("data-v-") or k.startswith("data-react-") for k in attrs):
         return True
     return False
 
@@ -889,7 +862,7 @@ class PlaywrightBridge:
             self._last_highlight_elements = []
             await self.ensure_highlights()
             try:
-                await self.simplify_dom()
+                await self._progressive_snapshot()
             except Exception:
                 logger.debug("_on_page_closed: auto-scan failed", exc_info=True)
         else:
@@ -1066,19 +1039,11 @@ class PlaywrightBridge:
             logger.warning("ensure_highlights failed for %s", pg.url[:60] if pg.url else "(no url)", exc_info=True)
 
     async def _auto_scan(self) -> None:
-        """Auto-scan current page with progressive snapshot (fallback to simplify_dom).
-
-        Sets ``_last_highlight_elements`` and calls ``ensure_highlights()``
-        internally via the snapshot method — no extra work needed here.
-        """
+        """Auto-scan current page with progressive snapshot."""
         try:
             await self._progressive_snapshot()
         except Exception:
-            logger.debug("_auto_scan: progressive snapshot failed, fallback to simplify_dom", exc_info=True)
-            try:
-                await self.simplify_dom()
-            except Exception:
-                logger.debug("_auto_scan: simplify_dom also failed", exc_info=True)
+            logger.debug("_auto_scan: progressive snapshot failed", exc_info=True)
 
     async def _on_page_load(self, page: Page) -> None:
         """Page load / reload 后自动重注高亮 + 扫描。"""
@@ -1125,7 +1090,7 @@ class PlaywrightBridge:
                     attrs[attrs_list[i]] = attrs_list[i + 1]
             tag = node["nodeName"].lower()
             bid = node["backendNodeId"]
-            if not _is_interactive(tag, attrs):
+            if not _is_interactive_progressive(tag, attrs):
                 for child in node.get("children", []):
                     walk(child)
                 return
@@ -1211,7 +1176,7 @@ class PlaywrightBridge:
                     if self._context and self._page not in self._context.pages:
                         if self._context.pages:
                             self._page = self._context.pages[0]
-                            await self.simplify_dom()
+                            await self._progressive_snapshot()
                         else:
                             self._page = None
                             return
@@ -1241,7 +1206,7 @@ class PlaywrightBridge:
         await self._page.goto(url, wait_until="domcontentloaded")
         # 导航后扫描新页面，自动刷新高亮
         try:
-            await self.simplify_dom()
+            await self._progressive_snapshot()
         except Exception:
             logger.debug("goto: auto-scan failed", exc_info=True)
         return {"url": url}
@@ -1337,7 +1302,7 @@ class PlaywrightBridge:
         elif action == "reload":
             await self._page.reload()
         try:
-            await self.simplify_dom()
+            await self._progressive_snapshot()
         except Exception:
             logger.debug("navigate: auto-scan failed", exc_info=True)
         return {"action": action}
@@ -1379,7 +1344,7 @@ class PlaywrightBridge:
                     self._last_highlight_elements = list(cached)
                 await self.ensure_highlights()
                 try:
-                    await self.simplify_dom()
+                    await self._progressive_snapshot()
                 except Exception:
                     logger.debug("tab_switch: auto-scan failed", exc_info=True)
                 return {"targetId": target_id, "url": p.url}
@@ -1477,156 +1442,6 @@ class PlaywrightBridge:
     async def screenshot(self) -> str:
         data = await self._page.screenshot(type="png", full_page=False)
         return base64.b64encode(data).decode("utf-8")
-
-    async def simplify_dom(self, query: str = "", in_viewport: bool = False) -> dict:
-        cdp = await self._context.new_cdp_session(self._page)
-        try:
-            doc = await cdp.send("DOM.getDocument", {"depth": -1, "pierce": True})
-        finally:
-            await cdp.detach()
-        elements: list[dict] = []
-
-        def walk(node: dict) -> None:
-            if node.get("nodeType") != 1:
-                for child in node.get("children", []):
-                    walk(child)
-                return
-
-            attrs_list = node.get("attributes", [])
-            attrs: dict[str, str] = {}
-            for i in range(0, len(attrs_list), 2):
-                if i + 1 < len(attrs_list):
-                    attrs[attrs_list[i]] = attrs_list[i + 1]
-
-            tag = node["nodeName"].lower()
-            bid = node["backendNodeId"]
-
-            if not _is_interactive(tag, attrs):
-                for child in node.get("children", []):
-                    walk(child)
-                return
-
-            selector = _build_selector_from_node(tag, attrs)
-            ref = f"@e_{bid}"
-
-            elem_type = attrs.get("type", "text") if tag == "input" else ""
-            elements.append({
-                "ref": ref,
-                "prog_label": str(bid),
-                "selector": selector,
-                "tag": tag,
-                "type": elem_type,
-                "text": "",
-                "value": attrs.get("value", ""),
-                "role": attrs.get("role", ""),
-                "tentative": _is_tentative(tag, attrs),
-                "x": 0, "y": 0, "width": 0, "height": 0,
-            })
-
-            for child in node.get("children", []):
-                walk(child)
-
-        walk(doc.get("root", {}))
-        logger.debug("simplify_dom: found %d interactive elements from DOM.getDocument", len(elements))
-
-        if elements:
-            sels = [e["selector"] for e in elements]
-            js = (
-                "(function(){"
-                "var sels=" + _json.dumps(sels) + ";"
-                "var selIdx={};"
-                "var out=[];"
-                "for(var i=0;i<sels.length;i++){"
-                "var si=selIdx[sels[i]]||0;selIdx[sels[i]]=si+1;"
-                "try{"
-                "var all=document.querySelectorAll(sels[i]);"
-                "if(all.length>si){"
-                "var el=all[si];"
-                "var r=el.getBoundingClientRect();"
-                "var t=el.textContent||el.innerText||'';"
-                "var cs=getComputedStyle(el);"
-                "out.push({x:r.left,y:r.top,w:r.width,h:r.height,t:t.trim().substring(0,100),c:cs.cursor==='pointer'});"
-                "}else{out.push({x:0,y:0,w:0,h:0,t:'',c:false});}"
-                "}catch(e){out.push({x:0,y:0,w:0,h:0,t:'',c:false});}"
-                "}"
-                "return JSON.stringify(out);"
-                "})()"
-            )
-            try:
-                raw = await self._page.evaluate(js)
-                if raw:
-                    data = _json.loads(raw)
-                    for el, d in zip(elements, data):
-                        if isinstance(d, dict):
-                            el["x"] = d.get("x", 0)
-                            el["y"] = d.get("y", 0)
-                            el["width"] = d.get("w", 0)
-                            el["height"] = d.get("h", 0)
-                            el["text"] = d.get("t", "")
-                            el["clickable"] = d.get("c", False)
-            except Exception:
-                logger.debug("simplify_dom: position enrichment failed", exc_info=True)
-
-        elements = [el for el in elements if not el.get("tentative") or el.get("clickable")]
-
-        for el in elements:
-            ref = el.get("ref", "")
-            if ref:
-                self._ref_map[ref] = {
-                    "ref": ref,
-                    "prog_label": el.get("prog_label", ""),
-                    "tag": el.get("tag", ""),
-                    "type": el.get("type", ""),
-                    "text": el.get("text", ""),
-                    "selector": el.get("selector", ""),
-                    "value": el.get("value", ""),
-                    "role": el.get("role", ""),
-                    "x": el.get("x", 0),
-                    "y": el.get("y", 0),
-                    "width": el.get("width", 0),
-                    "height": el.get("height", 0),
-                }
-
-        if in_viewport:
-            vp_w = await self._page.evaluate("window.innerWidth") or 1920
-            vp_h = await self._page.evaluate("window.innerHeight") or 1080
-            elements = [
-                el for el in elements
-                if el.get("y", 0) + el.get("height", 0) > 0
-                and el.get("y", 0) < vp_h
-                and el.get("x", 0) + el.get("width", 0) > 0
-                and el.get("x", 0) < vp_w
-            ]
-
-        if query:
-            q = query.lower()
-            if q.startswith("#") or q.startswith("."):
-                elements = [el for el in elements if q in el.get("selector", "").lower()]
-            else:
-                elements = [
-                    el for el in elements
-                    if q in el.get("text", "").lower()
-                    or q in el.get("tag", "").lower()
-                    or q in el.get("type", "").lower()
-                    or q in el.get("role", "").lower()
-                ]
-
-        self._last_highlight_elements = list(elements)
-        # 缓存当前页的元素，让其他 tab 切到时能显示自己的高亮
-        self._per_page_elements[id(self._page)] = list(elements)
-        await self.ensure_highlights()
-
-        result: dict = {"elements": elements, "mode": "interactive"}
-        try:
-            meta_raw = await self._page.evaluate(
-                "JSON.stringify({url: window.location.href, title: document.title})"
-            )
-            meta = _json.loads(meta_raw)
-            result["url"] = meta.get("url", "")
-            result["title"] = meta.get("title", "")
-        except Exception:
-            logger.warning("interactive_snapshot: failed to extract page meta", exc_info=True)
-        return result
 
     async def a11y_snapshot(self) -> dict:
         """Snapshot via Playwright Accessibility Tree with DOM stamping.

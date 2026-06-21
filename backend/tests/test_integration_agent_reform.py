@@ -66,12 +66,12 @@ class MockBridge:
                 return el.get("visible", True)
         return False
 
-    async def capture_snapshot_interactive(self, query: str = "", in_viewport: bool = False):
+    async def capture_snapshot_progressive(self, query: str = "", in_viewport: bool = False):
         return {
             "elements": self._elements,
             "url": self._url,
             "title": self._title,
-            "mode": "interactive",
+            "mode": "progressive",
         }
 
     async def capture_snapshot(self):

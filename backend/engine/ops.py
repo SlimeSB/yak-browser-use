@@ -140,7 +140,6 @@ class ToolContext:
 
         *mode* values:
           - ``"a11y"`` (default) — Accessibility Tree via ``a11y_snapshot`` (lightweight)
-          - ``"interactive"`` — interactive elements via ``simplify_dom``
           - ``"progressive"`` — CDP DOM walk + density-adaptive disclosure
           - ``"simplified"`` — simplified text-only snapshot
           - ``"full"`` — complete DOM + screenshot via ``capture_snapshot``
@@ -152,8 +151,6 @@ class ToolContext:
                 result = await self._bridge.a11y_snapshot()
             elif mode == "progressive":
                 result = await self._bridge._progressive_snapshot(query=query)
-            elif mode == "interactive":
-                result = await self._bridge.simplify_dom(query=query, in_viewport=in_viewport)
             elif mode == "simplified":
                 result = await self._bridge.simplified_snapshot()
             else:

@@ -163,9 +163,6 @@ async def execute_browser_op(
                 elif mode == "progressive":
                     snapshot = await bridge._progressive_snapshot(query=query)
                     result["result"] = snapshot
-                elif mode == "interactive":
-                    snapshot = await bridge.simplify_dom(query=query, in_viewport=in_viewport)
-                    result["result"] = snapshot
                 elif mode == "simplified":
                     if hasattr(bridge, "simplified_snapshot"):
                         result["result"] = await bridge.simplified_snapshot()
@@ -669,7 +666,7 @@ async def execute_browser_step(
                 op_record["selector"] = op.get("selector", "")
                 op_record["text"] = text
             elif op_type == "snapshot":
-                core_params = {"mode": op.get("mode", "interactive")}
+                core_params = {"mode": op.get("mode", "progressive")}
             elif op_type == "scroll":
                 core_params = {"direction": op.get("direction", "down"),
                                 "amount": op.get("amount", 300)}
@@ -770,9 +767,9 @@ async def execute_browser_step(
                 if op_type == "snapshot":
                     snap_result = core_result.get("result", {})
                     snap_mode = snap_result.get("mode", "full")
-                    if snap_mode == "interactive":
+                    if snap_mode == "progressive":
                         elements = snap_result.get("elements", [])
-                        elements_path = step_dir / "interactive_elements.json"
+                        elements_path = step_dir / "elements.json"
                         elements_path.write_text(_json.dumps(elements, ensure_ascii=False, indent=2), encoding="utf-8")
                         element_map = {el["ref"]: el["selector"] for el in elements if el.get("ref") and el.get("selector")}
                     elif snap_mode == "simplified":
