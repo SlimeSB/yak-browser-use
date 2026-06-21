@@ -14,7 +14,7 @@ Pipelines are byproducts of Agent work (presets), saved for later replay.
 
 ```
 yak-browser-use/
-├── __main__.py              # CLI entry (run/serve/chrome/convert/debug…)
+├── __main__.py              # CLI entry (serve/run/logs)
 ├── pyproject.toml            # Project config + dependencies
 │
 ├── api/                      # FastAPI REST + WebSocket API layer
