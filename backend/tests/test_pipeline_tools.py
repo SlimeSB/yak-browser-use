@@ -1,6 +1,5 @@
 """Tests for pipeline_tools module."""
 
-import json
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
@@ -86,8 +85,7 @@ def _mock_write_via_edit():
 
 @pytest.mark.asyncio
 async def test_pipeline_load_exists(sample_pipeline_file):
-    result = await pipeline_load(pipeline_name="test_pipeline")
-    data = json.loads(result)
+    data = await pipeline_load(pipeline_name="test_pipeline")
     assert data["ok"] is True
     assert data["name"] == "test_pipeline"
     assert data["description"] == "A test pipeline"
@@ -105,7 +103,7 @@ async def test_pipeline_load_exists(sample_pipeline_file):
 @pytest.mark.asyncio
 async def test_pipeline_load_not_found(temp_presets_dir):
     result = await pipeline_load(pipeline_name="nonexistent")
-    data = json.loads(result)
+    data = result
     assert data["ok"] is False
     assert "not found" in data["error"]
 
@@ -113,7 +111,7 @@ async def test_pipeline_load_not_found(temp_presets_dir):
 @pytest.mark.asyncio
 async def test_pipeline_load_empty_name():
     result = await pipeline_load(pipeline_name="")
-    data = json.loads(result)
+    data = result
     assert data["ok"] is False
     assert "required" in data["error"]
 
@@ -124,7 +122,7 @@ async def test_pipeline_load_corrupted(temp_presets_dir):
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(": invalid yaml: :", encoding="utf-8")
     result = await pipeline_load(pipeline_name="corrupt")
-    data = json.loads(result)
+    data = result
     assert data["ok"] is False
 
 
@@ -133,7 +131,7 @@ async def test_pipeline_load_corrupted(temp_presets_dir):
 @pytest.mark.asyncio
 async def test_pipeline_list_empty(temp_presets_dir):
     result = await pipeline_list()
-    data = json.loads(result)
+    data = result
     assert data["ok"] is True
     assert data["presets"] == []
 
@@ -141,7 +139,7 @@ async def test_pipeline_list_empty(temp_presets_dir):
 @pytest.mark.asyncio
 async def test_pipeline_list_with_files(sample_pipeline_file):
     result = await pipeline_list()
-    data = json.loads(result)
+    data = result
     assert data["ok"] is True
     assert len(data["presets"]) == 1
     assert data["presets"][0]["name"] == "test_pipeline"
@@ -155,7 +153,7 @@ async def test_pipeline_list_partial_corrupt(temp_presets_dir, sample_pipeline_f
     corrupt.parent.mkdir(parents=True, exist_ok=True)
     corrupt.write_text(": bad yaml", encoding="utf-8")
     result = await pipeline_list()
-    data = json.loads(result)
+    data = result
     assert data["ok"] is True
     assert len(data["presets"]) == 2
     corrupt_entry = next(p for p in data["presets"] if p["name"] == "corrupt")
@@ -174,7 +172,7 @@ async def test_pipeline_update_step_description(sample_pipeline_file):
             updates={"description": "Updated description"},
             explanation="test",
         )
-    data = json.loads(result)
+    data = result
     assert data["ok"] is True
 
     validated = _load_pipeline_yaml("test_pipeline")
@@ -190,7 +188,7 @@ async def test_pipeline_update_step_browser_ops(sample_pipeline_file):
             updates={"browser_ops": [{"click": "#btn"}]},
             explanation="test",
         )
-    data = json.loads(result)
+    data = result
     assert data["ok"] is True
 
     validated = _load_pipeline_yaml("test_pipeline")
@@ -207,7 +205,7 @@ async def test_pipeline_update_step_tool_name(sample_pipeline_file):
             updates={"tool_name": "other_tool"},
             explanation="test",
         )
-    data = json.loads(result)
+    data = result
     assert data["ok"] is True
 
     validated = _load_pipeline_yaml("test_pipeline")
@@ -224,7 +222,7 @@ async def test_pipeline_update_step_goal_description(sample_pipeline_file):
             updates={"goal_description": "Do something"},
             explanation="test",
         )
-    data = json.loads(result)
+    data = result
     assert data["ok"] is True
 
     validated = _load_pipeline_yaml("test_pipeline")
@@ -242,7 +240,7 @@ async def test_pipeline_update_step_depends_on(sample_pipeline_file):
             updates={"depends_on": ["step_3"]},
             explanation="test",
         )
-    data = json.loads(result)
+    data = result
     assert data["ok"] is True
 
     validated = _load_pipeline_yaml("test_pipeline")
@@ -256,7 +254,7 @@ async def test_pipeline_update_step_empty_updates(sample_pipeline_file):
         step_name="step_1",
         updates={},
     )
-    data = json.loads(result)
+    data = result
     assert data["ok"] is False
     assert "must not be empty" in data["error"]
 
@@ -268,7 +266,7 @@ async def test_pipeline_update_step_not_found(sample_pipeline_file):
         step_name="nonexistent",
         updates={"description": "x"},
     )
-    data = json.loads(result)
+    data = result
     assert data["ok"] is False
     assert "not found" in data["error"]
 
@@ -280,7 +278,7 @@ async def test_pipeline_update_step_pipeline_not_found(temp_presets_dir):
         step_name="step_1",
         updates={"description": "x"},
     )
-    data = json.loads(result)
+    data = result
     assert data["ok"] is False
     assert "not found" in data["error"]
 
@@ -293,7 +291,7 @@ async def test_pipeline_update_step_type_conflict(sample_pipeline_file):
         updates={"browser_ops": [{"goto": "x"}], "tool_name": "t"},
         explanation="test",
     )
-    data = json.loads(result)
+    data = result
     assert data["ok"] is False
     assert "mutually exclusive" in data["error"].lower() or "validation" in data["error"].lower()
 
@@ -305,7 +303,7 @@ async def test_pipeline_update_step_unknown_keys(sample_pipeline_file):
         step_name="step_1",
         updates={"description": "x", "unknown_field": "bad"},
     )
-    data = json.loads(result)
+    data = result
     assert data["ok"] is False
     assert "Unknown update keys" in data["error"]
     assert "unknown_field" in data["error"]
@@ -323,7 +321,7 @@ async def test_pipeline_add_step_append(sample_pipeline_file):
             browser_ops=[{"snapshot": {}}],
             explanation="test",
         )
-    data = json.loads(result)
+    data = result
     assert data["ok"] is True
 
     validated = _load_pipeline_yaml("test_pipeline")
@@ -342,7 +340,7 @@ async def test_pipeline_add_step_insert_after(sample_pipeline_file):
             after="step_1",
             explanation="test",
         )
-    data = json.loads(result)
+    data = result
     assert data["ok"] is True
 
     validated = _load_pipeline_yaml("test_pipeline")
@@ -358,7 +356,7 @@ async def test_pipeline_add_step_anchor_not_found(sample_pipeline_file):
         browser_ops=[{"goto": "x"}],
         after="nonexistent",
     )
-    data = json.loads(result)
+    data = result
     assert data["ok"] is False
     assert "not found" in data["error"]
 
@@ -371,7 +369,7 @@ async def test_pipeline_add_step_pipeline_not_found(temp_presets_dir):
         description="x",
         browser_ops=[{"goto": "x"}],
     )
-    data = json.loads(result)
+    data = result
     assert data["ok"] is False
     assert "not found" in data["error"]
 
@@ -387,7 +385,7 @@ async def test_pipeline_add_step_with_depends_on(sample_pipeline_file):
             depends_on=["step_1", "step_2"],
             explanation="test",
         )
-    data = json.loads(result)
+    data = result
     assert data["ok"] is True
 
     validated = _load_pipeline_yaml("test_pipeline")
@@ -403,7 +401,7 @@ async def test_pipeline_add_step_type_conflict(sample_pipeline_file):
         browser_ops=[{"goto": "x"}],
         tool_name="t",
     )
-    data = json.loads(result)
+    data = result
     assert data["ok"] is False
 
 
@@ -415,7 +413,7 @@ async def test_pipeline_add_step_duplicate_name(sample_pipeline_file):
         description="Duplicate",
         browser_ops=[{"goto": "x"}],
     )
-    data = json.loads(result)
+    data = result
     assert data["ok"] is False
     assert "already exists" in data["error"]
 
@@ -430,7 +428,7 @@ async def test_pipeline_remove_step(sample_pipeline_file):
             step_name="step_2",
             explanation="test",
         )
-    data = json.loads(result)
+    data = result
     assert data["ok"] is True
 
     validated = _load_pipeline_yaml("test_pipeline")
@@ -447,7 +445,7 @@ async def test_pipeline_remove_step_cleans_depends_on(sample_pipeline_file):
             step_name="step_1",
             explanation="test",
         )
-    data = json.loads(result)
+    data = result
     assert data["ok"] is True
 
     validated = _load_pipeline_yaml("test_pipeline")
@@ -461,7 +459,7 @@ async def test_pipeline_remove_step_not_found(sample_pipeline_file):
         pipeline_name="test_pipeline",
         step_name="nonexistent",
     )
-    data = json.loads(result)
+    data = result
     assert data["ok"] is False
     assert "not found" in data["error"]
 
@@ -472,7 +470,7 @@ async def test_pipeline_remove_step_pipeline_not_found(temp_presets_dir):
         pipeline_name="nonexistent",
         step_name="step_1",
     )
-    data = json.loads(result)
+    data = result
     assert data["ok"] is False
     assert "not found" in data["error"]
 
@@ -494,7 +492,7 @@ async def test_pipeline_remove_last_step(temp_presets_dir):
         pipeline_name="single",
         step_name="only",
     )
-    data = json.loads(result)
+    data = result
     assert data["ok"] is False
     assert "validation" in data["error"].lower() or "min_length" in data["error"].lower()
 
@@ -503,7 +501,7 @@ async def test_pipeline_remove_last_step(temp_presets_dir):
 
 @pytest.mark.asyncio
 async def test_pipeline_create(temp_presets_dir):
-    with patch("engine._harness.pipeline_tools._push_ws_event", return_value=None):
+    with patch("engine._harness.pipeline_tools.push_pipeline_edit_event", return_value=None):
         result = await pipeline_create(
             pipeline_name="new_pipeline",
             description="A new pipeline",
@@ -513,7 +511,7 @@ async def test_pipeline_create(temp_presets_dir):
             ],
             explanation="test",
         )
-    data = json.loads(result)
+    data = result
     assert data["ok"] is True
 
     path = temp_presets_dir / "new_pipeline" / "pipeline.yaml"
@@ -531,7 +529,7 @@ async def test_pipeline_create_duplicate(sample_pipeline_file):
         description="dup",
         steps=[{"name": "s1", "description": "x", "browser_ops": [{"goto": "x"}]}],
     )
-    data = json.loads(result)
+    data = result
     assert data["ok"] is False
     assert "already exists" in data["error"]
 
@@ -543,7 +541,7 @@ async def test_pipeline_create_invalid_name(temp_presets_dir):
         description="x",
         steps=[{"name": "s1", "description": "x", "browser_ops": [{"goto": "x"}]}],
     )
-    data = json.loads(result)
+    data = result
     assert data["ok"] is False
     assert "Invalid" in data["error"]
 
@@ -555,7 +553,7 @@ async def test_pipeline_create_empty_steps(temp_presets_dir):
         description="x",
         steps=[],
     )
-    data = json.loads(result)
+    data = result
     assert data["ok"] is False
 
 
@@ -568,7 +566,7 @@ async def test_pipeline_create_type_conflict(temp_presets_dir):
             {"name": "s1", "description": "x", "browser_ops": [{"goto": "x"}], "tool_name": "t"},
         ],
     )
-    data = json.loads(result)
+    data = result
     assert data["ok"] is False
 
 

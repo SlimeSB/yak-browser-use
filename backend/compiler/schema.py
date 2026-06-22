@@ -44,28 +44,22 @@ class StepYaml(BaseModel):
 
     def to_step_def(self) -> StepDef:
         """Convert to internal StepDef dataclass."""
-        if self.browser_ops is not None:
-            resolved_type = "browser"
+        from compiler.step_type import infer_step_type
+
+        resolved_type = infer_step_type(self)
+        if resolved_type == "browser":
             is_goal = False
             resolved_goal_desc = ""
             resolved_tool = ""
-            resolved_browser_ops = [_convert_browser_op(op) for op in self.browser_ops]
-        elif self.tool_name is not None:
-            resolved_type = "tool"
+            resolved_browser_ops = [_convert_browser_op(op) for op in self.browser_ops] if self.browser_ops else []
+        elif resolved_type == "tool":
             is_goal = False
             resolved_goal_desc = ""
             resolved_tool = self.tool_name
             resolved_browser_ops = []
-        elif self.goal_description is not None:
-            resolved_type = "goal"
-            is_goal = True
-            resolved_goal_desc = self.goal_description
-            resolved_tool = ""
-            resolved_browser_ops = []
         else:
-            resolved_type = "goal"
             is_goal = True
-            resolved_goal_desc = self.description
+            resolved_goal_desc = self.goal_description or self.description
             resolved_tool = ""
             resolved_browser_ops = []
 

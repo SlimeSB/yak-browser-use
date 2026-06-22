@@ -102,14 +102,8 @@ class PipelineTaskAdapter:
             if not description and step_def.get("tool_name"):
                 description = f"Run tool: {step_def['tool_name']}"
 
-            step_type = step_def.get("step_type", "")
-            if not step_type:
-                if step_def.get("is_goal"):
-                    step_type = "goal"
-                elif step_def.get("tool_name"):
-                    step_type = "tool"
-                else:
-                    step_type = "browser"
+            from compiler.step_type import infer_step_type
+            step_type = infer_step_type(step_def)
 
             steps.append(StepInfo(
                 key=key,

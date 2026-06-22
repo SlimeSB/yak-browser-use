@@ -49,15 +49,7 @@ def _write_execution_tree(run_dir: Path, machine: StepMachine, pipeline_name: st
         json.dump(tree, f, ensure_ascii=False, indent=2)
 
 
-def _step_type(step_def: dict) -> str:
-    """Infer the step type: browser / tool / goal."""
-    if step_def.get("step_type"):
-        return step_def["step_type"]
-    if step_def.get("tool_name"):
-        return "tool"
-    if step_def.get("is_goal"):
-        return "goal"
-    return "browser"
+from compiler.step_type import infer_step_type as _step_type
 
 
 def _safe_dirname(name: str) -> str:

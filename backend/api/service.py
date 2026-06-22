@@ -17,14 +17,12 @@ from utils.logging import get_logger
 
 from api.errors import APIError
 from tools.todo_store import TodoStore
+from workspace.manager import WORKSPACES_ROOT
 from workspace.session_store import SessionStore, read_last_active, write_last_active
 
 logger = get_logger(__name__)
 
-# Default session directory
-_DATA_DIR = Path(__file__).resolve().parent.parent.parent / "userdata"
-_SESSIONS_DIR = _DATA_DIR / "sessions"
-_WORKSPACES_DIR = _DATA_DIR / "workspaces"
+_WORKSPACES_DIR = WORKSPACES_ROOT
 
 _DEFAULT_PIPELINE = "__chat__"
 

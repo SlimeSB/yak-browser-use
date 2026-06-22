@@ -526,17 +526,15 @@ def _build_registry_impl() -> None:
             def _make_pipeline_handler(hn: str):
                 async def handler(args: dict, ctx: ToolContext) -> dict:
                     fn = _get_pipeline_dispatch()[hn]
-                    result_str = await fn(**args)
-                    try:
-                        result_dict = json.loads(result_str)
-                    except (json.JSONDecodeError, TypeError):
-                        return {"ok": True, "result": result_str}
-                    if "result" not in result_dict and result_dict.get("ok"):
-                        result_dict["result"] = json.dumps(
-                            {k: v for k, v in result_dict.items() if k not in ("ok", "result")},
+                    result = await fn(**args)
+                    if isinstance(result, str):
+                        return {"ok": True, "result": result}
+                    if "result" not in result and result.get("ok"):
+                        result["result"] = json.dumps(
+                            {k: v for k, v in result.items() if k not in ("ok", "result")},
                             ensure_ascii=False,
                         )
-                    return result_dict
+                    return result
                 return handler
 
             registry.register(name, schema, _make_pipeline_handler(name))

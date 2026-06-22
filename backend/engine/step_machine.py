@@ -83,14 +83,8 @@ class StepMachine:
         step_def = self.steps[self._index]
         key = step_def.get("key", f"step_{self._index}")
         name = step_def.get("name", key)
-        step_type = step_def.get("step_type", "")
-        if not step_type:
-            if step_def.get("tool_name"):
-                step_type = "tool"
-            elif step_def.get("is_goal"):
-                step_type = "goal"
-            else:
-                step_type = "browser"
+        from compiler.step_type import infer_step_type
+        step_type = infer_step_type(step_def)
 
         parent_index = self._fork_stack[-1] if self._fork_stack else None
         node = StepNode(

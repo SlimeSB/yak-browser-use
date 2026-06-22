@@ -7,17 +7,18 @@ so the frontend can show an inline diff for user review.
 from __future__ import annotations
 
 import asyncio
-import difflib
 import os
 import time
 from pathlib import Path
+
+from workspace.manager import WORKSPACES_ROOT
 
 from utils.logging import get_logger
 
 logger = get_logger(__name__)
 
 
-_WORKSPACES_DIR = Path(__file__).resolve().parent.parent.parent / "userdata" / "workspaces"
+_WORKSPACES_DIR = WORKSPACES_ROOT
 
 _checkpoints: dict[str, Path] = {}
 _processed_edits: set[str] = set()
@@ -89,71 +90,26 @@ async def edit_pipeline(
     pipeline_path.write_text(content, encoding="utf-8")
     logger.debug("Pipeline %s updated, edit_id=%s", safe_name, edit_id)
 
+    from engine._harness.pipeline_events import push_pipeline_edit_event
+
     checkpoint_path = _checkpoints.get(edit_id)
     if checkpoint_path and checkpoint_path.exists():
         original = checkpoint_path.read_text(encoding="utf-8")
     else:
         original = content
 
-    modified = content
-
-    diff_lines = _compute_diff(original, modified)
-
-    event = {
-        "type": "pipeline.edit",
-        "edit_id": edit_id,
-        "original": original,
-        "modified": modified,
-        "diff_lines": diff_lines,
-        "explanation": explanation,
-        "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S"),
-    }
-
-    if hasattr(engine_state, "ws_clients"):
-        for q in engine_state.ws_clients:
-            try:
-                q.put_nowait(event)
-            except Exception:  # expected: no ws client
-                pass
+    await push_pipeline_edit_event(
+        engine_state,
+        edit_id=edit_id,
+        original=original,
+        modified=content,
+        explanation=explanation,
+    )
 
     return (
         f"Pipeline '{safe_name}' updated successfully. "
         f"Changes pushed for review (edit_id: {edit_id})."
     )
-
-
-def _compute_diff(original: str, modified: str) -> list[dict]:
-    """Compute a line-level diff between original and modified text."""
-    orig_lines = original.splitlines(keepends=True)
-    mod_lines = modified.splitlines(keepends=True)
-
-    diff = list(difflib.unified_diff(
-        orig_lines, mod_lines,
-        fromfile="original", tofile="modified",
-        lineterm="",
-    ))
-
-    result: list[dict] = []
-    old_num = 0
-    new_num = 0
-
-    for line in diff:
-        if line.startswith("@@"):
-            continue
-        if line.startswith("---") or line.startswith("+++"):
-            continue
-        if line.startswith("-"):
-            old_num += 1
-            result.append({"type": "del", "line": line[1:], "oldLineNum": old_num})
-        elif line.startswith("+"):
-            new_num += 1
-            result.append({"type": "add", "line": line[1:], "newLineNum": new_num})
-        else:
-            old_num += 1
-            new_num += 1
-            result.append({"type": "ctx", "line": line[1:] if line.startswith(" ") else line})
-
-    return result
 
 
 def get_checkpoint_path(edit_id: str) -> Path | None:
