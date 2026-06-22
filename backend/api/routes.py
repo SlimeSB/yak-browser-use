@@ -143,17 +143,14 @@ def register_all_routes(app: FastAPI) -> None:
     async def api_run(request: dict) -> JSONResponse:
         """Execute a pipeline.yaml pipeline (runs as an async background task).
 
-        Request body: ``{"pipeline": "...", "params": {...}, "engine": "programmatic"|"agent"}``
+        Request body: ``{"pipeline": "...", "params": {...}}``
 
         Returns immediately with a ``run_id``.  Poll ``GET /api/status``
         or subscribe to ``/ws/events`` for completion.
         """
         pipeline_text = request.get("pipeline", "")
         params = request.get("params", {}) or {}
-        engine = request.get("engine", "programmatic")
-        if engine not in ("programmatic", "agent"):
-            raise APIError("engine must be 'programmatic' or 'agent'", status_code=400)
-        logger.debug("POST /api/run: pipeline=%s... params=%s engine=%s", pipeline_text[:80], params, engine)
+        logger.debug("POST /api/run: pipeline=%s... params=%s", pipeline_text[:80], params)
 
         if not engine_state.chrome_connected:
             raise APIError("Chrome is not connected — connect first via POST /api/chrome/connect")
@@ -199,73 +196,16 @@ def register_all_routes(app: FastAPI) -> None:
 
             from engine.agent import create_pipeline_llm_call
 
-            if engine == "agent":
-                from engine._harness.conversation_loop import run_preset_loop
-                from engine._harness.iteration_budget import IterationBudget
-                from engine.state import RunContext
-
-                run_dir = wm.create_run()
-                wm.set_status(run_dir, "running")
-                ctx = RunContext(
-                    pipeline_name=parsed.name,
-                    run_id=run_dir.name,
-                    run_dir=run_dir,
-                    version="0",
-                )
-
-                pipeline_lock = getattr(engine_state, "pipeline_lock", None)
-                if pipeline_lock is None:
-                    pipeline_lock = asyncio.Lock()
-                    engine_state.pipeline_lock = pipeline_lock
-                async with pipeline_lock:
-                    if engine_state.running_pipeline:
-                        raise APIError("a pipeline is already running")
-                    engine_state.running_pipeline = ctx
-
-                llm_call = create_pipeline_llm_call(persist_id=run_dir.name)
-
-                budget = IterationBudget(max_total=50)
-                try:
-                    result = await run_preset_loop(
-                        step_defs=steps,
-                        frontmatter=parsed.frontmatter,
-                        llm_call=llm_call,
-                        cdp_helpers=browser,
-                        budget=budget,
-                    )
-                except Exception:
-                    wm.set_status(run_dir, "failed")
-                    raise
-                finally:
-                    async with engine_state.pipeline_lock:
-                        engine_state.running_pipeline = None
-
-                if result.interrupted:
-                    ctx.errors.append({"step": "_agent_", "code": "AGENT_ERROR", "message": "agent interrupted"})
-                    wm.set_status(run_dir, "failed")
-                elif result.budget.is_exhausted:
-                    pipeline_finished = any(
-                        msg.get("role") == "tool" and msg.get("name") == "pipeline_finish"
-                        for msg in result.messages
-                    )
-                    if pipeline_finished:
-                        wm.set_status(run_dir, "completed")
-                    else:
-                        ctx.errors.append({"step": "_agent_", "code": "AGENT_ERROR", "message": "budget exhausted"})
-                        wm.set_status(run_dir, "failed")
-                else:
-                    wm.set_status(run_dir, "completed")
-            else:
-                llm_call = create_pipeline_llm_call(persist_id=f"pipeline_{parsed.name}")
-                ctx = await run_pipeline(
-                    pipeline_name=parsed.name,
-                    steps=steps,
-                    cdp_helpers=browser,
-                    pipeline_path=snapshot_path,
-                    frontmatter=parsed.frontmatter,
-                    guardian=guardian,
-                    llm_call=llm_call,
-                )
+            llm_call = create_pipeline_llm_call(persist_id=f"pipeline_{parsed.name}")
+            ctx = await run_pipeline(
+                pipeline_name=parsed.name,
+                steps=steps,
+                cdp_helpers=browser,
+                pipeline_path=snapshot_path,
+                frontmatter=parsed.frontmatter,
+                guardian=guardian,
+                llm_call=llm_call,
+            )
 
             status = "completed" if not ctx.errors else "failed"
             return JSONResponse({
