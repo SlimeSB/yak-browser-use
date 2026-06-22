@@ -194,9 +194,6 @@ def register_all_routes(app: FastAPI) -> None:
                     "Ensure engine/runner.py is implemented."
                 )
 
-            from engine.agent import create_pipeline_llm_call
-
-            llm_call = create_pipeline_llm_call(persist_id=f"pipeline_{parsed.name}")
             ctx = await run_pipeline(
                 pipeline_name=parsed.name,
                 steps=steps,
@@ -204,7 +201,6 @@ def register_all_routes(app: FastAPI) -> None:
                 pipeline_path=snapshot_path,
                 frontmatter=parsed.frontmatter,
                 guardian=guardian,
-                llm_call=llm_call,
             )
 
             status = "completed" if not ctx.errors else "failed"
@@ -680,9 +676,6 @@ def register_all_routes(app: FastAPI) -> None:
             from cdp.helpers import CDPHelpers
             browser = CDPHelpers(engine_state.bridge)
 
-            from engine.agent import create_pipeline_llm_call
-            llm_call = create_pipeline_llm_call(persist_id=run_id)
-
             ctx = await run_pipeline(
                 pipeline_name=pipeline_name,
                 steps=steps,
@@ -691,7 +684,6 @@ def register_all_routes(app: FastAPI) -> None:
                 frontmatter=parsed.frontmatter,
                 resume_from_index=resume_from_index,
                 guardian=guardian,
-                llm_call=llm_call,
             )
 
             final_status = "completed" if not ctx.errors else "failed"

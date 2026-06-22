@@ -2,7 +2,6 @@
 
 Provides:
 - start_chat_agent() — chat mode conversation_loop entry
-- create_pipeline_llm_call() — non-streaming llm_call for pipeline fallback
 - _create_chat_llm_call() — streaming llm_call for interactive chat
 """
 from __future__ import annotations
@@ -301,56 +300,4 @@ def _create_chat_llm_call(
     return _call
 
 
-def create_pipeline_llm_call(persist_id: str = ""):
-    """Create a simple llm_call for pipeline fallback (RuntimePlanner + Agent Swimlane).
 
-    Returns an async function that takes (messages, tools) and returns
-    an object with .content and .tool_calls attributes.
-    No streaming callbacks — designed for programmatic use.
-    """
-    from utils.browser import create_llm
-    from utils.response_logger import _log_non_streaming_response
-    from llm.messages import UserMessage, SystemMessage, AssistantMessage, ToolCall
-
-    llm = create_llm()
-
-    _turn_counter = {"value": 0}
-
-    def _advance_turn():
-        _turn_counter["value"] += 1
-        return _turn_counter["value"]
-
-    async def _call(messages: list[dict], tools: list[dict]) -> object:
-        request_summary = {
-            "model": getattr(llm, "model", ""),
-            "messages_count": len(messages),
-            "tools_count": len(tools) if tools else 0,
-        }
-
-        converted: list = []
-        for msg in messages:
-            role = msg.get("role", "user")
-            content = msg.get("content", "")
-            if role == "system":
-                converted.append(SystemMessage(content=content))
-            elif role == "assistant":
-                tool_calls_data = msg.get("tool_calls")
-                if tool_calls_data:
-                    tc_objs = [ToolCall(**tc) for tc in tool_calls_data]
-                    converted.append(AssistantMessage(content=content, tool_calls=tc_objs))
-                else:
-                    converted.append(AssistantMessage(content=content))
-            elif role == "tool":
-                converted.append(UserMessage(content=f"[tool result] {content}"))
-            else:
-                converted.append(UserMessage(content=content))
-
-        kwargs: dict = {"messages": converted}
-        if tools:
-            kwargs["tools"] = tools
-        response = await llm.ainvoke(**kwargs)
-        _local_turn = _advance_turn()
-        _log_non_streaming_response(persist_id, _local_turn, response, request_summary)
-        return response
-
-    return _call

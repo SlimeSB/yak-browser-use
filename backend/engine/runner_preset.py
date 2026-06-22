@@ -21,7 +21,6 @@ from pathlib import Path
 from engine.events import EventSink
 from engine.executor import (
     execute_browser_step,
-    execute_goal_step,
     execute_tool_step,
     mask_sensitive_patterns,
     run_check,
@@ -36,7 +35,6 @@ from workspace.path_guard import PathGuard
 
 logger = get_logger(__name__)
 
-_MAX_PLANNER_FAILURES = 3
 
 # ── helpers ──
 
@@ -137,205 +135,6 @@ async def _execute_tool_step_with_guardian(
 # ── main pipeline ──
 
 
-def _extract_final_url(step_dir: Path) -> str | None:
-    """Extract the final_url from a step's step.json file.
-
-    Returns None if the file doesn't exist or final_url is empty.
-    """
-    step_json = step_dir / "step.json"
-    if not step_json.exists():
-        return None
-    try:
-        data = json.loads(step_json.read_text(encoding="utf-8"))
-        url = data.get("final_url", "")
-        return url if url else None
-    except (json.JSONDecodeError, OSError):
-        return None
-
-
-def _collect_checkpoints(run_dir: Path, machine: StepMachine) -> list[str]:
-    """Collect checkpoint URLs from completed steps.
-
-    Iterates through all executed nodes, reads step.json from each
-    step directory, and extracts the final_url. Skips empty URLs.
-    """
-    checkpoints: list[str] = []
-    for node in machine.nodes:
-        if node.status != StepStatus.SUCCESS:
-            continue
-        step_def = machine.steps[node.index] if node.index < len(machine.steps) else {}
-        step_name = step_def.get("name", f"step_{node.index}")
-        step_dir = run_dir / _safe_dirname(step_name)
-        url = _extract_final_url(step_dir)
-        if url:
-            checkpoints.append(url)
-    return checkpoints
-
-
-async def _run_swimlane_agent(
-    *,
-    llm_call,
-    cdp_helpers,
-    machine: StepMachine,
-    node,
-    step_def: dict,
-    error_msg: str,
-    pipeline_name: str,
-    frontmatter: dict | None,
-    run_dir: Path,
-    wm,
-    events: EventSink,
-    ctx: RunContext,
-    shared_store: dict | None = None,
-) -> str | None:
-    """Run the Agent Swimlane when a check fails.
-
-    Collects runtime context (completed steps, checkpoint URLs, current
-    page state), builds a user message, and launches run_preset_loop()
-    to let the agent autonomously complete the remaining pipeline.
-
-    Returns:
-        "completed" if agent finished successfully,
-        "failed" if agent reported failure or budget exhausted,
-        None if the swimlane should be skipped (no llm_call).
-    """
-    from engine._harness import run_preset_loop, ConversationResult, IterationBudget
-
-    if llm_call is None:
-        return None
-
-    logger.info("  🏊 Agent Swimlane: check failed, launching agent for '%s'", ctx.current_step)
-
-    simplified_html = ""
-    current_url = ""
-    try:
-        snapshot = await cdp_helpers.capture_snapshot_simplified()
-        simplified_html = snapshot.get("summary", "")
-    except Exception as e:
-        logger.warning("swimlane: failed to capture simplified snapshot: %s", e)
-    try:
-        url_result = await cdp_helpers.js("window.location.href")
-        current_url = str(url_result) if url_result else ""
-    except Exception:
-        logger.warning("swimlane: js url fetch failed", exc_info=True)
-
-    checkpoints = _collect_checkpoints(run_dir, machine)
-    completed_steps = []
-    for n in machine.nodes:
-        if n.status == StepStatus.SUCCESS and n.index < len(machine.steps):
-            s = machine.steps[n.index]
-            completed_steps.append(s.get("name", f"step_{n.index}"))
-
-    remaining_steps = machine.steps[node.index:]
-
-    context_lines = [
-        "## Runtime Context",
-        "",
-        f"Pipeline: {pipeline_name}",
-        f"Failed step: {ctx.current_step}",
-        f"Error: {error_msg}",
-        "",
-    ]
-
-    if completed_steps:
-        context_lines.append("### Completed Steps")
-        for s in completed_steps:
-            context_lines.append(f"  ✓ {s}")
-        context_lines.append("")
-
-    if checkpoints:
-        context_lines.append("### Checkpoint URLs (you can navigate back to these)")
-        for i, url in enumerate(checkpoints):
-            context_lines.append(f"  {i + 1}. {url}")
-        context_lines.append("")
-
-    if current_url:
-        context_lines.append(f"### Current Page URL: {current_url}")
-        context_lines.append("")
-
-    context_lines.append("### Remaining Pipeline Steps")
-    for i, s in enumerate(remaining_steps):
-        name = s.get("name", f"step_{node.index + i}")
-        desc = s.get("description", s.get("goal_description", ""))
-        context_lines.append(f"  {i + 1}. {name}: {desc}"[:200])
-    context_lines.append("")
-
-    context_lines.append("### Current Page State (simplified)")
-    context_lines.append(simplified_html[:5000] if simplified_html else "(unavailable)")
-    context_lines.append("")
-
-    context_lines.append(
-        "The check for the current step failed. Please inspect the page and "
-        "complete the remaining pipeline steps autonomously. Use the checkpoint "
-        "URLs to navigate back if needed. Call pipeline_finish when done."
-    )
-
-    user_message = "\n".join(context_lines)
-
-    budget = IterationBudget(max_total=50)
-
-    try:
-        result: ConversationResult = await run_preset_loop(
-            step_defs=remaining_steps,
-            frontmatter=frontmatter,
-            llm_call=llm_call,
-            messages=[{"role": "user", "content": user_message}],
-            cdp_helpers=cdp_helpers,
-            budget=budget,
-            shared_store=shared_store,
-        )
-    except Exception as e:
-        logger.error("swimlane: run_preset_loop failed: %s", e)
-        return "failed"
-
-    if result.interrupted:
-        logger.warning("swimlane: agent interrupted")
-        ctx.errors.append(
-            {"step": ctx.current_step, "code": "CHECK_FAILED", "message": "agent interrupted"}
-        )
-        return "failed"
-
-    pipeline_finish_result = None
-    for msg in reversed(result.messages):
-        if msg.get("role") == "tool" and msg.get("name") == "pipeline_finish":
-            content = msg.get("content", "")
-            try:
-                pipeline_finish_result = json.loads(content)
-            except (json.JSONDecodeError, TypeError):
-                pass
-            break
-
-    if pipeline_finish_result is not None:
-        status = pipeline_finish_result.get("status", "")
-        if status == "completed":
-            logger.info("swimlane: agent completed via pipeline_finish")
-            return "completed"
-        else:
-            failed_summary = pipeline_finish_result.get("summary", "agent reported failure")
-            logger.warning("swimlane: agent reported failure: %s", failed_summary)
-            ctx.errors.append(
-                {"step": ctx.current_step, "code": "CHECK_FAILED", "message": failed_summary}
-            )
-            return "failed"
-
-    if result.final_response and result.final_response.strip():
-        logger.info("swimlane: agent completed successfully")
-        return "completed"
-
-    if result.budget.is_exhausted:
-        logger.warning("swimlane: budget exhausted without pipeline_finish")
-        ctx.errors.append(
-            {"step": ctx.current_step, "code": "CHECK_FAILED", "message": "budget exhausted"}
-        )
-        return "failed"
-
-    logger.warning("swimlane: agent finished without final response")
-    ctx.errors.append(
-        {"step": ctx.current_step, "code": "CHECK_FAILED", "message": "agent finished without response"}
-    )
-    return "failed"
-
-
 async def run_pipeline(
     pipeline_name: str,
     steps: list[dict],
@@ -347,9 +146,12 @@ async def run_pipeline(
     resume_from_index: int = 0,
     guardian=None,
     ws_clients: list | None = None,
-    llm_call=None,
 ) -> RunContext:
     """Execute a pipeline: create workspace → run through steps → finalize.
+
+    Preset mode runner. Executes steps programmatically through StepMachine:
+    browser and tool steps dispatch to executors; checks run programmatic
+    verification. Failed steps retry if configured, then fail terminally.
 
     Args:
         pipeline_name: Name of the pipeline (used for workspace directory).
@@ -357,13 +159,11 @@ async def run_pipeline(
         cdp_helpers: CDPHelpers instance for browser operations.
         max_runs: Maximum number of runs to keep in the workspace.
         version: Optional version string override.
-        pipeline_path: Optional path to pipeline.yaml for snapshot and goal agent context.
+        pipeline_path: Optional path to pipeline.yaml for snapshot context.
         frontmatter: Optional pipeline frontmatter dict.
         resume_from_index: Step index to resume from (0 = start).
         guardian: Optional Guardian instance for approval gating.
         ws_clients: Optional list of WebSocket client queues for event broadcast.
-        llm_call: Optional async callable(messages, tools) -> LLMResponse for
-            RuntimePlanner and Agent Swimlane fallback paths.
 
     Returns:
         RunContext with pipeline execution results.
@@ -426,7 +226,6 @@ async def run_pipeline(
 
     machine = StepMachine(steps, resume_from_index=resume_from_index)
     final_status = "completed"
-    planner_failures = 0
 
     shared_store: dict = {}
 
@@ -521,18 +320,6 @@ async def run_pipeline(
                         step_def, bridge, step_dir, run_dir,
                         shared_store=shared_store,
                     )
-            elif step_type == "goal":
-                step_result = await execute_goal_step(
-                    step_def=step_def,
-                    cdp_helpers=cdp_helpers,
-                    step_dir=step_dir,
-                    run_dir=run_dir,
-                    tools_dir=wm.tools_dir,
-                    pipeline_name=pipeline_name,
-                    frontmatter=frontmatter,
-                    pipeline_path=pipeline_path,
-                    shared_store=shared_store,
-                )
             else:
                 step_result = await _execute_tool_step_with_guardian(
                     step_def,
@@ -548,7 +335,7 @@ async def run_pipeline(
 
             # ── Programmatic check (non-goal steps only) ──
             check_def = step_def.get("check")
-            if check_def is not None and step_type != "goal" and step_result["status"] == "completed":
+            if check_def is not None and step_result["status"] == "completed":
                 bridge = getattr(cdp_helpers, "bridge", None) if cdp_helpers else None
                 if bridge is None:
                     step_result["status"] = "failed"
@@ -574,7 +361,6 @@ async def run_pipeline(
 
             # ── Success path ──
             if step_result["status"] == "completed":
-                planner_failures = 0
                 machine.end_step(node, StepStatus.SUCCESS)
                 events.emit_step_end(
                     ctx.current_step,
@@ -624,124 +410,6 @@ async def run_pipeline(
                     continue
 
                 compensation_data = step_result.get("compensation_history")
-
-                # ── Tier 3: CHECK_FAILED → Agent Swimlane ──
-                if error_code == "CHECK_FAILED" and llm_call is not None:
-                    swimlane_result = await _run_swimlane_agent(
-                        llm_call=llm_call,
-                        cdp_helpers=cdp_helpers,
-                        machine=machine,
-                        node=node,
-                        step_def=step_def,
-                        error_msg=error_msg,
-                        pipeline_name=pipeline_name,
-                        frontmatter=frontmatter,
-                        run_dir=run_dir,
-                        wm=wm,
-                        events=events,
-                        ctx=ctx,
-                        shared_store=shared_store,
-                    )
-                    if swimlane_result:
-                        step_status = StepStatus.SUCCESS if swimlane_result == "completed" else StepStatus.FAILED
-                        step_error = None if swimlane_result == "completed" else {"code": error_code, "message": error_msg}
-                        machine.end_step(node, step_status, error=step_error)
-                        events.emit_step_end(
-                            ctx.current_step, step_type,
-                            "completed" if swimlane_result == "completed" else "failed",
-                            step_result.get("duration_ms", 0),
-                        )
-                        final_status = swimlane_result
-                        wm.set_status(run_dir, final_status)
-                        _write_execution_tree(run_dir, machine, pipeline_name)
-                        break
-                    # Defensive: _run_swimlane_agent returns None only when llm_call is None,
-                    # which is already guarded above. Re-enter loop as fallback.
-                    continue
-
-                # ── Tier 2: Local Planner ──
-                if error_code in ("BROWSER_ERROR", "TIMEOUT_ERROR", "RUNTIME_ERROR") and llm_call is not None:
-                    planner_failures += 1
-                    if planner_failures > _MAX_PLANNER_FAILURES:
-                        logger.error(
-                            "  ✗ %s: Local Planner failed %d times consecutively, terminal failure",
-                            ctx.current_step, planner_failures,
-                        )
-                        # Fall through to terminal failure
-                    else:
-                        failed_op = {}
-                        if compensation_data:
-                            for op in reversed(compensation_data):
-                                if not op.get("ok", True):
-                                    failed_op = op
-                                    break
-                        if not failed_op and step_def.get("browser_ops"):
-                            failed_op = (
-                                step_def["browser_ops"][-1]
-                                if step_def["browser_ops"]
-                                else {}
-                            )
-
-                        simplified_html = ""
-                        try:
-                            snapshot = await cdp_helpers.capture_snapshot_simplified()
-                            simplified_html = snapshot.get("summary", "")
-                        except Exception as e:
-                            logger.warning("planner: failed to capture simplified snapshot: %s", e)
-
-                        from engine.planner import RuntimePlanner
-
-                        planner = RuntimePlanner(llm_call)
-                        goal_desc = step_def.get("description", step_def.get("name", ""))
-                        replacement_ops = await planner.plan_replacement_ops(
-                            failed_op=failed_op,
-                            goal_description=goal_desc,
-                            error_message=error_msg,
-                            simplified_html=simplified_html,
-                        )
-
-                        if replacement_ops:
-                            planner_failures = 0
-                            if compensation_data:
-                                ctx.compensation_history.append(
-                                    {
-                                        "step_index": node.index,
-                                        "step_name": ctx.current_step,
-                                        "ops": compensation_data,
-                                    }
-                                )
-                            ctx.errors.append(
-                                {"step": ctx.current_step, "code": error_code, "message": error_msg}
-                            )
-                            machine.end_step(
-                                node,
-                                StepStatus.FAILED,
-                                error={"code": error_code, "message": error_msg},
-                            )
-                            events.emit_step_end(
-                                ctx.current_step, step_type, "failed",
-                                step_result.get("duration_ms", 0),
-                            )
-                            events.emit_error(
-                                ctx.current_step, error_code,
-                                mask_sensitive_patterns(error_msg),
-                            )
-                            logger.warning(
-                                "  ↻ %s: Local Planner generated %d replacement ops",
-                                ctx.current_step, len(replacement_ops),
-                            )
-                            step_def["browser_ops"] = replacement_ops
-                            step_def.pop("tool_name", None)
-                            step_def.pop("goal_description", None)
-                            step_def.pop("is_goal", None)
-                            _write_execution_tree(run_dir, machine, pipeline_name)
-                            continue
-                        else:
-                            logger.warning(
-                                "  ⚠ %s: Local Planner returned no replacement ops, terminal failure",
-                                ctx.current_step,
-                            )
-                            # Fall through to terminal failure
 
                 # ── Terminal failure ──
                 if compensation_data:

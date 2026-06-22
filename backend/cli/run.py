@@ -65,10 +65,6 @@ async def _cmd_run(path: str, params: dict | None = None) -> None:
     inject_guardian_config_to_steps(steps, parsed.frontmatter)
     guardian = create_guardian_from_frontmatter(parsed.frontmatter)
 
-    from engine.agent import create_pipeline_llm_call
-
-    llm_call = create_pipeline_llm_call(persist_id=f"pipeline_{parsed.name}")
-
     # 5. Run pipeline (blocks until done; handles workspace, run_id, status internally)
     from engine.runner_preset import run_pipeline
 
@@ -80,7 +76,6 @@ async def _cmd_run(path: str, params: dict | None = None) -> None:
             pipeline_path=input_path,
             frontmatter=parsed.frontmatter,
             guardian=guardian,
-            llm_call=llm_call,
         )
     finally:
         await bridge.stop()

@@ -904,38 +904,6 @@ async def execute_tool_step(
     return result
 
 
-async def execute_goal_step(
-    step_def: dict,
-    cdp_helpers: object | None,
-    step_dir: Path,
-    run_dir: Path,
-    tools_dir: Path,
-    pipeline_name: str,
-    frontmatter: dict | None = None,
-    pipeline_path: Path | None = None,
-    shared_store: dict | None = None,
-) -> dict:
-    """Execute a goal step — returns placeholder (goals execute via todo + browser_*).
-
-    Goal steps no longer spawn a browser-use Agent.
-    """
-    goal_description = step_def.get("goal_description", "")
-    if not goal_description:
-        goal_description = step_def.get("description", "")
-
-    return {
-        "step": step_def.get("name", ""),
-        "type": "goal",
-        "status": "completed",
-        "duration_ms": 0,
-        "goal_description": goal_description,
-        "result": "Goal step skipped (stub) — goals execute via todo + browser_* in chat mode",
-        "skipped": True,
-        "output_files": [],
-        "error": {"code": None, "message": None, "stack": None},
-    }
-
-
 # ── Result writing ──
 
 

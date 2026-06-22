@@ -532,8 +532,7 @@ def _format_tool_result(tool_name: str, result_dict: dict) -> str:
             return r
         return str(r)
     else:
-        return load_prompt("guidance/error_recovery") + "\n\n" + \
-            f"Error executing {tool_name}: {result_dict.get('error', 'unknown error')}"
+        return f"Error executing {tool_name}: {result_dict.get('error', 'unknown error')}"
 
 
 def _format_guarded_result(guard_result: str) -> str:

@@ -297,61 +297,6 @@ async def run_conversation_loop(
     return await agent.run()
 
 
-async def run_preset_loop(
-    *,
-    step_defs: list[dict],
-    frontmatter: dict | None = None,
-    llm_call: Callable,
-    messages: list[dict] | None = None,
-    cdp_helpers: object | None = None,
-    tools_dir: Path | None = None,
-    budget: IterationBudget | None = None,
-    interrupt_check: Callable[[], bool] | None = None,
-    stream_callback: Callable[[dict], None] | None = None,
-    shared_store: dict | None = None,
-) -> ConversationResult:
-    from engine._harness.pipeline_task_adapter import PipelineTaskAdapter
-    from engine._harness.tools import get_all_tools
-
-    adapter = PipelineTaskAdapter(step_defs, frontmatter)
-    task_descriptor = adapter.build_descriptor()
-
-    try:
-        error_recovery = load_prompt("guidance/error_recovery")
-    except Exception:
-        error_recovery = ""
-
-    from prompts._loader import build_system_prompt
-
-    system_prompt = build_system_prompt()
-    system_prompt += (
-        f"\n\n## Pipeline\n\n"
-        f"{task_descriptor.format()}\n\n"
-    )
-    if error_recovery:
-        system_prompt += error_recovery + "\n\n"
-
-    if messages is None:
-        messages = []
-
-    pipeline_name = frontmatter.get("name", "preset") if frontmatter else "preset"
-
-    return await run_conversation_loop(
-        llm_call=llm_call,
-        system_prompt=system_prompt,
-        messages=messages,
-        tools=get_all_tools(),
-        cdp_helpers=cdp_helpers,
-        tools_dir=tools_dir,
-        pipeline_name=pipeline_name,
-        budget=budget,
-        interrupt_check=interrupt_check,
-        stream_callback=stream_callback,
-        preset_mode=True,
-        shared_store=shared_store,
-    )
-
-
 # ── Shared helpers ──────────────────────────────────────────────────────────
 
 

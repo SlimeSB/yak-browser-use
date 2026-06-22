@@ -13,8 +13,6 @@ from engine.runner_preset import (
     _step_type,
     _safe_dirname,
     _resolve_step_urls,
-    _extract_final_url,
-    _collect_checkpoints,
     _setup_run_logger,
     _write_execution_tree,
     _collect_input_files,
@@ -121,116 +119,6 @@ class TestResolveStepUrls:
         result = _resolve_step_urls(steps, {"home": "https://example.com"})
         result[0]["name"] = "modified"
         assert steps[0]["name"] == "s1"
-
-
-# ── _extract_final_url ────────────────────────────────────────────
-
-
-class TestExtractFinalUrl:
-    def test_returns_url_from_step_json(self, tmp_path):
-        step_dir = tmp_path / "step_1"
-        step_dir.mkdir()
-        (step_dir / "step.json").write_text(
-            json.dumps({"final_url": "https://example.com/page"}), encoding="utf-8"
-        )
-        assert _extract_final_url(step_dir) == "https://example.com/page"
-
-    def test_returns_none_when_no_file(self, tmp_path):
-        step_dir = tmp_path / "nonexistent"
-        assert _extract_final_url(step_dir) is None
-
-    def test_returns_none_when_url_empty(self, tmp_path):
-        step_dir = tmp_path / "step_1"
-        step_dir.mkdir()
-        (step_dir / "step.json").write_text(
-            json.dumps({"final_url": ""}), encoding="utf-8"
-        )
-        assert _extract_final_url(step_dir) is None
-
-    def test_returns_none_on_corrupt_json(self, tmp_path):
-        step_dir = tmp_path / "step_1"
-        step_dir.mkdir()
-        (step_dir / "step.json").write_text("not json", encoding="utf-8")
-        assert _extract_final_url(step_dir) is None
-
-    def test_returns_none_when_no_final_url_key(self, tmp_path):
-        step_dir = tmp_path / "step_1"
-        step_dir.mkdir()
-        (step_dir / "step.json").write_text(
-            json.dumps({"status": "completed"}), encoding="utf-8"
-        )
-        assert _extract_final_url(step_dir) is None
-
-
-# ── _collect_checkpoints ──────────────────────────────────────────
-
-
-class TestCollectCheckpoints:
-    def test_collects_from_successful_steps(self, tmp_path):
-        class MockNode:
-            def __init__(self, index, status=StepStatus.SUCCESS):
-                self.index = index
-                self.status = status
-
-        machine = MagicMock(spec=StepMachine)
-        machine.nodes = [
-            MockNode(0, StepStatus.SUCCESS),
-            MockNode(1, StepStatus.SUCCESS),
-        ]
-        machine.steps = [
-            {"name": "step_1"},
-            {"name": "step_2"},
-        ]
-
-        (tmp_path / "step_1").mkdir()
-        (tmp_path / "step_1" / "step.json").write_text(
-            json.dumps({"final_url": "https://example.com/1"}), encoding="utf-8"
-        )
-        (tmp_path / "step_2").mkdir()
-        (tmp_path / "step_2" / "step.json").write_text(
-            json.dumps({"final_url": "https://example.com/2"}), encoding="utf-8"
-        )
-
-        checkpoints = _collect_checkpoints(tmp_path, machine)
-        assert checkpoints == ["https://example.com/1", "https://example.com/2"]
-
-    def test_skips_failed_steps(self, tmp_path):
-        class MockNode:
-            def __init__(self, index, status):
-                self.index = index
-                self.status = status
-
-        machine = MagicMock(spec=StepMachine)
-        machine.nodes = [
-            MockNode(0, StepStatus.SUCCESS),
-            MockNode(1, StepStatus.FAILED),
-        ]
-        machine.steps = [
-            {"name": "step_1"},
-            {"name": "step_2"},
-        ]
-
-        (tmp_path / "step_1").mkdir()
-        (tmp_path / "step_1" / "step.json").write_text(
-            json.dumps({"final_url": "https://example.com/1"}), encoding="utf-8"
-        )
-        (tmp_path / "step_2").mkdir()
-
-        checkpoints = _collect_checkpoints(tmp_path, machine)
-        assert checkpoints == ["https://example.com/1"]
-
-    def test_empty_when_no_successful_steps(self, tmp_path):
-        class MockNode:
-            def __init__(self, index, status):
-                self.index = index
-                self.status = status
-
-        machine = MagicMock(spec=StepMachine)
-        machine.nodes = [MockNode(0, StepStatus.FAILED)]
-        machine.steps = [{"name": "step_1"}]
-
-        checkpoints = _collect_checkpoints(tmp_path, machine)
-        assert checkpoints == []
 
 
 # ── _setup_run_logger ─────────────────────────────────────────────

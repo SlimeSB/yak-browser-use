@@ -30,13 +30,7 @@ from engine._harness.tool_executor import (
 from engine._harness.conversation_loop import (
     ConversationResult,
     run_conversation_loop,
-    run_preset_loop,
     resume_conversation,
-)
-from engine._harness.pipeline_task_adapter import (
-    StepInfo,
-    TaskDescriptor,
-    PipelineTaskAdapter,
 )
 from engine._harness.tools import (
     get_all_tools,
@@ -61,11 +55,7 @@ __all__ = [
     "UnrecoverableError",
     "ConversationResult",
     "run_conversation_loop",
-    "run_preset_loop",
     "resume_conversation",
-    "StepInfo",
-    "TaskDescriptor",
-    "PipelineTaskAdapter",
     "get_all_tools",
     "get_browser_tools",
 ]
