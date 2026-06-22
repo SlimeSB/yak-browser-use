@@ -183,6 +183,7 @@ POST /api/run { pipeline: "..." }
   └→ run_pipeline() / run_preset_loop()
        ├→ 加载已录制的 pipeline.yaml
        ├→ PipelineTaskAdapter 构建 TaskDescriptor（步骤列表 + 进度）
+       ├→ 系统提示 = build_system_prompt() + TaskDescriptor + error_recovery.md
        ├→ LLM 看到完整步骤列表
        ├→ 用 browser_* 工具逐条执行步骤
        ├→ shared_store 透传支持数据流
@@ -252,32 +253,49 @@ yak-browser-use/
 │   └── launcher.py           # Chrome 启动 / 端口管理
 │
 ├── compiler/                 # Pipeline 编译
-│   ├── schema.py / parser.py # YAML 模型 & 解析
-│   ├── graph.py / resolver.py# DAG 构建 & 依赖解析
-│   ├── diff.py / generator.py / prepare.py
+│   ├── models.py / schema.py # 数据类 & Pydantic 模型
+│   ├── parser.py             # YAML 解析
+│   ├── graph.py / resolver.py# DAG 构建 + 依赖解析
+│   ├── prepare.py            # 执行前步骤准备
+│   ├── diff.py               # Op diff 计算
+│   ├── generator.py          # Handler 生成 & 代码生成
 │
 ├── tools/                    # 工具注册 + 实现
-│   ├── registry.py           # ToolRegistry — 集中调度
-│   ├── adapters.py           # 工具适配层
+│   ├── registry.py           # ToolRegistry — 集中调度（~35 工具）
+│   ├── adapters.py           # 工具数据适配（csv↔json、字段映射）
 │   ├── captcha.py            # 验证码识别（ddddocr）
 │   ├── file_read.py / file_write.py / format_convert.py
-│   ├── extract.py / data.py  # 数据处理工具
+│   ├── extract.py / data.py  # 数据提取 & 处理
 │   ├── todo.py / todo_store.py  # 待办事项管理
 │   ├── record_step.py        # Pipeline 步骤录制
-│   ├── edit_pipeline.py      # Pipeline 编辑
-│   └── _path_utils.py        # 路径工具
+│   ├── edit_pipeline.py      # Pipeline 编辑（支持回滚）
+│   └── _path_utils.py        # 路径遍历防护
 │
 ├── llm/                      # LLM 客户端层
-│   ├── client.py             # OpenAI-compatible 客户端
-│   └── messages.py           # 消息构造/解析
+│   ├── client.py             # LLMClient — OpenAI-compatible 适配器
+│   └── messages.py           # 消息类型（vendored OpenAI 格式）
 │
 ├── prompts/                  # Prompt 模板（Markdown）
-│   ├── chat/system.md        # Chat 模式系统提示
-│   ├── eval_agent/system.md  # Eval Agent 系统提示
-│   ├── guidance/ / guardrails/ / skill/
-│   └── planner-*.md / replan-on-failure.md / generate-handler.md
+│   ├── _loader.py            # Prompt 加载器（load_prompt / build_system_prompt）
+│   ├── chat/system.md        # Chat 模式系统提示（主 prompt）
+│   ├── eval_agent/           # Eval Agent prompts
+│   │   ├── system.md
+│   │   └── js_lib.js
+│   ├── guidance/             # 策略 & 恢复指导
+│   │   ├── tool_strategy.md  #   工具选择策略
+│   │   └── error_recovery.md #   错误恢复指引
+│   ├── guardrails/           # 护栏 prompt 片段
+│   │   ├── blocked.md / exact_failure.md / no_progress.md
+│   │   └── same_tool_failure.md / warning_prefix.md
+│   ├── skill/                # 系统技能
+│   │   ├── goal-execution/SKILL.md
+│   │   ├── skill-authoring/SKILL.md
+│   │   └── web-standard-paths/SKILL.md
+│   ├── planner-plan.md / planner-expand.md
+│   ├── replan-on-failure.md / generate-handler.md
+│   └── _archived/            # 已废弃 prompt
 │
-├── params/                   # 持久化参数管理
+├── params/                   # 持久化参数管理（ParamManager）
 ├── workspace/                # 工作区管理（manager/version/path）
 ├── cli/                      # CLI 命令（run.py / serve.py / logs.py）
 ├── utils/                    # 工具函数（browser/logging/tool_cdp/skill_loader/…）

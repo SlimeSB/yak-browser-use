@@ -77,33 +77,49 @@ yak-browser-use/
 │   └── prepare.py            # Pre-execution preparation
 │
 ├── tools/                    # Tool registry + implementations
-│   ├── registry.py           # ToolRegistry — central dispatch & schema generation
-│   ├── adapters.py           # Tool adaptation layer
-│   ├── record_step.py        # record_step tool (LLM records steps to pipeline)
-│   ├── todo.py / todo_store.py   # Todo task management tools
-│   ├── edit_pipeline.py      # Pipeline editing tools
-│   ├── extract.py / data.py  # Data processing tools
+│   ├── registry.py           # ToolRegistry — central dispatch (registers ~35 tools)
+│   │                         #   browser_* (22) / pipeline_* (8) / skill_* (5)
+│   │                         #   goal_run / todo / file_read / file_write
+│   │                         #   format_convert / record_step / eval_agent / captcha
+│   ├── adapters.py           # Tool data adaptation (csv↔json, field mapping)
+│   ├── record_step.py        # record_step — LLM records steps to pipeline.yaml
+│   ├── todo.py / todo_store.py   # Todo task management
+│   ├── edit_pipeline.py      # Pipeline editing with checkpoint/rollback
+│   ├── extract.py / data.py  # Data extraction & processing
 │   ├── captcha.py            # DOM-based captcha recognition (ddddocr)
-│   ├── file_read.py          # File reading tool
-│   ├── file_write.py         # File writing tool
-│   ├── format_convert.py     # Format conversion (CSV/JSON/Excel)
-│   └── _path_utils.py        # Path utility helpers
+│   ├── file_read.py          # File reading (encoding auto-detect)
+│   ├── file_write.py         # File writing
+│   ├── format_convert.py     # Format conversion (xlsx/csv/json)
+│   └── _path_utils.py        # Path traversal prevention
 │
 ├── llm/                      # LLM client layer
 │   ├── client.py             # LLM client (OpenAI-compatible)
 │   └── messages.py           # Message construction / parsing
 │
 ├── prompts/                  # Prompt templates (Markdown)
+│   ├── _loader.py            # Prompt loader (load_prompt / load_skill / build_system_prompt)
 │   ├── chat/system.md        # Chat mode system prompt
-│   ├── eval_agent/system.md  # Eval Agent system prompt
+│   ├── eval_agent/           # Eval Agent prompts
+│   │   ├── system.md         #   System prompt
+│   │   └── js_lib.js         #   JS library for eval agent execution
 │   ├── guidance/             # Strategy / recovery guidance
-│   ├── guardrails/           # Guardrail prompts
-│   ├── skill/                # Skill prompts (goal-execution, etc.)
+│   │   ├── tool_strategy.md  #   Tool selection strategy injected into system prompt
+│   │   └── error_recovery.md #   Error recovery instructions
+│   ├── guardrails/           # Guardrail prompt fragments
+│   │   ├── blocked.md        #   Tool blocked prefix
+│   │   ├── exact_failure.md  #   Exact-repeat failure message
+│   │   ├── no_progress.md    #   No-progress failure message
+│   │   ├── same_tool_failure.md # Same-tool-repeat failure message
+│   │   └── warning_prefix.md #   Guardrail warning prefix
+│   ├── skill/                # System skill prompts
+│   │   ├── goal-execution/SKILL.md    # Goal execution skill
+│   │   ├── skill-authoring/SKILL.md   # Skill authoring skill
+│   │   └── web-standard-paths/SKILL.md # Web standard paths skill
 │   ├── planner-plan.md       # Planner plan prompt
 │   ├── planner-expand.md     # Planner expand prompt
 │   ├── replan-on-failure.md  # Recovery replan prompt
 │   ├── generate-handler.md   # Handler generation prompt
-│   └── _loader.py            # Prompt loader
+│   └── _archived/            # Deprecated / archived prompts
 │
 ├── params/                   # Persistent parameter management
 │   ├── manager.py            # ParamManager (flat JSON config)
@@ -125,32 +141,36 @@ yak-browser-use/
 │   ├── skill_loader.py       # Skill file loading
 │   └── response_logger.py    # Response logging
 │
-├── tests/                    # Unit & integration tests
+├── tests/                    # Unit & integration tests (48 files)
 │   ├── conftest.py           # Pytest fixtures / shared setup
 │   ├── fixtures/             # Test fixture data
-│   ├── test_agent.py         # Agent module tests
-│   ├── test_api_routes.py    # API endpoint tests (REST + WebSocket)
-│   ├── test_runner.py        # Chat runner tests
-│   ├── test_runner_preset.py # Preset runner tests
-│   ├── test_registry.py      # ToolRegistry tests
-│   ├── test_planner.py       # Planner tests
-│   ├── test_conversation_loop.py  # Conversation loop tests
-│   ├── test_tool_executor.py # Tool executor tests (shared_store)
-│   ├── test_progressive.py   # Progressive snapshot tests
-│   ├── test_a11y_snapshot.py # A11y snapshot tests
-│   ├── test_ops.py           # Browser ops tests
-│   ├── test_param_resolver.py # Param resolver tests
-│   ├── test_compiler_*.py    # Compiler (parser/graph/resolver/diff/generator)
-│   ├── test_pipeline_tools.py
+│   ├── test_agent.py         # engine/agent.py
+│   ├── test_api_routes.py    # api/routes.py (REST + WebSocket)
+│   ├── test_runner.py        # engine/runner.py
+│   ├── test_runner_preset.py # engine/runner_preset.py
+│   ├── test_registry.py      # tools/registry.py
+│   ├── test_planner.py       # engine/planner.py
+│   ├── test_conversation_loop.py  # engine/_harness/conversation_loop.py
+│   ├── test_tool_executor.py # engine/_harness/tool_executor.py
+│   ├── test_progressive.py   # cdp/playwright_bridge.py (progressive snapshot)
+│   ├── test_a11y_snapshot.py # cdp/playwright_bridge.py (a11y snapshot)
+│   ├── test_ops.py           # engine/ops.py
+│   ├── test_param_resolver.py # engine/_param_resolver.py
+│   ├── test_schema.py        # compiler/schema.py
+│   ├── test_compiler_parser.py / test_compiler_graph.py
+│   ├── test_compiler_resolver.py / test_compiler_generator.py
+│   ├── test_compiler_diff.py / test_orchestration_filter.py / test_exact_match.py
+│   ├── test_pipeline_tools.py / test_pipeline_task_adapter.py
 │   ├── test_delivery.py / test_events.py / test_state.py
 │   ├── test_scratchpad.py / test_step_machine.py
 │   ├── test_turn_context.py / test_iteration_budget.py
 │   ├── test_file_io.py / test_format_convert.py
-│   ├── test_path_guard.py / test_version_manager.py / test_workspace_manager.py
-│   ├── test_harness_tools.py / test_pipeline_task_adapter.py
+│   ├── test_path_guard.py / test_workspace_manager.py / test_version_manager.py
+│   ├── test_harness_tools.py / test_tool_guardrails.py
 │   ├── test_retry_utils.py / test_error_classifier.py
-│   ├── test_tool_guardrails.py / test_todo_store.py
-│   ├── test_run_check.py / test_exact_match.py / ... (50+ test files)
+│   ├── test_todo_store.py / test_run_check.py / test_executor_helpers.py
+│   ├── test_prompts_loader.py / test_integration_agent_reform.py
+│   ├── run_a11y_on_html.py / run_progressive_profile.py / _debug_a11y.py
 │
 ├── electron/                 # Electron desktop frontend
 │   └── src/
@@ -288,9 +308,8 @@ POST /api/run { pipeline: "..." }
 run_preset_loop()
   ├→ PipelineTaskAdapter(step_defs, frontmatter).build_descriptor()
   │     → TaskDescriptor (pipeline name + step list + progress)
-  ├→ load prompts/preset/system.md
-  │     → inject {pipeline} placeholder (TaskDescriptor.format())
-  │     + {tool_strategy} + {error_recovery}
+  ├→ load prompts/chat/system.md + system skills (build_system_prompt())
+  │     → append TaskDescriptor.format() + error_recovery.md
   └→ run_conversation_loop(preset_mode=True)
        └→ LLM sees: "Pipeline: xxx | Steps: [pending] step_1 ..."
        └→ LLM uses browser_* tools to execute steps one by one
@@ -299,8 +318,8 @@ run_preset_loop()
 
 **Characteristics:**
 - LLM "sees" the complete step list and decides execution order and approach
-- System prompt `preset/system.md` is template-based, injecting pipeline description + strategy + recovery guidance
-- `preset_mode=True` skips automatic `tool_strategy` injection (already loaded from preset prompt)
+- System prompt is `chat/system.md` + system skills (via `build_system_prompt()`), with pipeline `TaskDescriptor` and `guidance/error_recovery.md` appended
+- `preset_mode=True` skips automatic `tool_strategy` injection (tool strategy is part of chat/system.md)
 - More flexible than legacy deterministic execution but depends on LLM capability
 - `record_step` is unnecessary (steps are pre-defined)
 
@@ -400,24 +419,23 @@ Snapshots return `url` and `title` for context. Debug dump available via F8 shor
 ### Shared Store (`engine/_harness/tool_executor.py` — `_shared_store`)
 
 Runtime memory bus for tool-to-tool data passing:
-- **Template resolution**: `${step_name.output_field}` — resolves parameter values from prior step outputs
+- **Template resolution**: `{path}` / `${path}` syntax — resolves parameter values from prior step outputs via `_param_resolver.resolve_params()`
 - **Source key**: `_source_key` parameter in any tool — fetches data from a named step's output
 - **eval_agent support**: inherits shared_store context; producer/consumer data flow
 - Used in both Chat and Preset modes (preset loop passthrough)
 
-### Three-Layer Execution Logic (`engine/executor.py` + `engine/ops.py`)
+### Three-Layer Execution Logic
 
-```
-ops.py                          executor.py (pipeline wrappers)
-────────                       ─────────────────────
-execute_browser_op()  ───→     execute_browser_step()
-execute_tool()        ───→     execute_tool_step()
-execute_goal()        ───→     execute_goal_step()
-```
+**`engine/executor.py`** — single-browser-op + tool + goal execution:
+- `execute_browser_op(op_type, params, bridge)` — dispatches a single browser operation
+- `execute_tool(tool_name, params, tools_dir, cdp_helpers)` — dynamic tool import/call
+- `execute_goal(description, ...)` — stub (goals handled by conversation_loop)
+- `run_check(check_def, bridge)` — programmatic step verification (`url_contains` / `element_exists` / `text_contains` / `element_visible`)
+- Pipeline wrappers: `execute_browser_step`, `execute_tool_step`, `execute_goal_step` — write step.json + screenshot + page HTML
 
-- **Core functions** (`ops.py`): used by chat mode tool_executor via `BrowserBridge` — no disk writes, return plain result dicts
-- **Pipeline wrappers** (`executor.py`): used by legacy preset mode — call core functions then write step.json + screenshot + page HTML
-- **BrowserBridge protocol** (`cdp/protocols.py`): interface defining `goto/click/fill/snapshot/scroll/eval/expand_branch/etc.`. `PlaywrightBridge` is the implementation.
+**`engine/ops.py`** — `ToolContext` class: safe browser SDK with domain whitelisting + circuit breaker. Used by chat mode tool_executor via `BrowserBridge`.
+
+**`cdp/protocols.py`** — `BrowserBridge` protocol: interface defining `goto/click/fill/snapshot/scroll/eval/expand_branch/hover/focus/select/clear/keyboard/tab/clipboard/wait/navigate` (23 async methods). `PlaywrightBridge` is the implementation.
 
 ---
 
@@ -509,8 +527,10 @@ Data               run_preset_loop()
 StepDef[] ───────→ PipelineTaskAdapter.build_descriptor()
                      │  → TaskDescriptor (step list + progress)
                      ▼
-                 prompts/preset/system.md
-                     │  {pipeline} + {tool_strategy} + {error_recovery}
+                 build_system_prompt()
+                     │  chat/system.md + system skills
+                     │  + TaskDescriptor.format()
+                     │  + error_recovery.md
                      ▼
                  run_conversation_loop(preset_mode=True)
                      │  LLM sees step list

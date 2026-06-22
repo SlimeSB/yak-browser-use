@@ -182,6 +182,7 @@ POST /api/run { pipeline: "..." }
   └→ run_pipeline() / run_preset_loop()
        ├→ Load previously recorded pipeline.yaml
        ├→ PipelineTaskAdapter builds TaskDescriptor (step list + progress)
+       ├→ System prompt = build_system_prompt() + TaskDescriptor + error_recovery.md
        ├→ LLM sees the full step list
        ├→ Executes steps one by one with browser_* tools
        ├→ shared_store passthrough for data flow
@@ -251,32 +252,49 @@ yak-browser-use/
 │   └── launcher.py           # Chrome launch / port mgmt
 │
 ├── compiler/                 # Pipeline compilation
-│   ├── schema.py / parser.py # YAML model & parser
-│   ├── graph.py / resolver.py# DAG builder & dependency resolver
-│   ├── diff.py / generator.py/ prepare.py
+│   ├── models.py / schema.py # Data classes & Pydantic models
+│   ├── parser.py             # YAML parser
+│   ├── graph.py / resolver.py# DAG builder + dependency resolver
+│   ├── prepare.py            # Pre-execution step preparation
+│   ├── diff.py               # Op diff computation
+│   ├── generator.py          # Handler prompt & code generation
 │
 ├── tools/                    # Tool registry + implementations
-│   ├── registry.py           # ToolRegistry — central dispatch
-│   ├── adapters.py           # Tool adaptation layer
-│   ├── captcha.py            # CAPTCHA recognition (ddddocr)
+│   ├── registry.py           # ToolRegistry — central dispatch (~35 tools)
+│   ├── adapters.py           # Tool data adaptation (csv↔json, field mapping)
+│   ├── captcha.py            # DOM-based CAPTCHA recognition (ddddocr)
 │   ├── file_read.py / file_write.py / format_convert.py
-│   ├── extract.py / data.py  # Data processing tools
+│   ├── extract.py / data.py  # Data extraction & processing
 │   ├── todo.py / todo_store.py  # Todo list management
 │   ├── record_step.py        # Pipeline step recording
-│   ├── edit_pipeline.py      # Pipeline editing
-│   └── _path_utils.py        # Path utilities
+│   ├── edit_pipeline.py      # Pipeline editing with rollback
+│   └── _path_utils.py        # Path traversal prevention
 │
 ├── llm/                      # LLM client layer
-│   ├── client.py             # OpenAI-compatible client
-│   └── messages.py           # Message construction / parsing
+│   ├── client.py             # LLMClient — OpenAI-compatible adapter
+│   └── messages.py           # Message types (vendored OpenAI format)
 │
 ├── prompts/                  # Prompt templates (Markdown)
-│   ├── chat/system.md        # Chat mode system prompt
-│   ├── eval_agent/system.md  # Eval Agent system prompt
-│   ├── guidance/ / guardrails/ / skill/
-│   └── planner-*.md / replan-on-failure.md / generate-handler.md
+│   ├── _loader.py            # Prompt loader (load_prompt / build_system_prompt)
+│   ├── chat/system.md        # Chat mode system prompt (main)
+│   ├── eval_agent/           # Eval Agent prompts
+│   │   ├── system.md
+│   │   └── js_lib.js
+│   ├── guidance/             # Strategy & recovery guidance
+│   │   ├── tool_strategy.md  #   Tool selection strategy
+│   │   └── error_recovery.md #   Error recovery instructions
+│   ├── guardrails/           # Guardrail prompt fragments
+│   │   ├── blocked.md / exact_failure.md / no_progress.md
+│   │   └── same_tool_failure.md / warning_prefix.md
+│   ├── skill/                # System skills
+│   │   ├── goal-execution/SKILL.md
+│   │   ├── skill-authoring/SKILL.md
+│   │   └── web-standard-paths/SKILL.md
+│   ├── planner-plan.md / planner-expand.md
+│   ├── replan-on-failure.md / generate-handler.md
+│   └── _archived/            # Deprecated prompts
 │
-├── params/                   # Persistent parameter manager
+├── params/                   # Persistent parameter manager (ParamManager)
 ├── workspace/                # Workspace management (manager/version/path)
 ├── cli/                      # CLI (run.py / serve.py / logs.py)
 ├── utils/                    # Utilities (browser/logging/tool_cdp/skill_loader/…)
