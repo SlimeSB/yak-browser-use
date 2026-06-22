@@ -1,6 +1,7 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
 import type { PipelineMeta } from '../../types';
+import * as api from '../../apiClient';
 import VersionPanel from '../VersionPanel';
 
 interface PipelinesTabProps {
@@ -47,7 +48,7 @@ export default function PipelinesTab({
               }}>✏ {t('pipelineManager.edit')}</button>
               <button className="btn btn-secondary btn-xs" onClick={() => {
                 onSelectPreset(p.name);
-                window.electronAPI.getPipeline(p.name).then(resp => {
+                api.getPipeline(p.name).then(resp => {
                   if (resp.content) {
                     navigator.clipboard.writeText(resp.content);
                   }

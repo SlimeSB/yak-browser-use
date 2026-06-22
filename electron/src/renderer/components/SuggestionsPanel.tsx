@@ -67,7 +67,7 @@ export default function SuggestionsPanel({
               className="btn btn-danger btn-sm"
               onClick={() => {
                 if (!rejectReason.trim()) {
-                  window.electronAPI.showAlert(t('log.reason') + t('log.required'));
+                  window.alert(t('log.reason') + t('log.required'));
                   return;
                 }
                 onReject(rejectReason);

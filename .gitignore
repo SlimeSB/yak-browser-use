@@ -44,6 +44,9 @@ userdata/workspaces/
 userdata/params.json
 userdata/provider.json
 
+# Web build output
+backend/static/
+
 
 # Debug dumps (F8)
 debug-page/

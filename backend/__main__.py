@@ -31,6 +31,11 @@ def main() -> None:
     )
     sub = parser.add_subparsers(dest="command", required=True)
 
+    # ── web ──
+    web_p = sub.add_parser("web", help="Start the web UI (backend + static frontend)")
+    web_p.add_argument("--port", type=int, default=8787, help="Port number (default: 8787)")
+    web_p.add_argument("--host", default="127.0.0.1")
+
     # ── serve ──
     serve_p = sub.add_parser("serve", help="Start the FastAPI service (backend)")
     serve_p.add_argument("--port", type=int, default=0, help="Port number (0 = auto-select)")
@@ -73,6 +78,10 @@ def main() -> None:
     elif args.command == "logs":
         from cli.logs import _cmd_logs
         asyncio.run(_cmd_logs(source=args.source, lines=args.lines, follow=args.follow, run=args.run))
+
+    elif args.command == "web":
+        from cli.web import main as web_main
+        web_main(host=args.host, port=args.port)
 
     else:
         parser.print_help()

@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import i18n from '../../i18n';
 import type { PresetDefinition } from '../../types';
+import * as api from '../../apiClient';
 
 interface SettingsTabProps {
   reviewMode: string;
@@ -39,13 +40,13 @@ export default function SettingsTab({
   const [presetsError, setPresetsError] = useState('');
 
   useEffect(() => {
-    window.electronAPI.getProviderConfig().then(r => {
+    api.getProviderConfig().then(r => {
       if (r.ok && r.config) {
         const { presets: _, ...rest } = r.config;
         setProviderConfig(prev => ({ ...prev, ...rest } as ProviderForm));
       }
     });
-    window.electronAPI.getProviderPresets().then(r => {
+    api.getProviderPresets().then(r => {
       if (r.ok && r.presets) {
         setPresets(r.presets);
       } else {
@@ -56,7 +57,7 @@ export default function SettingsTab({
 
   const handleSaveProvider = async () => {
     setSaving(true);
-    const r = await window.electronAPI.setProviderConfig({ ...providerConfig });
+    const r = await api.setProviderConfig({ ...providerConfig });
     if (r.ok) { setSaved(true); setTimeout(() => setSaved(false), 2000); }
     setSaving(false);
   };
@@ -64,7 +65,7 @@ export default function SettingsTab({
   const handleTest = async () => {
     setTesting(true);
     setTestResult(null);
-    const r = await window.electronAPI.testProvider(providerConfig as unknown as Record<string, string>);
+    const r = await api.testProvider(providerConfig as unknown as Record<string, string>);
     setTestResult(r.ok ? { ok: true, msg: t('settingsTab.testPassed') } : { ok: false, msg: r.error || 'Failed' });
     setTesting(false);
   };

@@ -2,6 +2,7 @@ import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import './styles/global.css';
 import type { PipelineMeta, EventData, ChatMessage, PendingEdit } from './types';
+import * as api from './apiClient';
 import TitleBar from './components/TitleBar';
 import ConnectionBar from './components/ConnectionBar';
 import StatusBar from './components/StatusBar';
@@ -108,7 +109,7 @@ export default function App() {
 
   const loadSessions = useCallback(async (pipelineName: string) => {
     try {
-      const r = await window.electronAPI.listSessions(pipelineName);
+      const r = await api.listSessions(pipelineName);
       if (r.sessions) {
         setSessions(r.sessions);
         if (r.sessions.length > 0) {
@@ -127,7 +128,7 @@ export default function App() {
   const switchPipeline = useCallback(async (pipelineName: string) => {
     setActivePreset(pipelineName);
     try {
-      const r = await window.electronAPI.switchSession(pipelineName);
+      const r = await api.switchSession(pipelineName);
       setChatMessages([]);
       setCurrentSessionId('');
       if (r.sessions) {
@@ -146,7 +147,7 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    window.electronAPI.listPipelines().then(async r => {
+    api.listPipelines().then(async r => {
       if (r.pipelines && r.pipelines.length > 0) {
         setPipelines(r.pipelines);
         const initial = r.pipelines[0].name;
@@ -160,7 +161,7 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    window.electronAPI.listIsolatedProfiles().then(r => {
+    api.listIsolatedProfiles().then(r => {
       if (r.profiles && r.profiles.length > 0) {
         setProfiles(r.profiles);
       }
@@ -184,7 +185,7 @@ export default function App() {
       if (pipelineContent) {
         setPipelineEditor(pipelineContent);
       } else {
-        window.electronAPI.getPipeline(activePreset).then(resp => {
+        api.getPipeline(activePreset).then(resp => {
           if (resp.content) {
             setPipelineCache(prev => ({ ...prev, [activePreset]: resp.content }));
             setPipelineEditor(resp.content);
@@ -217,9 +218,7 @@ export default function App() {
     const connect = async () => {
       if (stopped) return;
       try {
-        const port = await window.electronAPI.getPort();
-        if (stopped) return;
-        ws = new WebSocket(`ws://127.0.0.1:${port}/ws/events`);
+        ws = await api.createWebSocket('/ws/events');
         ws.onmessage = (ev) => {
           try {
             const event = JSON.parse(ev.data);
@@ -321,7 +320,7 @@ export default function App() {
                     : e
                 ));
               }
-              window.electronAPI.listPipelines().then(r => {
+              api.listPipelines().then(r => {
                 if (r.pipelines) setPipelines(r.pipelines);
               }).catch(() => {});
             } else {
@@ -349,7 +348,7 @@ export default function App() {
 
   useEffect(() => {
     if (activeTab !== 'params') return;
-    window.electronAPI.listCredentials().then(r => {
+    api.listCredentials().then(r => {
       if (r.params) setCredKeys(r.params);
     }).catch((e) => { console.error('listCredentials failed: %s', String(e)); });
   }, [activeTab]);
@@ -370,25 +369,25 @@ export default function App() {
       }
     }
     if (missingKeys.length > 0) {
-      window.electronAPI.showAlert(t('common.missingParams', { keys: missingKeys.join(', ') }));
+      window.alert(t('common.missingParams', { keys: missingKeys.join(', ') }));
       return;
     }
 
     let pipelineContent = pipelineCache[activePreset];
     if (!pipelineContent) {
       try {
-        const resp = await window.electronAPI.getPipeline(activePreset);
+        const resp = await api.getPipeline(activePreset);
         if (resp.content) {
           pipelineContent = resp.content;
           setPipelineCache(prev => ({ ...prev, [activePreset]: pipelineContent }));
           setPipelineEditor(pipelineContent);
         } else {
-          window.electronAPI.showAlert(t('common.loadFailed'));
+          window.alert(t('common.loadFailed'));
           return;
         }
       } catch (e) {
         console.error('getPipeline failed in handleRun: %s', String(e));
-        window.electronAPI.showAlert(t('common.loadFailed'));
+        window.alert(t('common.loadFailed'));
         return;
       }
     }
@@ -404,7 +403,7 @@ export default function App() {
     setEvents([]);
     try {
       addEvent('engine_start', 'pipeline', {});
-      const resp = await window.electronAPI.run(pipelineWithMode, params);
+      const resp = await api.run(pipelineWithMode, params);
       if (resp.run_id) setCurrentRunId(resp.run_id);
       if (resp.pipeline) setCurrentPipeline(resp.pipeline);
       if (resp.error) {
@@ -438,7 +437,7 @@ export default function App() {
   const handleConnect = useCallback(async (mode: 'user' | 'isolated', profile?: string) => {
     setConnectionError(null);
     try {
-      const resp = await window.electronAPI.connectBrowser(mode, profile, highlightMode);
+      const resp = await api.connectBrowser(mode, profile, highlightMode);
       if (resp.needsRestart) {
         setRestartDialog({ browserName: resp.browserName || 'Chrome' });
         return;
@@ -459,7 +458,7 @@ export default function App() {
   const handleCreateProfile = useCallback(async (name: string) => {
     if (!name.trim()) return;
     try {
-      const resp = await window.electronAPI.createIsolatedProfile(name.trim());
+      const resp = await api.createIsolatedProfile(name.trim());
       if (resp.created) {
         setProfiles(prev => {
           if (prev.includes(resp.profile_name)) return prev;
@@ -467,10 +466,10 @@ export default function App() {
         });
         setSelectedProfile(resp.profile_name);
       } else {
-        window.electronAPI.showAlert(t('common.creating') + ': ' + (resp.error || t('common.unknownError')));
+        window.alert(t('common.creating') + ': ' + (resp.error || t('common.unknownError')));
       }
     } catch (e) {
-      window.electronAPI.showAlert(t('common.creating') + ': ' + String(e));
+      window.alert(t('common.creating') + ': ' + String(e));
     }
   }, []);
 
@@ -479,7 +478,7 @@ export default function App() {
     setRestarting(true);
     setConnectionError(null);
     try {
-      const resp = await window.electronAPI.restartBrowser();
+      const resp = await api.restartBrowser();
       if (resp.success) {
         setConnected(true);
         setWsUrl(resp.wsUrl || '');
@@ -507,7 +506,7 @@ export default function App() {
   const refreshPipeline = useCallback(async () => {
     if (!activePreset) return;
     try {
-      const resp = await window.electronAPI.getPipeline(activePreset);
+      const resp = await api.getPipeline(activePreset);
       if (resp.content) {
         setPipelineCache(prev => ({ ...prev, [activePreset]: resp.content }));
         setPipelineEditor(resp.content);
@@ -517,7 +516,7 @@ export default function App() {
 
   const handleChatConfirm = useCallback(async (editId: string): Promise<string | null> => {
     try {
-      const result = await window.electronAPI.chatConfirm(editId);
+      const result = await api.chatConfirm(editId);
       if (result.status === 'confirmed' || result.status === 'already_confirmed') {
         await refreshPipeline();
         setPendingEdits(prev => prev.filter(e => e.edit_id !== editId));
@@ -531,7 +530,7 @@ export default function App() {
 
   const handleChatRevert = useCallback(async (editId: string): Promise<string | null> => {
     try {
-      const result = await window.electronAPI.chatRevert(editId);
+      const result = await api.chatRevert(editId);
       if (result.status === 'reverted' || result.status === 'already_reverted') {
         await refreshPipeline();
         setPendingEdits(prev => prev.filter(e => e.edit_id !== editId));
@@ -545,7 +544,7 @@ export default function App() {
 
   const handleDisconnect = useCallback(async () => {
     try {
-      await window.electronAPI.disconnectBrowser();
+      await api.disconnectBrowser();
     } catch (e) {
       console.error('Disconnect failed: %s', String(e));
     }
@@ -562,7 +561,7 @@ export default function App() {
     if (!currentPipeline || !currentRunId) return;
     setCancelling(true);
     try {
-      await window.electronAPI.cancelPipeline(currentPipeline, currentRunId);
+      await api.cancelPipeline(currentPipeline, currentRunId);
       setLoading(false);
       setCurrentRunId('');
       setCurrentPipeline('');
@@ -578,7 +577,7 @@ export default function App() {
     setPendingReview(null);
     if (pr?.threadId) {
       try {
-        await window.electronAPI.reviewPipeline(pr.threadId, 'approve', reason);
+        await api.reviewPipeline(pr.threadId, 'approve', reason);
       } catch (e) {
         console.error('Review approve failed: %s', String(e));
       }
@@ -591,7 +590,7 @@ export default function App() {
     setPendingReview(null);
     if (pr?.threadId) {
       try {
-        await window.electronAPI.reviewPipeline(pr.threadId, 'reject', reason);
+        await api.reviewPipeline(pr.threadId, 'reject', reason);
       } catch (e) {
         console.error('Review reject failed: %s', String(e));
       }
@@ -601,25 +600,25 @@ export default function App() {
 
   const handleCredSet = useCallback(async () => {
     if (!credKey.trim() || !credValue.trim()) return;
-    await window.electronAPI.setCredential(credKey.trim(), credValue);
+    await api.setCredential(credKey.trim(), credValue);
     setCredKey('');
     setCredValue('');
-    const r = await window.electronAPI.listCredentials();
+    const r = await api.listCredentials();
     if (r.params) setCredKeys(r.params);
   }, [credKey, credValue]);
 
   const handleCredDelete = useCallback(async (key: string) => {
-    await window.electronAPI.deleteCredential(key);
+    await api.deleteCredential(key);
     setCredKeys(prev => prev.filter(k => k !== key));
   }, []);
 
   const handleRefreshPipelines = useCallback(async () => {
-    const r = await window.electronAPI.listPipelines();
+    const r = await api.listPipelines();
     if (r.pipelines) setPipelines(r.pipelines);
   }, []);
 
   const handleDeletePipeline = useCallback(async (name: string) => {
-    const r = await window.electronAPI.deletePipeline(name);
+    const r = await api.deletePipeline(name);
     if (r.ok) {
       if (activePreset === name) {
         setActivePreset('');
@@ -627,7 +626,7 @@ export default function App() {
       }
       handleRefreshPipelines();
     } else {
-      window.electronAPI.showAlert(r.error || 'Delete failed');
+      window.alert(r.error || 'Delete failed');
     }
   }, [activePreset, handleRefreshPipelines]);
 
@@ -754,12 +753,12 @@ export default function App() {
           onNewSession={async () => {
             setLoadingSession(true);
             try {
-              const r = await window.electronAPI.newSession(activePreset);
+              const r = await api.newSession(activePreset);
               if (r.session_id) {
                 setCurrentSessionId(r.session_id);
                 setChatMessages([]);
                 // Refresh session list
-                const list = await window.electronAPI.listSessions(activePreset);
+                const list = await api.listSessions(activePreset);
                 if (list.sessions) setSessions(list.sessions);
               }
             } catch (e) {
@@ -771,8 +770,8 @@ export default function App() {
           onArchiveSession={async (sessionId: string) => {
             if (!confirm(t('chat.archiveSessionConfirm', 'Archive this session?'))) return;
             try {
-              await window.electronAPI.archiveSession(activePreset, sessionId);
-              const list = await window.electronAPI.listSessions(activePreset);
+              await api.archiveSession(activePreset, sessionId);
+              const list = await api.listSessions(activePreset);
               if (list.sessions) {
                 setSessions(list.sessions);
                 if (currentSessionId === sessionId) {
@@ -786,7 +785,7 @@ export default function App() {
           onSelectSession={async (sessionId: string) => {
             setLoadingSession(true);
             try {
-              const r = await window.electronAPI.getSessionData(activePreset, sessionId);
+              const r = await api.getSessionData(activePreset, sessionId);
               if (r.session) {
                 setCurrentSessionId(sessionId);
                 setChatMessages(r.session.messages || []);

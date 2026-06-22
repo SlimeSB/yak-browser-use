@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
+import os
 
 from fastapi import FastAPI
 from utils.logging import get_logger
@@ -29,6 +30,7 @@ def create_app() -> FastAPI:
     """Create and configure the FastAPI application instance."""
     from fastapi import FastAPI
     from fastapi.middleware.cors import CORSMiddleware
+    from fastapi.staticfiles import StaticFiles
     from api.routes import register_all_routes
     from api.errors import register_error_handlers
 
@@ -50,5 +52,10 @@ def create_app() -> FastAPI:
     # ── Routes & error handlers ────────────────────────────────────
     register_all_routes(app)
     register_error_handlers(app)
+
+    # ── Static files (Web mode) ────────────────────────────────────
+    static_dir = os.path.join(os.path.dirname(__file__), "..", "static")
+    if os.path.isdir(static_dir):
+        app.mount("/", StaticFiles(directory=static_dir, html=True), name="static")
 
     return app

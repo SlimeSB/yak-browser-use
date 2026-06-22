@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import type { ChatMessage, PipelineMeta, PendingEdit } from '../../types';
+import * as api from '../../apiClient';
 import MonacoYamlEditor from '../editor/MonacoYamlEditor';
 
 interface SessionMeta {
@@ -128,7 +129,7 @@ export default function ChatTab({
 
     try {
       const pipelineName = activePreset || undefined;
-      const result = await window.electronAPI.chat(text, pipelineName);
+      const result = await api.chat(text, pipelineName);
       if (result.ok) {
         const resp = result.response;
         if (resp) {
@@ -151,7 +152,7 @@ export default function ChatTab({
 
   const handleReset = async () => {
     try {
-      const result = await window.electronAPI.chatReset();
+      const result = await api.chatReset();
       if (result.ok) {
         setMessages([]);
         setSessionStatus('idle');
@@ -164,7 +165,7 @@ export default function ChatTab({
   const handleCancel = async () => {
     cancelledRef.current = true;
     try {
-      await window.electronAPI.chatCancel();
+      await api.chatCancel();
     } catch (e) {
       console.error('Chat cancel failed:', e);
     }

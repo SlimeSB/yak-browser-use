@@ -1,6 +1,7 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { VersionInfo } from '../types';
+import * as api from '../apiClient';
 
 interface VersionPanelProps {
   pipelineName: string;
@@ -16,7 +17,7 @@ export default function VersionPanel({ pipelineName, onRefresh }: VersionPanelPr
   const load = useCallback(async () => {
     if (!pipelineName) return;
     try {
-      const resp = await window.electronAPI.listVersions(pipelineName);
+      const resp = await api.listVersions(pipelineName);
       setVersions(resp.versions || []);
     } catch (e) { console.error('listVersions failed:', e); }
   }, [pipelineName]);
@@ -26,7 +27,7 @@ export default function VersionPanel({ pipelineName, onRefresh }: VersionPanelPr
   const handleView = useCallback(async (version: string) => {
     setViewing(null);
     try {
-      const resp = await window.electronAPI.getVersion(pipelineName, version);
+      const resp = await api.getVersion(pipelineName, version);
       setViewing({ version: resp.version, content: resp.content });
     } catch (e) { console.error('getVersion failed:', e); }
   }, [pipelineName]);
@@ -34,7 +35,7 @@ export default function VersionPanel({ pipelineName, onRefresh }: VersionPanelPr
   const handleRelearn = useCallback(async () => {
     setLoading(true);
     try {
-      const resp = await window.electronAPI.relearn(pipelineName);
+      const resp = await api.relearn(pipelineName);
       if (resp.deleted) {
         await load();
         onRefresh();
