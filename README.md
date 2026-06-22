@@ -41,6 +41,8 @@ Two modes:
 
 Built on [Playwright](https://playwright.dev/) `connect_over_cdp()` and an OpenAI-compatible LLM client.
 
+> **Built from the ground up.** ybu is an independent codebase with its own conversation loop, progressive snapshot engine, CDP integration, and pipeline compiler — designed entirely from scratch for this project. It has zero browser-use dependencies and shares no code with any other browser automation framework.
+
 ---
 
 ## Features

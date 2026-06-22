@@ -42,6 +42,8 @@
 
 技术底座基于 [Playwright](https://playwright.dev/) `connect_over_cdp()` 和 OpenAI-compatible LLM 客户端。
 
+> **从零构建。** ybu 是一个独立的代码库，拥有自己的对话循环、渐进式快照引擎、CDP 集成和 Pipeline 编译器——全部为本项目独立设计和实现。代码无 browser-use 依赖，也不与其他浏览器自动化框架共享代码。
+
 ---
 
 ## 特性总览
