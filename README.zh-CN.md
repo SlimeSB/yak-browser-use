@@ -44,10 +44,10 @@
 
 ---
 
-## 独创工程特性
+## 特性总览
 
-| # | 独创点 | 为什么重要 |
-|---|--------|-----------|
+| # | 特性 | 为什么重要 |
+|---|------|-----------|
 | 1 | **跨 Tab 隔离的实时 DOM 高亮** — 双层覆盖层（容器 + 浮动高亮块），RAF 节流重绘，MutationObserver 轻量增量更新。后台定时守卫线程防止跨 tab 不同步。每个 tab 保有独立高亮状态。 | 大多数浏览器 AI 工具要么没有实时高亮，要么用内联样式——滚动就崩、跨 tab 就串。Ybu 的高亮经受了真实业务压力测试——导航、滚动、SPA 切换后仍然稳定。 |
 | 2 | **三种快照策略 + 自动降级链路** — `progressive`（密度自适应 DOM 遍历，≤200 元素，折叠密集容器，`expand_branch` 按需展开）→ `a11y`（无障碍树，iframe / 锁定 DOM 仍可用）→ `simplified`（裸 DOM 提取）。降级链路是架构设计的一部分，不是事后补丁。 | 单一快照策略在不同页面类型（SPA、iframe 密集、锁定 DOM）上各自失败。三层链路最大化覆盖率，LLM 不需要知道选哪个策略。 |
 | 3 | **渐进式快照的密度自适应折叠** — 不是简单的截断。遍历器深度优先读文档，每层测量容器密度，折叠超过阈值的内容，展平后通过 `expand_branch` 句柄让 LLM 按需展开。 | 其他框架截断 N 个元素后直接丢掉剩余内容。Ybu 的折叠-展开机制让 LLM 看到页面全貌，然后只深入感兴趣的区域，不浪费 token 在模板代码上。 |
@@ -57,27 +57,17 @@
 | 7 | **Scratchpad 承载重数据** — HTML 源码、截图 base64、元素列表存入内存缓存。LLM 看到摘要，通过 `browser_source(cached=true)` 或 `browser_get_element_by_number(@e5)` 按需获取细节。 | 保持 LLM 上下文窗口清洁的同时不丢弃数据。Agent 根据需要决定需要什么细节，而不是预先猜测。 |
 | 8 | **Eval Agent 与 Shared Store 数据互通** — Eval 子 Agent 继承主对话的 `shared_store`。工具通过 `source_key` 写入结果，eval 通过 `{path}` / `${path}` 模板解析读取。Eval 可以内联验证工具产出，工具流程可以触发 eval 作为验收步骤。 | Eval 不是独立的事后系统——它跟工具生活在同一数据流里。共享存储桥接了工具生产和 eval 消费，实现实时验证循环。 |
 | 9 | **三步 Pipeline + 程序化验收** — Pipeline 步骤是 `goal → ops → check`，`check` 支持 `url_contains`、`element_exists`、`text_contains`、`element_visible`——确定性程序化验证，不依赖 LLM 判断。 | 大多数 Pipeline 框架把验证交给 LLM。Ybu 的程序化 check 快速、确定、不消耗 LLM token——简单的验收不需要模型调用。 |
-| 10 | **结构化错误恢复生态** — `error_classifier`（错误分类）→ `retry_utils`（可配退避）→ `turn_context`（轮次重试计数器）→ Agent Swimlane（自主动态重规划）。全链路打通，不是临时 try/except。 | 真实浏览器自动化持续失败（超时、元素找不到、CDP 断连）。结构化的恢复链路让 Agent 在真实世界的混乱中存活下来，而不是把错误砸用户脸上。 |
+| 10 | **结构化错误恢复生态** — `error_classifier`（错误分类）→ `retry_utils`（可配退避）→ `turn_context`（轮次重试计数器），辅以 `error_recovery` 系统提示词引导。全链路打通，不是临时 try/except。 | 真实浏览器自动化持续失败（超时、元素找不到、CDP 断连）。结构化的恢复链路让 Agent 在真实世界的混乱中存活下来，而不是把错误砸用户脸上。 |
 | 11 | **审核门控 + 熔断器 + 补偿回滚** — 三层安全生命周期。Guardian 对敏感操作要求人工审批，熔断器防止连续失败级联扩散，补偿机制支持变更回滚。 | 浏览器自动化会搞坏东西。安全生命周期意味着破坏性操作需要审批、连续失败不会级联、回滚是可行的——不只是"哦豁"。 |
-
----
-
-| | 能力 | 说明 |
-|---|------|------|
-| **🗣️ Chat + 浏览器同步** | 用户在 chat 输入指令，Agent 自主操作浏览器，操作过程实时推送给用户 |
-| **🔧 丰富浏览器工具集** | goto / click / fill / snapshot (progressive/a11y/raw) / scroll / eval / hover / tab 管理…… 覆盖日常自动化需求 |
-| **📸 智能快照** | 渐进式 DOM 遍历（密度自适应折叠）+ 无障碍树快照；`expand_branch` 展开折叠容器 |
-| **📋 Pipeline 编排** | 聊天过程中自动录制操作步骤到 pipeline.yaml，可保存为预设后续回放 |
-| **🤖 Agent Swimlane** | Pipeline 执行出问题时 Agent 自动介入恢复，无需人工干预 |
-| **🛡️ 安全护栏** | 路径守卫 (PathGuard)、SSRF 防护、域名白名单、熔断器、审核门控 (Guardian) — 多重安全机制 |
-| **🏓 流式 LLM** | 流式推理 + 文本增量 + 工具名实时推送，WebSocket 推送到前端 |
-| **🖥️ Electron 桌面** | React + Vite + Monaco 编辑器（支持 Diff 编辑器），提供完整桌面端体验 |
-| **🔌 REST + WebSocket API** | FastAPI 后端，支持 REST 调用和实时事件推送 |
-| **📂 工具注册中心** | ToolRegistry 集中管理内置工具（验证码、文件 IO、格式转换等） |
-| **🔗 共享存储** | 工具间数据传递：`{path}` 全串引用（保留原类型）+ `${path}` 模板插值（可嵌入字符串中间），详见 `_param_resolver.py` 文档 |
-| **💓 连接健康检测** | CDP 心跳检测 + 浏览器子进程监控 + 自动断连处理 |
-| **🔦 可切换高亮模式** | 支持 a11y / progressive / off 三种高亮模式，API 或 Electron 设置面板切换 |
-| **🔑 Provider 灵活配置** | 支持 DeepSeek / OpenAI / 任意 OpenAI-compatible 提供商，平铺 JSON 配置 |
+| 12 | **🗣️ Chat + 浏览器同步** — 用户输入指令 → Agent 操作浏览器 → 操作过程实时流式推送 | 无需配置文件、无需脚本。用自然语言对话就驱动浏览器。 |
+| 13 | **🔧 丰富浏览器工具集** — 22 个浏览器原子操作（goto、click、fill、snapshot、scroll、eval、hover、tab…）覆盖日常自动化 | 足够全面应对真实任务，又足够精细实现精确控制。 |
+| 14 | **🏓 流式 LLM** — 推理过程 + 文本增量 + 工具名实时 WebSocket 推送 | 用户看到 Agent 边思考边工作，而不是只看到最终结果。 |
+| 15 | **🖥️ Electron 桌面** — React + Vite + Monaco 编辑器（支持 Diff），提供完整桌面端体验 | 一个真正的 IDE 级环境用于编写和调试自动化流程。 |
+| 16 | **🔌 REST + WebSocket API** — FastAPI 后端同时提供 REST 端点和实时事件流 | 对接任何前端或 CI pipeline——不绑定桌面 App。 |
+| 17 | **📂 自定义工具脚本** — 通过 ToolRegistry 热加载 Python 脚本；内置验证码、文件 IO、格式转换 | 不修改核心代码即可扩展 Agent 能力。丢进一个脚本，它就工作。 |
+| 18 | **💓 连接健康检测** — CDP 心跳 + 进程监控 + 自动断线处理 | 让长时间运行的自动化在网络抖动和浏览器重启后仍保持在线。 |
+| 19 | **💾 会话持久化** — 每个 Pipeline 独立 session 目录，对话历史、侧边栏界面、API 端点 | 再也不丢上下文。重启后从上一次的地方继续。 |
+| 20 | **🔑 Provider 灵活配置** — 支持 DeepSeek / OpenAI / 任意 OpenAI-compatible 提供商，平铺 JSON 配置 | 用你想用的模型，不是我们替你选的。 |
 
 ---
 
@@ -155,7 +145,7 @@ ybu logs [-f] [--source all]  查看统一日志
 ┌─────────────────────────────────────────────────────┐
 │                   编排层                             │
 │  conversation_loop → LLM 决策 → tool_executor 执行   │
-│  chat 模式 / preset 模式 / agent swimlane            │
+│  chat 模式 / preset 模式 / 错误恢复            │
 └──────────────────┬──────────────────────────────────┘
                    │
 ┌──────────────────▼──────────────────────────────────┐
@@ -196,18 +186,18 @@ POST /api/chat { message: "打开百度搜咖啡" }
 POST /api/run { pipeline: "..." }
   └→ run_pipeline() / run_preset_loop()
        ├→ 加载已录制的 pipeline.yaml
-       ├→ PipelineTaskAdapter 构建 TaskDescriptor（步骤列表 + 进度）
-       ├→ 系统提示 = build_system_prompt() + TaskDescriptor + error_recovery.md
+       ├→ 将步骤列表送入 conversation_loop
+       ├→ 系统提示 = build_system_prompt() + 步骤列表
+       ├→ error_recovery.md 在 Agent 初始化时无条件加载
        ├→ LLM 看到完整步骤列表
        ├→ 用 browser_* 工具逐条执行步骤
        ├→ shared_store 透传支持数据流
-       └→ Agent Swimlane — 遇到故障自动恢复
+       └→ 通过 error_recovery.md 提示词 + 重试工具引导错误恢复
 ```
 
 **特点：**
 - 可重复执行的自动化流程
 - Pipeline 三步设计：**goal**（目标描述）→ **ops**（浏览器操作列表）→ **check**（程序化验收）
-- ops 失败时自动 fallback 到 goal 让 Agent 动态决策
 - check 支持 `url_contains` / `element_exists` / `text_contains` / `element_visible` 验收
 - Pipeline 上下文注入系统提示，Agent 感知工作空间
 
@@ -234,7 +224,6 @@ yak-browser-use/
 │   ├── ops.py                # 浏览器操作分发（通过 BrowserBridge）
 │   ├── scratchpad.py         # 内存数据缓存
 │   ├── step_machine.py       # Pipeline DAG 遍历
-│   ├── planner.py            # 运行时恢复规划器
 │   ├── eval_agent.py         # Eval Agent 验收执行
 │   ├── delivery.py / events.py / state.py
 │   ├── _param_resolver.py    # 参数模板解析
@@ -244,7 +233,7 @@ yak-browser-use/
 │   │   ├── tools.py               # 工具定义（browser_*/goal_run/…）
 │   │   ├── tool_executor.py       # 工具调用执行器 + shared_store
 │   │   ├── pipeline_tools.py      # Pipeline 管理工具
-│   │   ├── pipeline_task_adapter.py  # StepDef → TaskDescriptor
+│   │   ├── pipeline_events.py     # 集中式 WebSocket 事件推送
 │   │   ├── iteration_budget.py    # LLM 轮次预算控制
 │   │   ├── tool_guardrails.py     # 工具护栏
 │   │   ├── turn_context.py        # 每轮次上下文管理
@@ -262,7 +251,6 @@ yak-browser-use/
 │   ├── helpers.py            # CDPHelpers 高级封装
 │   ├── protocols.py          # BrowserBridge 协议接口
 │   ├── profiles.py / session.py  # 配置 & 会话管理
-│   ├── daemon.py             # CDP Daemon 管理
 │   ├── discover.py           # Chrome 发现/连接
 │   └── launcher.py           # Chrome 启动 / 端口管理
 │
@@ -271,11 +259,12 @@ yak-browser-use/
 │   ├── parser.py             # YAML 解析
 │   ├── graph.py / resolver.py# DAG 构建 + 依赖解析
 │   ├── prepare.py            # 执行前步骤准备
+│   ├── step_type.py          # 统一步骤类型推断
 │   ├── diff.py               # Op diff 计算
 │   ├── generator.py          # Handler 生成 & 代码生成
 │
 ├── tools/                    # 工具注册 + 实现
-│   ├── registry.py           # ToolRegistry — 集中调度（~35 工具）
+│   ├── registry.py           # ToolRegistry — 集中调度（43 工具）
 │   ├── adapters.py           # 工具数据适配（csv↔json、字段映射）
 │   ├── captcha.py            # 验证码识别（ddddocr）
 │   ├── file_read.py / file_write.py / format_convert.py
@@ -310,10 +299,11 @@ yak-browser-use/
 │   └── _archived/            # 已废弃 prompt
 │
 ├── params/                   # 持久化参数管理（ParamManager）
-├── workspace/                # 工作区管理（manager/version/path）
+├── workspace/                # 工作区管理（manager/version/path/session）
+│   └── session_store.py      # 每个 Pipeline 独立 session 持久化
 ├── cli/                      # CLI 命令（run.py / serve.py / logs.py）
 ├── utils/                    # 工具函数（browser/logging/tool_cdp/skill_loader/…）
-├── tests/                    # 50+ 单元 & 集成测试
+├── tests/                    # 800+ 单元 & 集成测试
 │
 ├── electron/                 # Electron 桌面前端
 │   └── src/
@@ -333,19 +323,9 @@ yak-browser-use/
 
 ## 核心设计原则
 
-1. **去子 Agent** — 不再 spawn browser-use Agent 作为子进程。`goal_run` 是模式切换信号，主 LLM 用 `todo` + `browser_*` 自己分步执行，减少隔离开销。
+1. **PlaywrightBridge 统一驱动** — 所有浏览器操作通过 PlaywrightBridge (`connect_over_cdp()`)，获得 auto-wait / auto-scroll / auto-retry，外加健康检测心跳、子进程监控、断连处理和 SSRF 防护。`BrowserBridge` 协议（`cdp/protocols.py`）定义了接口契约。
 
-2. **重数据进 Scratchpad** — 浏览器返回的 HTML、元素列表、截图 base64 等大块数据存入内存缓存（scratchpad），LLM 看到的只是摘要，按需通过 `browser_source(cached=true)` 或 `browser_get_element_by_number(@e5)` 获取详情。
-
-3. **Pipeline 是副产品** — pipeline.yaml 是 Agent 聊天过程的录制产物，不是设计的起点。Agent 聊天产生有用流程后保存下来供后续回放。
-
-4. **PlaywrightBridge 统一驱动** — 所有浏览器操作通过 PlaywrightBridge (`connect_over_cdp()`)，获得 auto-wait / auto-scroll / auto-retry，外加健康检测心跳、子进程监控、断连处理和 SSRF 防护。`BrowserBridge` 协议（`cdp/protocols.py`）定义了接口契约。
-
-5. **文件即契约** — pipeline.yaml 是静态契约，编译阶段严格校验（DAG 环检测、文件引用校验），运行时尽量减少意外。
-
-6. **渐进式快照默认** — 密度自适应 DOM 遍历替代旧版交互式快照。LLM 最多看到 200 个元素；密集容器折叠后用 `expand_branch` 按需展开。对锁定/iframe 页面降级到 a11y 无障碍树。
-
-7. **共享存储支持工具数据流** — 运行时内存总线通过 `${step_name.output}` 模板和 `_source_key` 参数实现工具间数据传递，同时在 Chat 和 Preset 模式中支持流水线工作流。
+2. **文件即契约** — pipeline.yaml 是静态契约，编译阶段严格校验（DAG 环检测、文件引用校验），运行时尽量减少意外。
 
 ---
 
@@ -391,6 +371,8 @@ chrome.exe --remote-debugging-port=9222
 ## 许可证
 
 MIT © 2026 Yak Browser-Use Contributors
+
+项目参考及贡献者鸣谢请见 [`ACKNOWLEDGMENTS.md`](ACKNOWLEDGMENTS.md)。
 
 ---
 

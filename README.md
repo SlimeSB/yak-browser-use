@@ -43,40 +43,30 @@ Built on [Playwright](https://playwright.dev/) `connect_over_cdp()` and an OpenA
 
 ---
 
-## What Makes Ybu Different
+## Features
 
-| # | Innovation | Why It Matters |
-|---|-----------|----------------|
+| # | Feature | Why It Matters |
+|---|--------|----------------|
 | 1 | **Live DOM highlighting with cross-tab isolation** — Two-layer overlay (container + floating divs), RAF-throttled repaint, MutationObserver for lightweight re-render. Periodic background guard prevents desync across tabs. Every tab gets its own highlight state. | Most browser AI tools have no live highlights, or use inline styles that tear on scroll and leak across tabs. Ybu's system survived real production stress tests — it stays put after navigation, scroll, and SPA transitions. |
 | 2 | **Three snapshot strategies with automatic fallback** — `progressive` (density-adaptive DOM walk, ≤200 elements, fold dense containers with `expand_branch`) → `a11y` (accessibility tree, works in iframes and locked DOM) → `simplified` (raw DOM extraction). Fallback chain is designed in, not bolted on. | Single-strategy snapshots fail on different page types (SPA, iframe-heavy, locked DOM). The three-tier chain maximizes coverage without the LLM having to know which strategy to pick. |
 | 3 | **Progressive snapshot's adaptive density disclosure** — Not truncation. The walker reads the document depth-first, measures container density per depth, folds anything above threshold, and presents a flattened view with `expand_branch` handles the LLM can pull on demand. | Other frameworks truncate at N elements and lose the rest. Progressive's fold-and-expand lets the LLM see the page shape and dig into relevant sections without wasting tokens on boilerplate. |
-| 4. | **Pipeline as byproduct** — Ybu doesn't require pre-defined pipelines. Chat first, record later. `pipeline.yaml` is a recording artifact from chat sessions, not a design starting point. Useful flows get saved and replayed. | Lowers the adoption bar: you don't plan automation flows, you just chat and the Agent writes them for you. Pipeline design emerges from real interaction instead of upfront spec. |
+| 4 | **Pipeline as byproduct** — Ybu doesn't require pre-defined pipelines. Chat first, record later. `pipeline.yaml` is a recording artifact from chat sessions, not a design starting point. Useful flows get saved and replayed. | Lowers the adoption bar: you don't plan automation flows, you just chat and the Agent writes them for you. Pipeline design emerges from real interaction instead of upfront spec. |
 | 5 | **Shared Store dual-syntax template resolution** — `{path}` (whole-value reference, preserves type) and `${path}` (inline string interpolation, `$` prefix disambiguates from JSON braces). Designed as two separate needs, not accidental inconsistency. | Pass entire data structures between tools (`{step_3}`), or interpolate values inside URLs and templates (`https://${host}/api`). Each syntax has clear semantics and failure modes. |
-| 6. | **No spawned sub-agents** — `goal_run` is a mode switch for the main LLM (todo + browser_* tools), not a nested browser-use Agent spawn. The entire conversation stays in one context window with one set of tools. | Eliminates isolation overhead, context fragmentation, and synchronization bugs that plague multi-agent architectures. Simpler, faster, more predictable. |
+| 6 | **No spawned sub-agents** — `goal_run` is a mode switch for the main LLM (todo + browser_* tools), not a nested browser-use Agent spawn. The entire conversation stays in one context window with one set of tools. | Eliminates isolation overhead, context fragmentation, and synchronization bugs that plague multi-agent architectures. Simpler, faster, more predictable. |
 | 7 | **Scratchpad for heavy data** — HTML dumps, screenshot base64, element lists go to in-memory scratchpad. LLM sees summaries and fetches detail on demand via `browser_source(cached=true)` or `browser_get_element_by_number(@e5)`. | Keeps the LLM context window clean without discarding data. The Agent decides what detail it needs rather than guessing up-front. |
 | 8 | **Eval Agent + Shared Store data bridge** — The eval subagent inherits the main conversation's `shared_store`. Tools write results via `source_key`, and eval reads them through `{path}` / `${path}` template resolution. Eval can verify tool outputs inline, and tool flows can trigger eval as a verification step. | Eval is not a separate post-hoc system — it lives in the same data flow as tools. The shared store bridges tool production and eval consumption, enabling real-time verification loops. |
 | 9 | **Three-step pipeline with programmatic checks** — Pipeline steps are `goal → ops → check`, where `check` supports `url_contains`, `element_exists`, `text_contains`, `element_visible` — deterministic programmatic verification, not LLM opinion. | Most pipeline frameworks leave verification to the LLM. Ybu's programmatic checks are fast, deterministic, and independent of LLM cost/latency — a trivial check doesn't need a model call. |
-| 10 | **Structured error recovery ecosystem** — `error_classifier` (categorizes failures) → `retry_utils` (configurable backoff) → `turn_context` (per-turn retry counters) → Agent Swimlane (autonomous dynamic replanning). All wired together, not ad-hoc try/except. | Real browser automation fails constantly (network timeout, element not found, CDP disconnect). A structured recovery pipeline means the Agent survives real-world chaos without dumping errors on the user. |
+| 10 | **Structured error recovery ecosystem** — `error_classifier` (categorizes failures) → `retry_utils` (configurable backoff) → `turn_context` (per-turn retry counters), guided by `error_recovery` system prompt. All wired together, not ad-hoc try/except. | Real browser automation fails constantly (network timeout, element not found, CDP disconnect). A structured recovery pipeline means the Agent survives real-world chaos without dumping errors on the user. |
 | 11 | **Guardian approval gate + circuit breaker + compensation rollback** — Three-layer safety lifecycle. Guardian gates sensitive operations for human approval, circuit breaker prevents cascading failures, compensation undoes changes on rollback. | Browser automation can break things. The safety lifecycle means destructive operations require approval, repeated failures don't cascade, and rollback is possible — not just "oops." |
-
----
-
-| | Capability | Description |
-|---|------------|-------------|
-| **🗣️ Chat + Browser Sync** | Type commands, Agent operates the browser, everything streams back in real-time |
-| **🔧 Rich Browser Toolkit** | goto / click / fill / snapshot (progressive/a11y/raw) / scroll / eval / hover / tab management… full daily automation coverage |
-| **📸 Smart Snapshot** | Progressive DOM walk with density-adaptive disclosure + A11y accessibility tree; `expand_branch` for folded containers |
-| **📋 Pipeline Recording** | Agent automatically records operations into pipeline.yaml as you chat; save and replay later |
-| **🤖 Agent Swimlane** | When a pipeline step fails, the Agent autonomously recovers — no manual intervention needed |
-| **🛡️ Safety Guards** | PathGuard, SSRF guard, domain whitelisting, circuit breaker, Guardian approval gate — multiple safety layers |
-| **🏓 Streaming LLM** | Real-time reasoning stream, text deltas, tool name push — all via WebSocket to the frontend |
-| **🖥️ Electron Desktop** | React + Vite + Monaco Editor (with diff editor), full desktop experience |
-| **🔌 REST + WebSocket API** | FastAPI backend with both REST endpoints and real-time event push |
-| **📂 Custom Tool Scripts** | Hot-load Python scripts via ToolRegistry; built-in captcha, file I/O, format conversion |
-| **🔗 Shared Store** | Tool-to-tool data passing via `${}` templates and `_source_key` — pipeline data flow |
-| **💓 Connection Health** | CDP health check heartbeat + browser process watcher + auto-disconnect handling |
-| **🔦 Configurable Highlights** | Switchable highlight modes (a11y / progressive / off) via API or Electron settings UI |
-| **🔑 Flexible Providers** | DeepSeek / OpenAI / any OpenAI-compatible provider, flat JSON config |
+| 12 | **🗣️ Chat + Browser Sync** — User types commands → Agent operates browser → everything streams back in real-time | No config files, no scripts. Just natural language conversation driving the browser. |
+| 13 | **🔧 Rich Browser Toolkit** — 22 browser atomics (goto, click, fill, snapshot, scroll, eval, hover, tab…) covering daily automation | Broad enough for real-world tasks, granular enough for precise control. |
+| 14 | **🏓 Streaming LLM** — Real-time reasoning stream, text deltas, tool name push — all via WebSocket | Users see the Agent think as it works, not just the final result. |
+| 15 | **🖥️ Electron Desktop** — React + Vite + Monaco Editor with diff editor, full desktop experience | A real IDE-like environment for building and debugging automation pipelines. |
+| 16 | **🔌 REST + WebSocket API** — FastAPI backend serving both REST endpoints and real-time event streams | Integrate with any frontend or CI pipeline — not tied to the desktop app. |
+| 17 | **📂 Custom Tool Scripts** — Hot-load Python scripts via ToolRegistry; built-in captcha, file I/O, format conversion | Extend the agent without modifying core code. Drop in a script, it just works. |
+| 18 | **💓 Connection Health** — CDP heartbeat + process watcher + auto-disconnect handling | Keeps long-running automation sessions alive through network blips and browser restarts. |
+| 19 | **💾 Session Persistence** — Per-pipeline session directories with conversation history, sidebar UI, and API endpoints | Never lose your chat context. Pick up where you left off across restarts. |
+| 20 | **🔑 Flexible Providers** — DeepSeek / OpenAI / any OpenAI-compatible provider via flat JSON config | Use the model you want, not the one we chose for you. |
 
 ---
 
@@ -154,7 +144,7 @@ ybu logs [-f] [--source all]   View unified logs
 ┌─────────────────────────────────────────────────────┐
 │              Orchestration Layer                     │
 │  conversation_loop → LLM decides → tool_executor     │
-│  chat mode / preset mode / agent swimlane            │
+│  chat mode / preset mode / error recovery            │
 └──────────────────┬──────────────────────────────────┘
                    │
 ┌──────────────────▼──────────────────────────────────┐
@@ -195,19 +185,19 @@ POST /api/chat { message: "Open Baidu and search for coffee" }
 POST /api/run { pipeline: "..." }
   └→ run_pipeline() / run_preset_loop()
        ├→ Load previously recorded pipeline.yaml
-       ├→ PipelineTaskAdapter builds TaskDescriptor (step list + progress)
-       ├→ System prompt = build_system_prompt() + TaskDescriptor + error_recovery.md
+       ├→ Feed step list into conversation_loop
+       ├→ System prompt = build_system_prompt() + Step list
+       ├→ error_recovery.md loaded unconditionally in Agent init
        ├→ LLM sees the full step list
        ├→ Executes steps one by one with browser_* tools
        ├→ shared_store passthrough for data flow
-       └→ Agent Swimlane — auto-recover on failure
+       └→ Guided error recovery via error_recovery.md prompt + retry utilities
 ```
 
 **Key Points:**
 - Repeatable automation workflow
 - Pipeline three-step design: **goal** → **ops** (browser ops) → **check** (programmatic verification)
 - `check` supports: `url_contains` / `element_exists` / `text_contains` / `element_visible`
-- Falls back from ops to goal on failure for dynamic Agent decision
 - Pipeline context injected into system prompt for workspace awareness
 
 ---
@@ -233,7 +223,6 @@ yak-browser-use/
 │   ├── ops.py                # Browser op dispatcher via BrowserBridge
 │   ├── scratchpad.py         # In-memory data cache
 │   ├── step_machine.py       # Pipeline DAG walker
-│   ├── planner.py            # Runtime recovery planner
 │   ├── eval_agent.py         # Eval Agent for verification
 │   ├── delivery.py / events.py / state.py
 │   ├── _param_resolver.py    # Templated param resolution
@@ -243,7 +232,7 @@ yak-browser-use/
 │   │   ├── tools.py               # Tool definitions (browser_*/goal_run/…)
 │   │   ├── tool_executor.py       # Sequental dispatcher + shared_store
 │   │   ├── pipeline_tools.py      # Pipeline CRUD tools
-│   │   ├── pipeline_task_adapter.py  # StepDef → TaskDescriptor
+│   │   ├── pipeline_events.py     # Centralized WS event propagation
 │   │   ├── iteration_budget.py    # LLM turn budget control
 │   │   ├── tool_guardrails.py     # Tool call guardrails
 │   │   ├── turn_context.py        # Per-turn context (retry counters)
@@ -261,7 +250,6 @@ yak-browser-use/
 │   ├── helpers.py            # CDPHelpers high-level API
 │   ├── protocols.py          # BrowserBridge protocol interface
 │   ├── profiles.py / session.py  # Profile & session management
-│   ├── daemon.py             # CDP Daemon management
 │   ├── discover.py           # Chrome discovery / connection
 │   └── launcher.py           # Chrome launch / port mgmt
 │
@@ -270,11 +258,12 @@ yak-browser-use/
 │   ├── parser.py             # YAML parser
 │   ├── graph.py / resolver.py# DAG builder + dependency resolver
 │   ├── prepare.py            # Pre-execution step preparation
+│   ├── step_type.py          # Unified step type inference
 │   ├── diff.py               # Op diff computation
 │   ├── generator.py          # Handler prompt & code generation
 │
 ├── tools/                    # Tool registry + implementations
-│   ├── registry.py           # ToolRegistry — central dispatch (~35 tools)
+│   ├── registry.py           # ToolRegistry — central dispatch (43 tools)
 │   ├── adapters.py           # Tool data adaptation (csv↔json, field mapping)
 │   ├── captcha.py            # DOM-based CAPTCHA recognition (ddddocr)
 │   ├── file_read.py / file_write.py / format_convert.py
@@ -309,10 +298,11 @@ yak-browser-use/
 │   └── _archived/            # Deprecated prompts
 │
 ├── params/                   # Persistent parameter manager (ParamManager)
-├── workspace/                # Workspace management (manager/version/path)
+├── workspace/                # Workspace management (manager/version/path/session)
+│   └── session_store.py      # Per-pipeline session persistence
 ├── cli/                      # CLI (run.py / serve.py / logs.py)
 ├── utils/                    # Utilities (browser/logging/tool_cdp/skill_loader/…)
-├── tests/                    # 50+ unit & integration tests
+├── tests/                    # 800+ unit & integration tests
 │
 ├── electron/                 # Electron desktop frontend
 │   └── src/
@@ -332,19 +322,9 @@ yak-browser-use/
 
 ## Key Design Decisions
 
-1. **No Spawned Sub-Agents** — `goal_run` is a mode switch, not a sub-Agent spawn. The main LLM decomposes goals with `todo` + `browser_*` tools, eliminating isolation overhead.
+1. **PlaywrightBridge Unified Driver** — All browser operations go through `PlaywrightBridge` (`connect_over_cdp()`), gaining auto-wait / auto-scroll / auto-retry, plus health check heartbeat, process watcher, disconnect handling, and SSRF guard. `BrowserBridge` protocol (`cdp/protocols.py`) defines the interface contract.
 
-2. **Heavy Data Goes to Scratchpad** — Large payloads (HTML, element lists, screenshot base64) go to an in-memory scratchpad. The LLM sees summaries and fetches details on demand via `browser_source(cached=true)` or `browser_get_element_by_number(@e5)`.
-
-3. **Pipeline is a Byproduct** — pipeline.yaml is a recording artifact from chat sessions, not the design starting point. Useful flows get saved and replayed later.
-
-4. **PlaywrightBridge Unified Driver** — All browser operations go through `PlaywrightBridge` (`connect_over_cdp()`), gaining auto-wait / auto-scroll / auto-retry, plus health check heartbeat, process watcher, disconnect handling, and SSRF guard. `BrowserBridge` protocol (`cdp/protocols.py`) defines the interface contract.
-
-5. **File as Contract** — pipeline.yaml is a static contract, strictly validated at compile time (DAG cycle detection, file reference validation), minimizing surprises at runtime.
-
-6. **Progressive Snapshot by Default** — Density-adaptive DOM walk replaces old interactive snapshot. LLM sees at most 200 elements; dense containers folded with `expand_branch` for on-demand expansion. Falls back to a11y accessibility tree for locked/iframed pages.
-
-7. **Shared Store for Tool Data Flow** — Runtime memory bus enables tool-to-tool data passing via `${step_name.output}` templates and `_source_key` parameters, supporting pipelined workflows in both Chat and Preset modes.
+2. **File as Contract** — pipeline.yaml is a static contract, strictly validated at compile time (DAG cycle detection, file reference validation), minimizing surprises at runtime.
 
 ---
 
@@ -390,6 +370,8 @@ For a full architectural deep-dive (data flow diagrams, design principles, execu
 ## License
 
 MIT © 2026 Yak Browser-Use Contributors
+
+See [`ACKNOWLEDGMENTS.md`](ACKNOWLEDGMENTS.md) for project references and contributor credits.
 
 ---
 
