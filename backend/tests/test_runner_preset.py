@@ -1,0 +1,407 @@
+"""Tests for engine.runner_preset — preset pipeline orchestrator."""
+
+from __future__ import annotations
+
+import json
+import logging
+from pathlib import Path
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
+
+from engine.runner_preset import (
+    _step_type,
+    _safe_dirname,
+    _resolve_step_urls,
+    _extract_final_url,
+    _collect_checkpoints,
+    _setup_run_logger,
+    _write_execution_tree,
+    _collect_input_files,
+)
+from engine.step_machine import StepMachine, StepStatus
+
+
+# ── _step_type ─────────────────────────────────────────────────────
+
+
+class TestStepType:
+    def test_browser_type(self):
+        assert _step_type({"step_type": "browser"}) == "browser"
+
+    def test_tool_type_by_field(self):
+        assert _step_type({"tool_name": "extract"}) == "tool"
+
+    def test_goal_type_by_field(self):
+        assert _step_type({"is_goal": True}) == "goal"
+
+    def test_browser_default(self):
+        assert _step_type({}) == "browser"
+
+    def test_step_type_takes_priority(self):
+        assert _step_type({"step_type": "browser", "tool_name": "x"}) == "browser"
+
+
+# ── _safe_dirname ─────────────────────────────────────────────────
+
+
+class TestSafeDirname:
+    def test_removes_special_chars(self):
+        assert "/" not in _safe_dirname("step/1")
+        assert "\\" not in _safe_dirname("step\\1")
+        assert ":" not in _safe_dirname("step:1")
+        assert "*" not in _safe_dirname("step*1")
+
+    def test_strips_whitespace(self):
+        assert _safe_dirname("  hello  ") == "hello"
+
+    def test_normal_name_unchanged(self):
+        assert _safe_dirname("hello_world") == "hello_world"
+
+    def test_empty_string(self):
+        assert _safe_dirname("") == ""
+
+
+# ── _resolve_step_urls ────────────────────────────────────────────
+
+
+class TestResolveStepUrls:
+    def test_replaces_goto_url(self):
+        steps = [
+            {"name": "s1", "browser_ops": [
+                {"type": "goto", "value": "{home}"},
+            ]},
+        ]
+        result = _resolve_step_urls(steps, {"home": "https://example.com"})
+        assert result[0]["browser_ops"][0]["value"] == "https://example.com"
+
+    def test_replaces_goal_description(self):
+        steps = [
+            {"name": "s1", "goal_description": "Visit {home} page"},
+        ]
+        result = _resolve_step_urls(steps, {"home": "https://x.com"})
+        assert "https://x.com" in result[0]["goal_description"]
+
+    def test_unknown_alias_left_untouched(self):
+        steps = [
+            {"name": "s1", "browser_ops": [{"type": "goto", "value": "{unknown}"}]},
+        ]
+        result = _resolve_step_urls(steps, {"home": "https://x.com"})
+        assert result[0]["browser_ops"][0]["value"] == "{unknown}"
+
+    def test_does_not_mutate_input(self):
+        original = [
+            {"name": "s1", "browser_ops": [{"type": "goto", "value": "{home}"}]},
+        ]
+        result = _resolve_step_urls(original, {"home": "https://example.com"})
+        assert original[0]["browser_ops"][0]["value"] == "{home}"
+        assert result[0]["browser_ops"][0]["value"] == "https://example.com"
+
+    def test_empty_url_aliases(self):
+        steps = [{"name": "s1", "browser_ops": [{"type": "goto", "value": "https://x.com"}]}]
+        result = _resolve_step_urls(steps, {})
+        assert result[0]["browser_ops"][0]["value"] == "https://x.com"
+
+    def test_mixed_ops_some_aliased(self):
+        steps = [
+            {"name": "s1", "browser_ops": [
+                {"type": "goto", "value": "{home}"},
+                {"type": "click", "selector": "#btn"},
+            ]},
+        ]
+        result = _resolve_step_urls(steps, {"home": "https://example.com"})
+        assert result[0]["browser_ops"][0]["value"] == "https://example.com"
+        assert result[0]["browser_ops"][1]["type"] == "click"
+
+    def test_deepcopy_independence(self):
+        """Changes to result should not affect original."""
+        steps = [
+            {"name": "s1", "browser_ops": [{"type": "goto", "value": "{home}"}]},
+        ]
+        result = _resolve_step_urls(steps, {"home": "https://example.com"})
+        result[0]["name"] = "modified"
+        assert steps[0]["name"] == "s1"
+
+
+# ── _extract_final_url ────────────────────────────────────────────
+
+
+class TestExtractFinalUrl:
+    def test_returns_url_from_step_json(self, tmp_path):
+        step_dir = tmp_path / "step_1"
+        step_dir.mkdir()
+        (step_dir / "step.json").write_text(
+            json.dumps({"final_url": "https://example.com/page"}), encoding="utf-8"
+        )
+        assert _extract_final_url(step_dir) == "https://example.com/page"
+
+    def test_returns_none_when_no_file(self, tmp_path):
+        step_dir = tmp_path / "nonexistent"
+        assert _extract_final_url(step_dir) is None
+
+    def test_returns_none_when_url_empty(self, tmp_path):
+        step_dir = tmp_path / "step_1"
+        step_dir.mkdir()
+        (step_dir / "step.json").write_text(
+            json.dumps({"final_url": ""}), encoding="utf-8"
+        )
+        assert _extract_final_url(step_dir) is None
+
+    def test_returns_none_on_corrupt_json(self, tmp_path):
+        step_dir = tmp_path / "step_1"
+        step_dir.mkdir()
+        (step_dir / "step.json").write_text("not json", encoding="utf-8")
+        assert _extract_final_url(step_dir) is None
+
+    def test_returns_none_when_no_final_url_key(self, tmp_path):
+        step_dir = tmp_path / "step_1"
+        step_dir.mkdir()
+        (step_dir / "step.json").write_text(
+            json.dumps({"status": "completed"}), encoding="utf-8"
+        )
+        assert _extract_final_url(step_dir) is None
+
+
+# ── _collect_checkpoints ──────────────────────────────────────────
+
+
+class TestCollectCheckpoints:
+    def test_collects_from_successful_steps(self, tmp_path):
+        class MockNode:
+            def __init__(self, index, status=StepStatus.SUCCESS):
+                self.index = index
+                self.status = status
+
+        machine = MagicMock(spec=StepMachine)
+        machine.nodes = [
+            MockNode(0, StepStatus.SUCCESS),
+            MockNode(1, StepStatus.SUCCESS),
+        ]
+        machine.steps = [
+            {"name": "step_1"},
+            {"name": "step_2"},
+        ]
+
+        (tmp_path / "step_1").mkdir()
+        (tmp_path / "step_1" / "step.json").write_text(
+            json.dumps({"final_url": "https://example.com/1"}), encoding="utf-8"
+        )
+        (tmp_path / "step_2").mkdir()
+        (tmp_path / "step_2" / "step.json").write_text(
+            json.dumps({"final_url": "https://example.com/2"}), encoding="utf-8"
+        )
+
+        checkpoints = _collect_checkpoints(tmp_path, machine)
+        assert checkpoints == ["https://example.com/1", "https://example.com/2"]
+
+    def test_skips_failed_steps(self, tmp_path):
+        class MockNode:
+            def __init__(self, index, status):
+                self.index = index
+                self.status = status
+
+        machine = MagicMock(spec=StepMachine)
+        machine.nodes = [
+            MockNode(0, StepStatus.SUCCESS),
+            MockNode(1, StepStatus.FAILED),
+        ]
+        machine.steps = [
+            {"name": "step_1"},
+            {"name": "step_2"},
+        ]
+
+        (tmp_path / "step_1").mkdir()
+        (tmp_path / "step_1" / "step.json").write_text(
+            json.dumps({"final_url": "https://example.com/1"}), encoding="utf-8"
+        )
+        (tmp_path / "step_2").mkdir()
+
+        checkpoints = _collect_checkpoints(tmp_path, machine)
+        assert checkpoints == ["https://example.com/1"]
+
+    def test_empty_when_no_successful_steps(self, tmp_path):
+        class MockNode:
+            def __init__(self, index, status):
+                self.index = index
+                self.status = status
+
+        machine = MagicMock(spec=StepMachine)
+        machine.nodes = [MockNode(0, StepStatus.FAILED)]
+        machine.steps = [{"name": "step_1"}]
+
+        checkpoints = _collect_checkpoints(tmp_path, machine)
+        assert checkpoints == []
+
+
+# ── _setup_run_logger ─────────────────────────────────────────────
+
+
+class TestSetupRunLogger:
+    def test_creates_log_file(self, tmp_path):
+        handler = _setup_run_logger(tmp_path)
+        assert handler is not None
+        assert (tmp_path / "_pipeline.log").exists()
+        logging.getLogger().removeHandler(handler)
+        handler.close()
+
+    def test_returns_handler_with_debug_level(self, tmp_path):
+        handler = _setup_run_logger(tmp_path)
+        assert handler is not None
+        assert handler.level == logging.DEBUG
+        logging.getLogger().removeHandler(handler)
+        handler.close()
+
+    def test_return_none_on_permission_error(self):
+        handler = _setup_run_logger(Path("/nonexistent_dir_xyz/run_1"))
+        assert handler is None
+
+
+# ── _write_execution_tree ─────────────────────────────────────────
+
+
+class TestWriteExecutionTree:
+    def test_writes_execution_tree(self, tmp_path):
+        machine = MagicMock(spec=StepMachine)
+        machine.to_execution_tree.return_value = {
+            "nodes": [{"index": 0, "status": "success"}],
+            "edges": [],
+        }
+
+        _write_execution_tree(tmp_path, machine, "test_pipe")
+        tree_file = tmp_path / "_execution_tree.json"
+        assert tree_file.exists()
+        data = json.loads(tree_file.read_text(encoding="utf-8"))
+        assert data["pipeline"] == "test_pipe"
+        assert len(data["nodes"]) == 1
+
+
+# ── _collect_input_files ──────────────────────────────────────────
+
+
+class TestCollectInputFiles:
+    def test_delegates_to_executor(self):
+        mock_input_ref = {"data.json": "@step_1.output"}
+        mock_run_dir = Path("/runs/1")
+
+        with patch(
+            "engine.executor._resolve_input_files",
+            return_value={"data.json": "/runs/1/step_1/data.json"},
+        ) as mock_resolve:
+            result = _collect_input_files(mock_input_ref, mock_run_dir)
+            assert result["data.json"] == "/runs/1/step_1/data.json"
+            mock_resolve.assert_called_once_with(mock_input_ref, mock_run_dir)
+
+    def test_empty_input_ref(self):
+        with patch("engine.executor._resolve_input_files", return_value={}):
+            result = _collect_input_files({}, Path("/"))
+            assert result == {}
+
+
+# ── run_pipeline (end-to-end with mocks) ───────────────────────────
+
+
+class TestRunPipeline:
+    @pytest.mark.asyncio
+    async def test_empty_steps_returns_immediately(self):
+        """Pipeline with no steps should complete immediately."""
+        from engine.runner_preset import run_pipeline
+
+        with (
+            patch("engine.runner_preset.WorkspaceManager") as MockWM,
+        ):
+            mock_wm = MagicMock()
+            mock_wm.root = Path("/mock/root")
+            mock_wm.versions_dir = Path("/mock/versions")
+            mock_wm.tools_dir = Path("/mock/tools")
+            mock_wm.create_run.return_value = Path("/mock/run_1")
+            mock_wm.get_status.return_value = "running"
+            mock_wm.get_latest_version.return_value = "v1"
+            MockWM.return_value = mock_wm
+
+            ctx = await run_pipeline(
+                pipeline_name="empty_test",
+                steps=[],
+            )
+
+        assert ctx is not None
+        assert ctx.pipeline_name == "empty_test"
+        assert ctx.run_dir is not None
+        # Status set at least once
+        assert mock_wm.set_status.call_count >= 1
+
+    @pytest.mark.asyncio
+    async def test_browser_step_executes(self):
+        from engine.runner_preset import run_pipeline
+
+        steps = [
+            {"name": "navigate", "browser_ops": [{"type": "goto", "value": "https://x.com"}]},
+        ]
+
+        with (
+            patch("engine.runner_preset.WorkspaceManager") as MockWM,
+            patch("engine.runner_preset.execute_browser_step", new_callable=AsyncMock) as mock_exec,
+            patch("engine.runner_preset.write_step_json"),
+            patch("engine.runner_preset.sanitize_result", side_effect=lambda x: x),
+            patch("engine.runner_preset._write_execution_tree"),
+            patch("engine.runner_preset._setup_run_logger", return_value=None),
+            patch("engine.runner_preset.EventSink") as MockEvents,
+        ):
+            mock_wm = MagicMock()
+            mock_wm.root = Path("/mock/root")
+            mock_wm.versions_dir = Path("/mock/versions")
+            mock_wm.tools_dir = Path("/mock/tools")
+            mock_wm.create_run.return_value = Path("/mock/run_1")
+            mock_wm.get_status.return_value = "running"
+            mock_wm.get_latest_version.return_value = "v1"
+            MockWM.return_value = mock_wm
+
+            mock_exec.return_value = {"status": "completed", "duration_ms": 100}
+
+            mock_events = MagicMock()
+            MockEvents.return_value = mock_events
+
+            mock_cdp = MagicMock()
+            mock_cdp.bridge = MagicMock()
+
+            ctx = await run_pipeline(
+                pipeline_name="browser_test",
+                steps=steps,
+                cdp_helpers=mock_cdp,
+            )
+
+            assert len(ctx.errors) == 0
+
+    @pytest.mark.asyncio
+    async def test_cancelled_during_run(self):
+        from engine.runner_preset import run_pipeline
+
+        steps = [
+            {"name": "s1", "browser_ops": [{"type": "goto", "value": "https://x.com"}]},
+        ]
+
+        with (
+            patch("engine.runner_preset.WorkspaceManager") as MockWM,
+            patch("engine.runner_preset.execute_browser_step", new_callable=AsyncMock),
+            patch("engine.runner_preset._write_execution_tree"),
+            patch("engine.runner_preset._setup_run_logger", return_value=None),
+            patch("engine.runner_preset.EventSink") as MockEvents,
+        ):
+            mock_wm = MagicMock()
+            mock_wm.root = Path("/mock/root")
+            mock_wm.versions_dir = Path("/mock/versions")
+            mock_wm.tools_dir = Path("/mock/tools")
+            mock_wm.create_run.return_value = Path("/mock/run_1")
+            mock_wm.get_status.side_effect = ["running", "cancelled"]
+            mock_wm.get_latest_version.return_value = "v1"
+            MockWM.return_value = mock_wm
+
+            mock_events = MagicMock()
+            MockEvents.return_value = mock_events
+
+            ctx = await run_pipeline(
+                pipeline_name="cancel_test",
+                steps=steps,
+                cdp_helpers=MagicMock(),
+            )
+
+            assert ctx is not None
