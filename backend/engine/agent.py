@@ -1,8 +1,9 @@
-"""Agent integration — run goal steps and chat mode entry.
+"""Agent integration — chat mode entry and LLM call factories.
 
-Provides two entry points:
-- run_goal_step() — goal_run tool backend (stub — goals execute via todo + browser_*)
+Provides:
 - start_chat_agent() — chat mode conversation_loop entry
+- create_pipeline_llm_call() — non-streaming llm_call for pipeline fallback
+- _create_chat_llm_call() — streaming llm_call for interactive chat
 """
 from __future__ import annotations
 
@@ -11,30 +12,6 @@ from pathlib import Path
 from utils.logging import get_logger
 
 logger = get_logger(__name__)
-
-
-async def run_goal_step(
-    step_def: dict,
-    cdp_helpers: object | None,
-    step_dir: Path,
-    pipeline_name: str,
-    frontmatter: dict | None = None,
-    source_text: str = "",
-    tools_dir: Path | None = None,
-    ws_url: str = "",
-    pipeline_path: Path | None = None,
-    system_prompt: str = "",
-) -> dict:
-    """Execute a goal step — stub that delegates to todo + browser_* in chat mode.
-
-    Goal steps no longer spawn a browser-use Agent. Instead, the main LLM
-    uses todo + browser_* tools to execute complex tasks step by step.
-    """
-    return {
-        "status": "success",
-        "skipped": True,
-        "message": "Goals execute via todo + browser_* in chat mode",
-    }
 
 
 # ── Chat mode entry ──────────────────────────────────────────────────
