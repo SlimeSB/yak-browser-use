@@ -132,6 +132,14 @@ class Agent:
         except Exception:
             logger.warning("Failed to load guidance/tool_strategy prompt", exc_info=True)
 
+        # Load error_recovery — must be present regardless of how system_prompt was built
+        try:
+            recovery_text = load_prompt("guidance/error_recovery")
+            if recovery_text:
+                self._system_prompt = self._system_prompt + "\n\n" + recovery_text
+        except Exception:
+            logger.warning("Failed to load guidance/error_recovery prompt", exc_info=True)
+
         self._start_time = time.time()
 
         while not self._check_exit():

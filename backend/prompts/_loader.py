@@ -54,10 +54,6 @@ def build_system_prompt() -> str:
     """
     prompt = load_prompt("chat/system")
 
-    error_recovery = load_prompt("guidance/error_recovery")
-    if error_recovery:
-        prompt += "\n\n" + error_recovery
-
     from utils.skill_loader import skill_list
 
     skills = skill_list(include_body=True)
