@@ -117,8 +117,6 @@ npm run electron:dev
 }
 ```
 
-环境变量兜底：`YBU_MODEL`、`YBU_API_KEY`、`YBU_API_BASE`。
-
 ---
 
 ## 命令参考

@@ -116,8 +116,6 @@ Create `userdata/provider.json` (or configure via Electron Settings → LLM Prov
 }
 ```
 
-Environment variable fallback: `YBU_MODEL`, `YBU_API_KEY`, `YBU_API_BASE`.
-
 ---
 
 ## Commands

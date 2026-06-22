@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import json
-import os
 from pathlib import Path
 
 from utils.logging import get_logger
@@ -33,16 +32,15 @@ def _load_config() -> dict:
 def create_llm(model: str | None = None) -> object:
     """Create an LLMClient instance.
 
-    Reads from <project>/provider.json first, then falls back to
-    YBU_MODEL / YBU_API_KEY / YBU_API_BASE env vars.
+    Reads from <project>/userdata/provider.json.
     """
     from llm.client import LLMClient
 
     cfg = _load_config()
 
-    model_name = model or cfg.get("model") or os.environ.get("YBU_MODEL", "gpt-4o")
-    api_key = cfg.get("api_key") or os.environ.get("YBU_API_KEY", "")
-    api_base = cfg.get("api_base") or os.environ.get("YBU_API_BASE", "")
+    model_name = model or cfg.get("model", "gpt-4o")
+    api_key = cfg.get("api_key", "")
+    api_base = cfg.get("api_base", "")
 
     if not api_key:
         raise ValueError(
