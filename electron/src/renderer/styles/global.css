@@ -1970,7 +1970,10 @@ body {
 }
 
 .chat-session-item {
-  padding: 6px 10px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 6px 4px 10px;
   cursor: pointer;
   font-size: 11px;
   color: #8b949e;
@@ -1991,10 +1994,27 @@ body {
 }
 
 .chat-session-label {
-  display: block;
+  flex: 1;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  cursor: pointer;
+}
+
+.chat-session-archive-btn {
+  flex-shrink: 0;
+  opacity: 0.5;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 10px;
+  padding: 2px 4px;
+  line-height: 1;
+  transition: opacity 0.1s;
+}
+
+.chat-session-item:hover .chat-session-archive-btn {
+  opacity: 1;
 }
 
 .chat-left {

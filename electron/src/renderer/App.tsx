@@ -768,6 +768,21 @@ export default function App() {
               setLoadingSession(false);
             }
           }}
+          onArchiveSession={async (sessionId: string) => {
+            if (!confirm(t('chat.archiveSessionConfirm', 'Archive this session?'))) return;
+            try {
+              await window.electronAPI.archiveSession(activePreset, sessionId);
+              const list = await window.electronAPI.listSessions(activePreset);
+              if (list.sessions) {
+                setSessions(list.sessions);
+                if (currentSessionId === sessionId) {
+                  setCurrentSessionId(list.sessions.length > 0 ? list.sessions[0].session_id : '');
+                }
+              }
+            } catch (e) {
+              console.error('archiveSession failed: %s', String(e));
+            }
+          }}
           onSelectSession={async (sessionId: string) => {
             setLoadingSession(true);
             try {

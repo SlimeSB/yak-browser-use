@@ -1016,6 +1016,15 @@ def register_all_routes(app: FastAPI) -> None:
         sessions = store.list_sessions()
         return JSONResponse({"sessions": sessions})
 
+    @app.post("/api/session/{pipeline_name}/{session_id}/archive")
+    async def session_archive(pipeline_name: str, session_id: str) -> JSONResponse:
+        """Archive a session (soft-delete)."""
+        service = await _get_service()
+        ok = service.archive_session(pipeline_name, session_id)
+        if not ok:
+            return JSONResponse({"ok": False, "error": "Session not found"}, status_code=404)
+        return JSONResponse({"ok": True})
+
     @app.get("/api/session/{pipeline_name}/{session_id}")
     async def session_get(pipeline_name: str, session_id: str) -> JSONResponse:
         """Get full session data (including messages) by ID."""

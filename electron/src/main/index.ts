@@ -439,6 +439,11 @@ app.whenReady().then(async () => {
     return _apiFetch(`/api/session/${encodeURIComponent(pipelineName)}/list`, {}, 'api:session-list');
   });
 
+  ipcMain.handle('api:session-archive', async (_event, pipelineName: string, sessionId: string) => {
+    logger.debug('IPC: api:session-archive pipeline=%s session=%s', pipelineName, sessionId);
+    return _apiFetch(`/api/session/${encodeURIComponent(pipelineName)}/${encodeURIComponent(sessionId)}/archive`, { method: 'POST' }, 'api:session-archive');
+  });
+
   ipcMain.handle('api:session-get', async (_event, pipelineName: string, sessionId: string) => {
     logger.debug('IPC: api:session-get pipeline=%s session=%s', pipelineName, sessionId);
     return _apiFetch(`/api/session/${encodeURIComponent(pipelineName)}/${encodeURIComponent(sessionId)}`, {}, 'api:session-get');

@@ -160,6 +160,15 @@ class Service:
         logger.info("Switched to pipeline %s (%d sessions)", target, len(sessions))
         return sessions
 
+    def archive_session(self, pipeline_name: str, session_id: str) -> bool:
+        """Archive a session for the given pipeline."""
+        normalized = self._normalize_pipeline(pipeline_name)
+        store = SessionStore(normalized)
+        ok = store.archive_session(session_id)
+        if ok:
+            logger.info("Service: archived session %s in pipeline %s", session_id, normalized)
+        return ok
+
     def new_session(self, pipeline_name: str) -> dict:
         """Create a new persisted session for the given pipeline."""
         normalized = self._normalize_pipeline(pipeline_name)

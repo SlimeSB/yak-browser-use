@@ -85,6 +85,11 @@ declare global {
       chatReset: () => Promise<{ ok?: boolean; session_id?: string; status?: string }>;
       chatCancel: () => Promise<{ ok?: boolean }>;
       getSession: () => Promise<{ session?: { session_id: string; pipeline_name: string; status: string; message_count: number } | null }>;
+      newSession: (pipelineName: string) => Promise<{ session_id: string; created_at: number; pipeline_name: string }>;
+      switchSession: (pipelineName: string) => Promise<{ sessions?: Array<{ session_id: string; display_name?: string | null; created_at: string; message_count: number; status: string }> }>;
+      listSessions: (pipelineName: string) => Promise<{ sessions?: Array<{ session_id: string; display_name?: string | null; created_at: string; message_count: number; status: string }> }>;
+      getSessionData: (pipelineName: string, sessionId: string) => Promise<{ session?: { messages?: ChatMessage[] } & Record<string, unknown> }>;
+      archiveSession: (pipelineName: string, sessionId: string) => Promise<{ ok: boolean; error?: string }>;
       listPresets: () => Promise<{ presets: Array<{ name: string; path: string; modified: number }> }>;
       listVersions: (pipelineName: string) => Promise<{ versions: VersionInfo[] }>;
       getVersion: (pipelineName: string, version: string) => Promise<{ version: string; content: string }>;

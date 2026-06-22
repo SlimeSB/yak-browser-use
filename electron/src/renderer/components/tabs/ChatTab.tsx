@@ -34,6 +34,7 @@ interface ChatTabProps {
   loadingSession?: boolean;
   onNewSession?: () => void;
   onSelectSession?: (sessionId: string) => void;
+  onArchiveSession?: (sessionId: string) => void;
 }
 
 export default function ChatTab({
@@ -43,7 +44,7 @@ export default function ChatTab({
   pendingEdit, onConfirmEdit, onRevertEdit,
   onDeletePipeline,
   reversed, theme,
-  sessions, currentSessionId, loadingSession, onNewSession, onSelectSession,
+  sessions, currentSessionId, loadingSession, onNewSession, onSelectSession, onArchiveSession,
 }: ChatTabProps) {
   const { t } = useTranslation();
   const [input, setInput] = useState('');
@@ -245,7 +246,7 @@ export default function ChatTab({
             <button
               className="btn btn-small btn-primary"
               onClick={onNewSession}
-              disabled={loadingSession}
+              disabled={loadingSession || !activePreset || messages.length === 0}
               title={t('chat.newSession', 'New Session')}
             >
               +
@@ -259,9 +260,15 @@ export default function ChatTab({
               <div
                 key={s.session_id}
                 className={`chat-session-item ${currentSessionId === s.session_id ? 'active' : ''}`}
-                onClick={() => onSelectSession?.(s.session_id)}
               >
-                <span className="chat-session-label">{formatSessionLabel(s)}</span>
+                <span className="chat-session-label" onClick={() => onSelectSession?.(s.session_id)}>{formatSessionLabel(s)}</span>
+                <button
+                  className="btn btn-xs btn-secondary chat-session-archive-btn"
+                  title={t('chat.archiveSession', 'Archive')}
+                  onClick={(e) => { e.stopPropagation(); onArchiveSession?.(s.session_id); }}
+                >
+                  🗑
+                </button>
               </div>
             ))}
           </div>

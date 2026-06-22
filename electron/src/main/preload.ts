@@ -50,6 +50,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   switchSession: (pipelineName: string) => ipcRenderer.invoke('api:session-switch', pipelineName),
   listSessions: (pipelineName: string) => ipcRenderer.invoke('api:session-list', pipelineName),
   getSessionData: (pipelineName: string, sessionId: string) => ipcRenderer.invoke('api:session-get', pipelineName, sessionId),
+  archiveSession: (pipelineName: string, sessionId: string) => ipcRenderer.invoke('api:session-archive', pipelineName, sessionId),
   listPresets: () => ipcRenderer.invoke('api:presets-list'),
 
   // Provider config

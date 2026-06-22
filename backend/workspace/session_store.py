@@ -149,12 +149,36 @@ class SessionStore:
             return None
         return _read_json(path)
 
-    def list_sessions(self) -> list[dict]:
+    def list_sessions(self, include_archived: bool = False) -> list[dict]:
         """Return all session metadata, sorted by creation time descending."""
         index = self._read_index()
         sessions = list(index.values())
+        if not include_archived:
+            sessions = [s for s in sessions if not s.get("archived")]
         sessions.sort(key=lambda s: s.get("created_at", ""), reverse=True)
         return sessions
+
+    def archive_session(self, session_id: str) -> bool:
+        """Mark a session as archived (soft-delete)."""
+        index = self._read_index()
+        if session_id not in index:
+            return False
+        index[session_id]["archived"] = True
+        index[session_id]["updated_at"] = datetime.now().isoformat()
+        self._write_index(index)
+        logger.info("session_store: archived session %s in %s", session_id, self.pipeline_name)
+        return True
+
+    def unarchive_session(self, session_id: str) -> bool:
+        """Remove archived flag from a session."""
+        index = self._read_index()
+        if session_id not in index:
+            return False
+        index[session_id].pop("archived", None)
+        index[session_id]["updated_at"] = datetime.now().isoformat()
+        self._write_index(index)
+        logger.info("session_store: unarchived session %s in %s", session_id, self.pipeline_name)
+        return True
 
     def delete_session_files(self, session_id: str) -> None:
         """Remove session files and index entry."""
