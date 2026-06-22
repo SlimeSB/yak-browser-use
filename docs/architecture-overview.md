@@ -419,7 +419,7 @@ Snapshots return `url` and `title` for context. Debug dump available via F8 shor
 ### Shared Store (`engine/_harness/tool_executor.py` — `_shared_store`)
 
 Runtime memory bus for tool-to-tool data passing:
-- **Template resolution**: `{path}` / `${path}` syntax — resolves parameter values from prior step outputs via `_param_resolver.resolve_params()`
+- **Template resolution**: `{path}` / `${path}` syntax — resolves parameter values from prior step outputs via `_param_resolver.resolve_params()`. `{path}` = whole-string replacement (preserves type), `${path}` = template interpolation (string-safe, works inline). See `_param_resolver.py` docstring for full semantics.
 - **Source key**: `_source_key` parameter in any tool — fetches data from a named step's output
 - **eval_agent support**: inherits shared_store context; producer/consumer data flow
 - Used in both Chat and Preset modes (preset loop passthrough)

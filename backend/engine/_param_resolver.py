@@ -3,6 +3,38 @@ in tool call arguments against a shared_store dict.
 
 Returns (resolved_params, errors) — a deep copy with all templates resolved,
 and a list of failed paths. Original params are never modified.
+
+Syntax reference
+----------------
+
+Two syntaxes exist for different use cases; they are NOT interchangeable.
+
+``{path}`` — whole-string replacement (bare data lookup)
+    Regex: ``{([\\w.]+)}``, fullmatch only.
+    The ENTIRE string must be ``{key}`` — partial matches are ignored so
+    that JSON literal braces (e.g. ``{"a": 1}``) never trigger resolution.
+    Returns the store value AS-IS — can be any type (str, int, list, dict,
+    None, etc.).
+    Use when the entire parameter value IS the reference (e.g. passing a
+    prior step's full output as the next tool's input).
+
+``${path}`` — template interpolation (substitution or whole-string)
+    Regex: ``\\${([^}]+)}``, matches both full-string and partial.
+    - Full-match: behaves like ``{path}`` — whole-string replacement.
+    - Partial (sub): replaces inline ``${key}`` occurrences within a larger
+      string. The result is ALWAYS a string (non-string store values cause
+      a resolve error).
+    The ``$`` prefix disambiguates braces from JSON — safe for use inside
+    longer strings like ``"https://${host}/api/v1"``.
+    Use when you need to interpolate a value inside a larger string.
+
+Pick ``{path}`` when:
+    - The whole parameter is a reference to prior step output
+    - You want to preserve the store value's type (list, dict etc.)
+
+Pick ``${path}`` when:
+    - You need inline interpolation inside a larger string
+    - The store value is / should be coerced to a string
 """
 
 from __future__ import annotations

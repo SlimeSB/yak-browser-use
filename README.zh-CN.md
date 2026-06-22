@@ -58,7 +58,7 @@
 | **🖥️ Electron 桌面** | React + Vite + Monaco 编辑器（支持 Diff 编辑器），提供完整桌面端体验 |
 | **🔌 REST + WebSocket API** | FastAPI 后端，支持 REST 调用和实时事件推送 |
 | **📂 工具注册中心** | ToolRegistry 集中管理内置工具（验证码、文件 IO、格式转换等） |
-| **🔗 共享存储** | 工具间数据传递：`${}` 模板语法 + `_source_key` 参数，支持 Pipeline 数据流 |
+| **🔗 共享存储** | 工具间数据传递：`{path}` 全串引用（保留原类型）+ `${path}` 模板插值（可嵌入字符串中间），详见 `_param_resolver.py` 文档 |
 | **💓 连接健康检测** | CDP 心跳检测 + 浏览器子进程监控 + 自动断连处理 |
 | **🔦 可切换高亮模式** | 支持 a11y / progressive / off 三种高亮模式，API 或 Electron 设置面板切换 |
 | **🔑 Provider 灵活配置** | 支持 DeepSeek / OpenAI / 任意 OpenAI-compatible 提供商，平铺 JSON 配置 |
@@ -107,17 +107,17 @@ npm run electron:dev
 
 ### 配置 Provider
 
-创建 `userdata/provider.json`：
+创建 `userdata/provider.json`（或在 Electron 设置面板 → LLM Provider 中配置）：
 
 ```json
 {
-  "provider": "deepseek",
   "model": "deepseek-chat",
-  "api_key": "sk-xxx...xxxx"
+  "api_key": "sk-xxx...xxxx",
+  "api_base": "https://api.deepseek.com"
 }
 ```
 
-也可用 CLI 配置：`ybu param set provider.api_key "sk-xxx"`
+环境变量兜底：`YBU_MODEL`、`YBU_API_KEY`、`YBU_API_BASE`。
 
 ---
 
@@ -129,7 +129,7 @@ ybu serve [--port PORT]       启动 REST API 服务
 ybu logs [-f] [--source all]  查看统一日志
 ```
 
-> 更多子命令：`chrome`、`param`、`pipeline`、`daemon`、`tool`、`debug` — 见 `ybu <subcommand> --help`。
+> CLI 命令只有 `serve`、`run`、`logs`。配置通过 REST API / Electron 设置面板进行，不存在 `ybu param` 等子命令。
 
 ---
 

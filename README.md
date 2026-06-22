@@ -106,17 +106,17 @@ npm run electron:dev
 
 ### Configure Provider
 
-Create `userdata/provider.json`:
+Create `userdata/provider.json` (or configure via Electron Settings → LLM Provider):
 
 ```json
 {
-  "provider": "deepseek",
   "model": "deepseek-chat",
-  "api_key": "sk-xxx...xxxx"
+  "api_key": "sk-xxx...xxxx",
+  "api_base": "https://api.deepseek.com"
 }
 ```
 
-Or via CLI: `ybu param set provider.api_key "sk-xxx"`
+Environment variable fallback: `YBU_MODEL`, `YBU_API_KEY`, `YBU_API_BASE`.
 
 ---
 
@@ -128,7 +128,7 @@ ybu serve [--port PORT]        Start the REST API server
 ybu logs [-f] [--source all]   View unified logs
 ```
 
-> More subcommands: `chrome`, `param`, `pipeline`, `daemon`, `tool`, `debug` — see `ybu <subcommand> --help`.
+> CLI commands: `serve`, `run`, `logs`. Config via REST API / Electron Settings (not CLI subcommands).
 
 ---
 
