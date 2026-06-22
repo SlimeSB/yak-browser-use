@@ -6,10 +6,11 @@ import webbrowser
 import uvicorn
 
 from api.server import create_app
+from cli._init import init_cli
 
 
 def main(host: str = "127.0.0.1", port: int = 8787) -> None:
-    """Start the FastAPI server and open the browser."""
+    init_cli()
     app = create_app()
     webbrowser.open(f"http://{host}:{port}")
     uvicorn.run(app, host=host, port=port, log_level="info")

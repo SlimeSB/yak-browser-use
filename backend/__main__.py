@@ -3,22 +3,8 @@ from __future__ import annotations
 import argparse
 import asyncio
 import sys
-from pathlib import Path
 
-try:
-    sys.stdout.reconfigure(encoding="utf-8")  # type: ignore[attr-defined]
-    sys.stderr.reconfigure(encoding="utf-8")  # type: ignore[attr-defined]
-except Exception:  # expected: non-utf8 terminal
-    pass
-
-from dotenv import load_dotenv
-
-root_env = Path(__file__).resolve().parent.parent / ".env"
-local_env = Path(__file__).resolve().parent / ".env"
-if root_env.exists():
-    load_dotenv(dotenv_path=root_env)
-if local_env.exists():
-    load_dotenv(dotenv_path=local_env, override=True)
+from cli._init import init_cli
 
 
 def main() -> None:
@@ -59,8 +45,7 @@ def main() -> None:
 
     args = parser.parse_args()
 
-    from utils.logging import setup_logging
-    setup_logging(level=args.log_level)
+    init_cli(level=args.log_level)
 
     if args.command == "serve":
         from cli.serve import _cmd_serve
