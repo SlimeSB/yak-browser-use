@@ -49,14 +49,18 @@
 | | 能力 | 说明 |
 |---|------|------|
 | **🗣️ Chat + 浏览器同步** | 用户在 chat 输入指令，Agent 自主操作浏览器，操作过程实时推送给用户 |
-| **🔧 丰富浏览器工具集** | goto / click / fill / snapshot / scroll / eval / hover / tab 管理…… 覆盖日常自动化需求 |
+| **🔧 丰富浏览器工具集** | goto / click / fill / snapshot (progressive/a11y/raw) / scroll / eval / hover / tab 管理…… 覆盖日常自动化需求 |
+| **📸 智能快照** | 渐进式 DOM 遍历（密度自适应折叠）+ 无障碍树快照；`expand_branch` 展开折叠容器 |
 | **📋 Pipeline 编排** | 聊天过程中自动录制操作步骤到 pipeline.yaml，可保存为预设后续回放 |
 | **🤖 Agent Swimlane** | Pipeline 执行出问题时 Agent 自动介入恢复，无需人工干预 |
-| **🛡️ 安全护栏** | 路径守卫 (PathGuard)、域名白名单、熔断器、审核门控 (Guardian) — 多重安全机制 |
+| **🛡️ 安全护栏** | 路径守卫 (PathGuard)、SSRF 防护、域名白名单、熔断器、审核门控 (Guardian) — 多重安全机制 |
 | **🏓 流式 LLM** | 流式推理 + 文本增量 + 工具名实时推送，WebSocket 推送到前端 |
-| **🖥️ Electron 桌面** | React + Vite + Monaco 编辑器，提供完整桌面端体验 |
+| **🖥️ Electron 桌面** | React + Vite + Monaco 编辑器（支持 Diff 编辑器），提供完整桌面端体验 |
 | **🔌 REST + WebSocket API** | FastAPI 后端，支持 REST 调用和实时事件推送 |
-| **📂 第三方工具脚本** | `tools/` 目录支持自定义 Python 工具热加载 |
+| **📂 工具注册中心** | ToolRegistry 集中管理内置工具（验证码、文件 IO、格式转换等） |
+| **🔗 共享存储** | 工具间数据传递：`${}` 模板语法 + `_source_key` 参数，支持 Pipeline 数据流 |
+| **💓 连接健康检测** | CDP 心跳检测 + 浏览器子进程监控 + 自动断连处理 |
+| **🔦 可切换高亮模式** | 支持 a11y / progressive / off 三种高亮模式，API 或 Electron 设置面板切换 |
 | **🔑 Provider 灵活配置** | 支持 DeepSeek / OpenAI / 任意 OpenAI-compatible 提供商，平铺 JSON 配置 |
 
 ---
@@ -155,11 +159,12 @@ ybu logs [-f] [--source all]  查看统一日志
 POST /api/chat { message: "打开百度搜咖啡" }
   └→ service.process_chat_message()
        └→ run_conversation_loop()
-            ├→ 加载 chat/system.md 系统提示
-            ├→ LLM 调用（携带 browser_* / goal_run / todo 工具）
-            ├→ LLM 返回工具调用 → tool_executor 执行
-            │     ├→ browser_goto  → PlaywrightBridge.goto()
-            │     ├→ browser_click → PlaywrightBridge.click()
+            ├→ 加载 chat/system.md + pipeline 上下文
+            ├→ LLM 调用（browser_* / goal_run / todo / skill / expand_branch）
+            ├→ LLM 返回工具调用 → tool_executor（带 shared_store）
+            │     ├→ browser_goto  → ops.py → PlaywrightBridge.goto()
+            │     ├→ browser_click → ops.py → PlaywrightBridge.click()
+            │     ├→ browser_snapshot → progressive/a11y/raw 快照
             │     └→ record_step   → 写入 pipeline.yaml
             └→ LLM 返回文本 → 结束本轮
 ```
@@ -169,6 +174,7 @@ POST /api/chat { message: "打开百度搜咖啡" }
 - 流式 LLM 响应（推理过程 + 文本增量）实时推送
 - WebSocket 事件流通知前端（turn_start / tool_start / text_chunk）
 - Agent 会自动记录操作步骤到 pipeline.yaml
+- 工具间通过 shared_store 数据传递（`${}` 模板 / `_source_key`）
 
 #### Preset 模式（预设回放）
 
@@ -176,8 +182,10 @@ POST /api/chat { message: "打开百度搜咖啡" }
 POST /api/run { pipeline: "..." }
   └→ run_pipeline() / run_preset_loop()
        ├→ 加载已录制的 pipeline.yaml
+       ├→ PipelineTaskAdapter 构建 TaskDescriptor（步骤列表 + 进度）
        ├→ LLM 看到完整步骤列表
        ├→ 用 browser_* 工具逐条执行步骤
+       ├→ shared_store 透传支持数据流
        └→ Agent Swimlane — 遇到故障自动恢复
 ```
 
@@ -186,6 +194,7 @@ POST /api/run { pipeline: "..." }
 - Pipeline 三步设计：**goal**（目标描述）→ **ops**（浏览器操作列表）→ **check**（程序化验收）
 - ops 失败时自动 fallback 到 goal 让 Agent 动态决策
 - check 支持 `url_contains` / `element_exists` / `text_contains` / `element_visible` 验收
+- Pipeline 上下文注入系统提示，Agent 感知工作空间
 
 ---
 
@@ -198,63 +207,85 @@ yak-browser-use/
 │
 ├── api/                      # FastAPI REST + WebSocket 接口
 │   ├── routes.py             # 路由注册
-│   └── service.py            # 业务逻辑
+│   ├── service.py            # 业务逻辑
+│   ├── server.py             # 服务器生命周期
+│   └── state.py / errors.py  # 引擎状态 & 错误类型
 │
 ├── engine/                   # 核心执行引擎 ★
 │   ├── agent.py              # Agent 入口 + 流式 LLM call
 │   ├── runner.py             # Chat 模式 runner
 │   ├── runner_preset.py      # Preset 模式 orchestrator
-│   ├── executor.py           # 浏览器/工具/目标三层执行器
+│   ├── executor.py           # Pipeline 包装执行器
+│   ├── ops.py                # 浏览器操作分发（通过 BrowserBridge）
+│   ├── scratchpad.py         # 内存数据缓存
 │   ├── step_machine.py       # Pipeline DAG 遍历
+│   ├── planner.py            # 运行时恢复规划器
+│   ├── eval_agent.py         # Eval Agent 验收执行
+│   ├── delivery.py / events.py / state.py
+│   ├── _param_resolver.py    # 参数模板解析
 │   │
 │   ├── _harness/             # Conversation loop 基础设施 ★
 │   │   ├── conversation_loop.py   # 核心对话循环
-│   │   ├── tools.py               # 工具注册（browser_*/goal_run/todo/pipeline_*）
-│   │   ├── tool_executor.py       # 工具调用执行器
+│   │   ├── tools.py               # 工具定义（browser_*/goal_run/…）
+│   │   ├── tool_executor.py       # 工具调用执行器 + shared_store
 │   │   ├── pipeline_tools.py      # Pipeline 管理工具
+│   │   ├── pipeline_task_adapter.py  # StepDef → TaskDescriptor
 │   │   ├── iteration_budget.py    # LLM 轮次预算控制
 │   │   ├── tool_guardrails.py     # 工具护栏
-│   │   └── turn_context.py        # 每轮次上下文管理
+│   │   ├── turn_context.py        # 每轮次上下文管理
+│   │   ├── error_classifier.py    # 错误分类
+│   │   ├── retry_utils.py         # 重试工具
+│   │   └── skill_tools.py         # Skill 注入
 │   │
 │   └── _lifecycle/           # Pipeline 生命周期
 │       ├── guardian.py       # 审核门控 + 熔断器
 │       └── compensation.py   # 回滚/撤销支持
 │
-├── cdp/                      # Chrome DevTools Protocol 层
-│   ├── playwright_bridge.py  # Playwright 统一驱动
+├── cdp/                      # Chrome DevTools Protocol 层 ★
+│   ├── playwright_bridge.py  # PlaywrightBridge — 统一驱动
+│   │                        #   （健康检测 / 进程监控 / 断连处理）
 │   ├── helpers.py            # CDPHelpers 高级封装
+│   ├── protocols.py          # BrowserBridge 协议接口
+│   ├── profiles.py / session.py  # 配置 & 会话管理
 │   ├── daemon.py             # CDP Daemon 管理
 │   ├── discover.py           # Chrome 发现/连接
-│   └── launcher.py           # Chrome 启动
+│   └── launcher.py           # Chrome 启动 / 端口管理
 │
 ├── compiler/                 # Pipeline 编译
-│   ├── schema.py             # YAML 模型（PipelineYaml / StepYaml）
-│   ├── parser.py             # YAML 解析
-│   ├── graph.py              # DAG 构建
-│   └── resolver.py           # 依赖解析
+│   ├── schema.py / parser.py # YAML 模型 & 解析
+│   ├── graph.py / resolver.py# DAG 构建 & 依赖解析
+│   ├── diff.py / generator.py / prepare.py
 │
 ├── tools/                    # 工具注册 + 实现
-│   ├── registry.py           # 工具注册中心
+│   ├── registry.py           # ToolRegistry — 集中调度
+│   ├── adapters.py           # 工具适配层
 │   ├── captcha.py            # 验证码识别（ddddocr）
-│   ├── file_read.py          # 文件读取工具
-│   ├── file_write.py         # 文件写入工具
-│   ├── format_convert.py     # 格式转换（CSV/JSON/Excel）
+│   ├── file_read.py / file_write.py / format_convert.py
 │   ├── extract.py / data.py  # 数据处理工具
 │   ├── todo.py / todo_store.py  # 待办事项管理
-│   └── record_step.py        # Pipeline 步骤录制
+│   ├── record_step.py        # Pipeline 步骤录制
+│   ├── edit_pipeline.py      # Pipeline 编辑
+│   └── _path_utils.py        # 路径工具
+│
+├── llm/                      # LLM 客户端层
+│   ├── client.py             # OpenAI-compatible 客户端
+│   └── messages.py           # 消息构造/解析
 │
 ├── prompts/                  # Prompt 模板（Markdown）
 │   ├── chat/system.md        # Chat 模式系统提示
-│   └── eval_agent/system.md  # Eval Agent 系统提示
+│   ├── eval_agent/system.md  # Eval Agent 系统提示
+│   ├── guidance/ / guardrails/ / skill/
+│   └── planner-*.md / replan-on-failure.md / generate-handler.md
 │
 ├── params/                   # 持久化参数管理
-├── workspace/                # 工作区管理
-├── cli/                      # CLI 命令实现
-├── utils/                    # 工具函数
+├── workspace/                # 工作区管理（manager/version/path）
+├── cli/                      # CLI 命令（run.py / serve.py / logs.py）
+├── utils/                    # 工具函数（browser/logging/tool_cdp/skill_loader/…）
+├── tests/                    # 50+ 单元 & 集成测试
 │
 ├── electron/                 # Electron 桌面前端
 │   └── src/
-│       └── renderer/         # React + Vite + Monaco Editor
+│       └── renderer/         # React + Vite + Monaco Editor（Diff 支持）
 │
 ├── docs/                     # 文档
 │   └── architecture-overview.md  # 架构详解
@@ -276,9 +307,13 @@ yak-browser-use/
 
 3. **Pipeline 是副产品** — pipeline.yaml 是 Agent 聊天过程的录制产物，不是设计的起点。Agent 聊天产生有用流程后保存下来供后续回放。
 
-4. **Playwright 统一驱动** — 所有浏览器操作统一通过 Playwright `connect_over_cdp()`，获得 auto-wait / auto-scroll / auto-retry 能力。`CDPHelpers` 和 `ToolContext` 提供双层封装。
+4. **PlaywrightBridge 统一驱动** — 所有浏览器操作通过 PlaywrightBridge (`connect_over_cdp()`)，获得 auto-wait / auto-scroll / auto-retry，外加健康检测心跳、子进程监控、断连处理和 SSRF 防护。`BrowserBridge` 协议（`cdp/protocols.py`）定义了接口契约。
 
 5. **文件即契约** — pipeline.yaml 是静态契约，编译阶段严格校验（DAG 环检测、文件引用校验），运行时尽量减少意外。
+
+6. **渐进式快照默认** — 密度自适应 DOM 遍历替代旧版交互式快照。LLM 最多看到 200 个元素；密集容器折叠后用 `expand_branch` 按需展开。对锁定/iframe 页面降级到 a11y 无障碍树。
+
+7. **共享存储支持工具数据流** — 运行时内存总线通过 `${step_name.output}` 模板和 `_source_key` 参数实现工具间数据传递，同时在 Chat 和 Preset 模式中支持流水线工作流。
 
 ---
 

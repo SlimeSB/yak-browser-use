@@ -1,6 +1,6 @@
 # Yak Browser-Use Architecture Overview
 
-> Last updated: 2026-06-19
+> Last updated: 2026-06-22
 
 ## Project Positioning
 
@@ -20,66 +20,93 @@ yak-browser-use/
 ├── api/                      # FastAPI REST + WebSocket API layer
 │   ├── routes.py             # Route registration (chat/run/chrome/pipeline/workspace)
 │   ├── service.py            # Business logic (session mgmt / chat / preset mgmt)
+│   ├── server.py             # FastAPI server lifecycle
 │   ├── state.py              # Global engine_state
 │   └── errors.py             # API error types
 │
 ├── engine/                   # Core execution engine ★
-│   ├── agent.py              # Agent entry (chat mode entry + streaming LLM call)
+│   ├── agent.py              # Agent entry (chat mode + streaming LLM call)
 │   ├── runner.py             # Chat mode runner (lightweight wrapper)
 │   ├── runner_preset.py      # Preset mode runner (full pipeline orchestrator)
 │   ├── executor.py           # Core executor (browser/tool/goal three-layer)
+│   ├── ops.py                # Browser operation dispatcher (bridge-based)
 │   ├── scratchpad.py         # In-memory data cache (heavy data stays out of LLM context)
 │   ├── delivery.py           # Delivery report generation
 │   ├── state.py              # RunContext data class
 │   ├── events.py             # EventSink event pipeline
 │   ├── step_machine.py       # StepMachine (pipeline DAG walker)
 │   ├── planner.py            # Runtime recovery planner
+│   ├── eval_agent.py         # Eval Agent for pipeline verification
+│   ├── _param_resolver.py    # Param resolver (${} / _source_key templating)
 │   │
 │   ├── _harness/             # Conversation loop infrastructure ★
 │   │   ├── conversation_loop.py    # Core agent turn loop (shared by chat + preset)
-│   │   ├── tools.py                # Tool definitions (browser_*/goal_run/record_step/pipeline_*/todo)
-│   │   ├── tool_executor.py        # Sequential tool call dispatcher
+│   │   ├── tools.py                # Tool definitions (browser_*/goal_run/record_step/pipeline_*/todo/skill)
+│   │   ├── tool_executor.py        # Sequential tool call dispatcher + shared_store
 │   │   ├── pipeline_tools.py       # pipeline_load/list/update/add/remove/create implementations
 │   │   ├── pipeline_task_adapter.py # StepDef → TaskDescriptor (preset mode only)
 │   │   ├── iteration_budget.py     # LLM turn budget control
 │   │   ├── tool_guardrails.py      # Tool call guardrails
 │   │   ├── turn_context.py         # Per-turn context (retry counters, etc.)
 │   │   ├── error_classifier.py     # API error classification
-│   │   └── retry_utils.py          # Retry utility functions
+│   │   ├── retry_utils.py          # Retry utility functions
+│   │   └── skill_tools.py          # Skill injection for agent
 │   │
 │   └── _lifecycle/           # Pipeline lifecycle management
-│       ├── compensation.py   # Compensate / rollback logic
-│       ├── guardian.py       # Approval gate
-│       ├── tool_runner.py    # _PH- tool lifecycle
-│       └── fallback.py       # Page state assessment
+│       ├── compensation.py   # Compensate / rollback logic (async-locked)
+│       └── guardian.py       # Approval gate + circuit breaker
 │
-├── cdp/                      # Chrome DevTools Protocol layer
+├── cdp/                      # Chrome DevTools Protocol layer ★
+│   ├── playwright_bridge.py  # PlaywrightBridge — unified driver (health check, process watch)
 │   ├── helpers.py            # CDPHelpers (high-level browser operation wrappers)
+│   ├── protocols.py          # BrowserBridge protocol (interface definition)
+│   ├── profiles.py           # Browser profile management
+│   ├── session.py            # CDP session management
 │   ├── daemon.py             # CDP Daemon management
 │   ├── discover.py           # Chrome discovery / connection
-│   └── launcher.py           # Chrome launch
+│   └── launcher.py           # Chrome launch / port management
 │
 ├── compiler/                 # Pipeline compilation
 │   ├── models.py             # PipelineDef / StepDef data classes
 │   ├── schema.py             # PipelineYaml / StepYaml Pydantic models
 │   ├── parser.py             # YAML parser
-│   └── resolver.py           # Dependency resolver
+│   ├── graph.py              # DAG builder / cycle detection
+│   ├── resolver.py           # Dependency resolver
+│   ├── diff.py               # Pipeline diff computation
+│   ├── generator.py          # Pipeline generator
+│   └── prepare.py            # Pre-execution preparation
 │
-├── tools/                    # Custom tool scripts
+├── tools/                    # Tool registry + implementations
+│   ├── registry.py           # ToolRegistry — central dispatch & schema generation
+│   ├── adapters.py           # Tool adaptation layer
 │   ├── record_step.py        # record_step tool (LLM records steps to pipeline)
 │   ├── todo.py / todo_store.py   # Todo task management tools
 │   ├── edit_pipeline.py      # Pipeline editing tools
-│   └── extract.py / data.py  # Data processing tools
+│   ├── extract.py / data.py  # Data processing tools
+│   ├── captcha.py            # DOM-based captcha recognition (ddddocr)
+│   ├── file_read.py          # File reading tool
+│   ├── file_write.py         # File writing tool
+│   ├── format_convert.py     # Format conversion (CSV/JSON/Excel)
+│   └── _path_utils.py        # Path utility helpers
+│
+├── llm/                      # LLM client layer
+│   ├── client.py             # LLM client (OpenAI-compatible)
+│   └── messages.py           # Message construction / parsing
 │
 ├── prompts/                  # Prompt templates (Markdown)
 │   ├── chat/system.md        # Chat mode system prompt
-│   ├── preset/system.md      # Preset mode system prompt
+│   ├── eval_agent/system.md  # Eval Agent system prompt
 │   ├── guidance/             # Strategy / recovery guidance
 │   ├── guardrails/           # Guardrail prompts
-│   └── skill/                # Skill prompts (goal-execution, etc.)
+│   ├── skill/                # Skill prompts (goal-execution, etc.)
+│   ├── planner-plan.md       # Planner plan prompt
+│   ├── planner-expand.md     # Planner expand prompt
+│   ├── replan-on-failure.md  # Recovery replan prompt
+│   ├── generate-handler.md   # Handler generation prompt
+│   └── _loader.py            # Prompt loader
 │
 ├── params/                   # Persistent parameter management
-│   ├── manager.py            # ParamManager (replaces legacy credential system)
+│   ├── manager.py            # ParamManager (flat JSON config)
 │
 ├── workspace/                # Workspace management
 │   ├── manager.py            # WorkspaceManager
@@ -87,17 +114,50 @@ yak-browser-use/
 │   └── path_guard.py         # Path security validation
 │
 ├── cli/                      # CLI command implementations
-│   ├── run.py / serve.py / chrome.py / ...
+│   ├── run.py                # ybu run
+│   ├── serve.py              # ybu serve
+│   └── logs.py               # ybu logs
 │
 ├── utils/                    # Utility functions
 │   ├── browser.py            # LLM creation / provider config
 │   ├── tool_cdp.py           # Restricted CDP wrapper (for tool scripts)
-│   └── logging.py            # Logging configuration
+│   ├── logging.py            # Logging configuration
+│   ├── skill_loader.py       # Skill file loading
+│   └── response_logger.py    # Response logging
 │
-├── assets/                   # Static assets
-│   └── simplify-dom.js       # DOM simplification script (element numbering / summary)
+├── tests/                    # Unit & integration tests
+│   ├── conftest.py           # Pytest fixtures / shared setup
+│   ├── fixtures/             # Test fixture data
+│   ├── test_agent.py         # Agent module tests
+│   ├── test_api_routes.py    # API endpoint tests (REST + WebSocket)
+│   ├── test_runner.py        # Chat runner tests
+│   ├── test_runner_preset.py # Preset runner tests
+│   ├── test_registry.py      # ToolRegistry tests
+│   ├── test_planner.py       # Planner tests
+│   ├── test_conversation_loop.py  # Conversation loop tests
+│   ├── test_tool_executor.py # Tool executor tests (shared_store)
+│   ├── test_progressive.py   # Progressive snapshot tests
+│   ├── test_a11y_snapshot.py # A11y snapshot tests
+│   ├── test_ops.py           # Browser ops tests
+│   ├── test_param_resolver.py # Param resolver tests
+│   ├── test_compiler_*.py    # Compiler (parser/graph/resolver/diff/generator)
+│   ├── test_pipeline_tools.py
+│   ├── test_delivery.py / test_events.py / test_state.py
+│   ├── test_scratchpad.py / test_step_machine.py
+│   ├── test_turn_context.py / test_iteration_budget.py
+│   ├── test_file_io.py / test_format_convert.py
+│   ├── test_path_guard.py / test_version_manager.py / test_workspace_manager.py
+│   ├── test_harness_tools.py / test_pipeline_task_adapter.py
+│   ├── test_retry_utils.py / test_error_classifier.py
+│   ├── test_tool_guardrails.py / test_todo_store.py
+│   ├── test_run_check.py / test_exact_match.py / ... (50+ test files)
 │
-└── openspec/                 # Design docs & specifications
+├── electron/                 # Electron desktop frontend
+│   └── src/
+│       └── renderer/         # React + Vite + Monaco Editor (diff editor support)
+│
+└── docs/                     # Documentation
+    └── architecture-overview.md  # Full architecture deep-dive (this file)
 ```
 
 ---
@@ -130,16 +190,17 @@ Core concepts:
 ### Lower Layer: CDP Browser Control
 
 ```
-executor.py                  # Logic layer — parses operation types, constructs params
+ops.py                      # Logic layer — dispatches via BrowserBridge protocol
      │
      ▼
-cdp/helpers.py (CDPHelpers) # Protocol layer — CDP WebSocket calls
+BrowserBridge (protocols.py) # Interface contract (playwright_bridge.py implements it)
      │
      ▼
-cdp_daemon (CDPDaemon)      # Transport layer — WS ↔ Chrome DevTools
-     │
+PlaywrightBridge             # Unified driver — Playwright connect_over_cdp()
+     │                          auto-wait / auto-scroll / auto-retry
+     │                          + health check / process watcher / disconnect handling
      ▼
-Chrome Browser
+Chrome Browser (CDP)
 ```
 
 ---
@@ -169,9 +230,12 @@ POST /api/chat { message: "Open Baidu and search for coffee" }
 **Key features:**
 - System prompt `chat/system.md` tells the LLM to "call record_step after each operation to record to the pipeline"
 - LLM can use `goal_run` to set complex goals, then split into steps with `todo` and execute
-- `record_step` appends to `userdata/workspaces/<name>/pipeline.yaml` after each operation
+- `record_step` appends to `workspaces/<name>/pipeline.yaml` after each operation
 - Streaming events via WebSocket to frontend (turn_start/tool_start/text_chunk, etc.)
 - Streaming LLM pushes reasoning content and text deltas in real-time
+- **Configurable highlight mode**: a11y / progressive / off — set via API or Electron settings UI
+- **Tool-to-tool data passing** via `shared_store` (template resolution `${}` / `_source_key`)
+- **Pipeline context injection** in system prompt for agent workspace awareness
 
 **Entry files:**
 - `api/routes.py` → `POST /api/chat` route
@@ -275,45 +339,85 @@ All tool definitions (OpenAI-compatible function calling schemas):
 | **Browser** | `browser_goto` | Navigate to a URL |
 | | `browser_click` | Click element by CSS selector |
 | | `browser_fill` | Fill input field |
-| | `browser_snapshot` | Page snapshot (interactive/full/simplified) |
+| | `browser_snapshot` | Page snapshot (progressive / a11y / raw) |
 | | `browser_scroll` | Scroll the page |
 | | `browser_source` | Get full page HTML |
 | | `browser_eval` | Execute JavaScript |
-| | `browser_get_element_by_number` | Get element details by @eN |
+| | `browser_get_element_by_number` | Get element details by selector |
+| | `browser_expand_branch` | Expand folded progressive-snapshot container |
 | **Goal** | `goal_run` | Set complex goal (execute via todo + browser_*) |
 | **Recording** | `record_step` | Record an operation to pipeline.yaml |
 | **Pipeline** | `pipeline_load/list/update_step/add_step/remove_step/create` | Manage and edit presets |
 | **Tasks** | `todo` | Task list management |
+| **Skill** | `skill` | Inject skill prompt into conversation |
 
 ### Executor (`engine/_harness/tool_executor.py`)
 
 Unified routing for all tool calls:
-- `browser_*` → `executor.execute_browser_op()` (core logic, no file I/O)
+- `browser_*` → `executor.execute_browser_op()` via `ops.py` → `BrowserBridge.click/goto/fill/etc.`
 - `pipeline_*` → handler functions in `pipeline_tools.py`
 - `goal_run` → returns a prompt message (LLM decomposes itself)
 - `todo` → `todo.py` task management
-- Others → `executor.execute_tool()` (loads custom Python scripts from `tools/`)
+- `skill` → `skill_tools.py` skill injection
+- Others → `executor.execute_tool()` (registered via `ToolRegistry` from `tools/registry.py`)
 
-### Scratchpad (`engine/scratchpad.py`)
+**Shared Store** (`tool_executor._shared_store`):
+- Runtime memory bus for tool-to-tool data passing
+- Template resolution: `${step_name.output_path}` inline syntax
+- Source key: `_source_key` parameter fetches previous step's output
+- Used in both Chat and Preset modes for pipelined data flow
 
-**In-memory cache** for heavy browser data, never enters LLM messages:
-- `store()` → stores URL/title/elements/element_map/summary
-- `get_scratchpad().summary` → LLM sees "Page title: xxx | 15 interactive elements"
-- `element_map` → `@e5` → CSS selector mapping
-- `raw_html` → cached page HTML source
+### CDP Snapshot Modes
 
-### Three-Layer Execution Logic (`engine/executor.py`)
+Three snapshot modes are available, configured globally via `highlight_mode`:
+
+1. **Progressive** (default auto-scan) — DOM walk with density-adaptive disclosure:
+   - Two-phase: `CollectState` collects all interactive elements, `build_llm_view` builds a compact view
+   - Semantic container detection (tags / class patterns / child count) for smart grouping
+   - LLM sees at most 200 elements; dense containers are folded with an `expand_hint`
+   - `expand_branch` tool browses folded containers with pagination
+   - Query filtering: case-insensitive text/tag/role match
+   - Region sampling (8 equal bands) replaces old container-based LLM limits
+   - `prog_label` (`:nth-of-type` based) replaces `@ref` for LLM element lookups
+
+2. **A11y** — Playwright Accessibility Tree:
+   - Stamps DOM via CDP `AXTree` and maps `role=…` selectors
+   - `@a_N` ref-based interaction removed; LLM uses `selector` directly
+   - Works with locked / iframed / shadow-DOM rich pages
+
+3. **Off** — no snapshot, raw `browser_source` only
+
+Snapshots return `url` and `title` for context. Debug dump available via F8 shortcut (saves page HTML + screenshot).
+
+### PlaywrightBridge Health & Lifecycle
+
+- **Health check**: periodic CDP heartbeat (`page.evaluate("1+1")`) with retry; triggers disconnect on double failure
+- **Process watcher**: monitors spawned browser subprocess; auto-disconnects on exit
+- **Disconnect handling**: idempotent cleanup (flag-guarded); fires callback to `EngineState`
+- **SSRF guard**: only `http://` / `https://` URLs allowed in `goto()`
+- **Auto-scan**: calls `_progressive_snapshot()` on page load, navigation, frame navigated, and new tabs
+
+### Shared Store (`engine/_harness/tool_executor.py` — `_shared_store`)
+
+Runtime memory bus for tool-to-tool data passing:
+- **Template resolution**: `${step_name.output_field}` — resolves parameter values from prior step outputs
+- **Source key**: `_source_key` parameter in any tool — fetches data from a named step's output
+- **eval_agent support**: inherits shared_store context; producer/consumer data flow
+- Used in both Chat and Preset modes (preset loop passthrough)
+
+### Three-Layer Execution Logic (`engine/executor.py` + `engine/ops.py`)
 
 ```
-Core functions (no file I/O)     Pipeline wrappers (write files)
-─────────────────                ─────────────────────
-execute_browser_op()  ───→       execute_browser_step()
-execute_tool()        ───→       execute_tool_step()
-execute_goal()        ───→       execute_goal_step()
+ops.py                          executor.py (pipeline wrappers)
+────────                       ─────────────────────
+execute_browser_op()  ───→     execute_browser_step()
+execute_tool()        ───→     execute_tool_step()
+execute_goal()        ───→     execute_goal_step()
 ```
 
-- **Core functions**: used exclusively by chat mode tool_executor — no disk writes, return plain result dicts
-- **Pipeline wrappers**: used by legacy preset mode — call core functions then write step.json + screenshot + page HTML
+- **Core functions** (`ops.py`): used by chat mode tool_executor via `BrowserBridge` — no disk writes, return plain result dicts
+- **Pipeline wrappers** (`executor.py`): used by legacy preset mode — call core functions then write step.json + screenshot + page HTML
+- **BrowserBridge protocol** (`cdp/protocols.py`): interface defining `goto/click/fill/snapshot/scroll/eval/expand_branch/etc.`. `PlaywrightBridge` is the implementation.
 
 ---
 
@@ -344,6 +448,24 @@ Users receive real-time event streams via WebSocket: `turn_start/tool_start/tool
 
 Configuration uses a flat `userdata/provider.json` JSON file — no environment variables / dotenv fallback. Built-in providers: deepseek, mimo, opencode-go.
 
+### 6. Progressive Snapshot by Default
+
+The progressive snapshot mode is the default auto-scan strategy. It walks the full DOM depth, applies density-adaptive disclosure to keep LLM context compact, and supports `expand_branch` for drilling into folded containers. Replaces the deprecated interactive snapshot mode.
+
+### 7. PlaywrightBridge as Unified Driver
+
+All browser operations go through `PlaywrightBridge` (`connect_over_cdp()`), which provides:
+- Auto-wait / auto-scroll / auto-retry for all interaction ops
+- Health check heartbeat to detect browser disconnection
+- Subprocess watcher for isolated-mode browser cleanup
+- Idempotent disconnect handling with callback notification
+- SSRF guard on `goto()`
+- Per-page element cache for multi-tab highlight support
+
+### 8. Configurable Highlight System
+
+Three highlight modes (a11y / progressive / off) switchable at runtime via API or Electron settings UI. The highlight injection uses a single bootstrap script (`_HIGHLIGHT_BOOTSTRAP`) rendered via Canvas overlay, with periodic guard refresh every 2 s.
+
 ---
 
 ## Data Flow Diagrams
@@ -352,45 +474,50 @@ Configuration uses a flat `userdata/provider.json` JSON file — no environment 
 
 ```
 User ──POST /api/chat──→ routes.chat_message()
-                           │
-                           ▼
-                        service.process_chat_message()
-                           │
-                   ┌───────▼─────────┐
-                   │  run_conversation_loop()
-                   │                  │
-                   │    LLM call ──→  │  ← prompts/chat/system.md
-                   │       │          │
-                   │       ▼          │
-                   │  tool_executor ──│──→ scratchpad
-                   │       │          │
-                   │       ▼          │
-                   │  executor.py     │
-                   │  (browser/tool)  │
-                   │       │          │
-                   └───────┬─────────┘
-                           │
-                           ▼
-                    JSONResponse
-                    {response, turn_count, …}
+                            │
+                            ▼
+                         service.process_chat_message()
+                            │
+                    ┌───────▼─────────┐
+                    │  run_conversation_loop()
+                    │                  │
+                    │    LLM call ──→  │  ← prompts/chat/system.md
+                    │       │          │        + pipeline context
+                    │       ▼          │
+                    │  tool_executor ──│──→ scratchpad
+                    │       │          │     shared_store
+                    │       ▼          │
+                    │  ops.py          │
+                    │  (BrowserBridge) │  → PlaywrightBridge
+                    │       │          │     (health check /
+                    │       ▼          │      process watch /
+                    │  tools/registry   │      disconnect handling)
+                    │  (captcha/todo/   │
+                    │   file_io/...)    │
+                    └───────┬─────────┘
+                            │
+                            ▼
+                     JSONResponse
+                     {response, turn_count, …}
 ```
 
 ### Preset Mode (New)
 
 ```
 Data               run_preset_loop()
-                    │
+                     │
 StepDef[] ───────→ PipelineTaskAdapter.build_descriptor()
-                    │  → TaskDescriptor
-                    ▼
-                prompts/preset/system.md
-                    │  {pipeline} placeholder substitution
-                    ▼
-                run_conversation_loop(preset_mode=True)
-                    │  LLM sees step list
-                    │  → browser_* tools execute each step
-                    ▼
-                ConversationResult
+                     │  → TaskDescriptor (step list + progress)
+                     ▼
+                 prompts/preset/system.md
+                     │  {pipeline} + {tool_strategy} + {error_recovery}
+                     ▼
+                 run_conversation_loop(preset_mode=True)
+                     │  LLM sees step list
+                     │  → browser_* tools execute each step
+                     │  → shared_store passthrough for tool data flow
+                     ▼
+                 ConversationResult
 ```
 
 ---
