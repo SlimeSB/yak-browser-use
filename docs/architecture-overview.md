@@ -169,7 +169,7 @@ POST /api/chat { message: "Open Baidu and search for coffee" }
 **Key features:**
 - System prompt `chat/system.md` tells the LLM to "call record_step after each operation to record to the pipeline"
 - LLM can use `goal_run` to set complex goals, then split into steps with `todo` and execute
-- `record_step` appends to `userdata/presets/<name>.pipeline.yaml` after each operation
+- `record_step` appends to `userdata/workspaces/<name>/pipeline.yaml` after each operation
 - Streaming events via WebSocket to frontend (turn_start/tool_start/text_chunk, etc.)
 - Streaming LLM pushes reasoning content and text deltas in real-time
 

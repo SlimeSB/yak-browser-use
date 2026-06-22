@@ -112,7 +112,8 @@ export default function ChatTab({
     setMessages(prev => [...prev, { role: 'user', content: text }]);
 
     try {
-      const result = await window.electronAPI.chat(text);
+      const pipelineName = activePreset || undefined;
+      const result = await window.electronAPI.chat(text, pipelineName);
       if (result.ok) {
         const resp = result.response;
         if (resp) {

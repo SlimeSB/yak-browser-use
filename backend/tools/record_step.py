@@ -14,7 +14,7 @@ from utils.logging import get_logger
 
 logger = get_logger(__name__)
 
-PRESETS_DIR = Path(__file__).resolve().parent.parent.parent / "userdata" / "presets"
+_WORKSPACES_DIR = Path(__file__).resolve().parent.parent.parent / "userdata" / "workspaces"
 
 _pipeline_edit_id: dict[str, str] = {}
 
@@ -48,13 +48,13 @@ async def record_step(
     if not safe_name or safe_name != pipeline_name.replace("\\", "/"):
         return f"Invalid pipeline name: {pipeline_name}"
 
-    preset_path = PRESETS_DIR / f"{safe_name}.pipeline.yaml"
-    PRESETS_DIR.mkdir(parents=True, exist_ok=True)
+    pipeline_path = _WORKSPACES_DIR / safe_name / "pipeline.yaml"
+    pipeline_path.parent.mkdir(parents=True, exist_ok=True)
 
     # Load existing pipeline or create new
-    if preset_path.exists():
+    if pipeline_path.exists():
         try:
-            data = yaml.safe_load(preset_path.read_text(encoding="utf-8")) or {}
+            data = yaml.safe_load(pipeline_path.read_text(encoding="utf-8")) or {}
         except Exception:
             data = {}
     else:
@@ -100,11 +100,11 @@ async def record_step(
         logger.debug("Recording step %s%s", step_name, f": {op_type}" if op_type else "")
 
     # Save checkpoint before writing
-    original = preset_path.read_text(encoding="utf-8") if preset_path.exists() else ""
+    original = pipeline_path.read_text(encoding="utf-8") if pipeline_path.exists() else ""
 
     # Write back
     new_content = yaml.dump(data, default_flow_style=False, allow_unicode=True, sort_keys=False)
-    preset_path.write_text(new_content, encoding="utf-8")
+    pipeline_path.write_text(new_content, encoding="utf-8")
 
     # Push pipeline.edit event for review
     _push_edit_event(safe_name, original, new_content, step_name, explanation or f"Recorded step: {step_name}")
@@ -127,7 +127,7 @@ def _push_edit_event(pipeline_name: str, original: str, modified: str, step_name
             original = cp.read_text(encoding="utf-8")
     else:
         edit_id = f"rec_{pipeline_name}_{int(time.time() * 1000)}"
-        checkpoint_path = PRESETS_DIR / f"{pipeline_name}.pipeline.yaml.{edit_id}.orig"
+        checkpoint_path = _WORKSPACES_DIR / pipeline_name / f"{edit_id}.orig"
         checkpoint_path.write_text(original, encoding="utf-8")
         logger.debug("Saved checkpoint: %s", checkpoint_path)
         register_edit(edit_id, checkpoint_path, pipeline_name)

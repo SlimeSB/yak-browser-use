@@ -17,7 +17,7 @@ from utils.logging import get_logger
 logger = get_logger(__name__)
 
 
-PRESETS_DIR = Path(__file__).resolve().parent.parent.parent / "userdata" / "presets"
+_WORKSPACES_DIR = Path(__file__).resolve().parent.parent.parent / "userdata" / "workspaces"
 
 _checkpoints: dict[str, Path] = {}
 _processed_edits: set[str] = set()
@@ -63,10 +63,10 @@ async def edit_pipeline(
     if not safe_name or safe_name != pipeline_name.replace("\\", "/"):
         return f"Invalid pipeline name: {pipeline_name}"
 
-    preset_path = PRESETS_DIR / f"{safe_name}.pipeline.yaml"
+    pipeline_path = _WORKSPACES_DIR / safe_name / "pipeline.yaml"
 
-    if not preset_path.exists():
-        return f"Pipeline preset '{safe_name}' not found"
+    if not pipeline_path.exists():
+        return f"Pipeline '{safe_name}' not found"
 
     edit_id = kwargs.get("edit_id", f"edit_{int(time.time() * 1000)}")
     safe_edit_id = os.path.basename(edit_id.replace("\\", "/"))
@@ -77,15 +77,16 @@ async def edit_pipeline(
 
     if is_first:
         logger.info("First edit on %s", safe_name)
-        checkpoint_path = PRESETS_DIR / f"{safe_name}.pipeline.yaml.{edit_id}.orig"
-        checkpoint_path.write_text(preset_path.read_text(encoding="utf-8"), encoding="utf-8")
+        pipeline_path.parent.mkdir(parents=True, exist_ok=True)
+        checkpoint_path = pipeline_path.parent / f"{edit_id}.orig"
+        checkpoint_path.write_text(pipeline_path.read_text(encoding="utf-8"), encoding="utf-8")
         _checkpoints[edit_id] = checkpoint_path
         _processed_edits.add(edit_id)
         _edit_status[edit_id] = "pending"
         _edit_pipelines[edit_id] = safe_name
         _trim_oldest()
 
-    preset_path.write_text(content, encoding="utf-8")
+    pipeline_path.write_text(content, encoding="utf-8")
     logger.debug("Pipeline %s updated, edit_id=%s", safe_name, edit_id)
 
     checkpoint_path = _checkpoints.get(edit_id)

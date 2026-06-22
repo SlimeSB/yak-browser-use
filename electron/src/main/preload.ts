@@ -42,7 +42,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   deletePipeline: (name: string) => ipcRenderer.invoke('pipelines:delete', name),
 
   // Chat
-  chat: (message: string) => ipcRenderer.invoke('api:chat', { message }),
+  chat: (message: string, pipelineName?: string) => ipcRenderer.invoke('api:chat', { message, pipelineName }),
   chatReset: () => ipcRenderer.invoke('api:chat-reset'),
   chatCancel: () => ipcRenderer.invoke('api:chat-cancel'),
   getSession: () => ipcRenderer.invoke('api:session'),

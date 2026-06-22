@@ -1,11 +1,11 @@
-"""Pipeline tools — CRUD operations for pipeline preset files.
+"""Pipeline tools — CRUD operations for pipeline files.
 
 Provides load, list, update_step, add_step, remove_step, and create
 functions. Read operations return structured summaries. Write operations
 reuse tools/edit_pipeline.py for checkpoint + diff + WebSocket safety.
 
-All public functions are async to match the dispatch pattern in
-tool_executor.py, even though they perform synchronous I/O internally.
+All storage is under workspaces/<name>/ so the pipeline YAML lives
+alongside its runs, versions, tools, and checkpoints.
 """
 
 from __future__ import annotations
@@ -21,7 +21,7 @@ from utils.logging import get_logger
 
 logger = get_logger(__name__)
 
-PRESETS_DIR = Path(__file__).resolve().parent.parent.parent.parent / "userdata" / "presets"
+_WORKSPACES_DIR = Path(__file__).resolve().parent.parent.parent.parent / "userdata" / "workspaces"
 
 _VALID_UPDATE_KEYS = frozenset({
     "browser_ops", "tool_name", "goal_description", "description", "depends_on", "params",
@@ -32,13 +32,13 @@ def _resolve_pipeline_path(pipeline_name: str) -> Path:
     safe_name = PurePosixPath(pipeline_name).name
     if not safe_name or safe_name != pipeline_name.replace("\\", "/"):
         raise ValueError(f"Invalid pipeline name: {pipeline_name}")
-    return PRESETS_DIR / f"{safe_name}.pipeline.yaml"
+    return _WORKSPACES_DIR / safe_name / "pipeline.yaml"
 
 
 def _load_pipeline_yaml(pipeline_name: str) -> PipelineYaml:
     path = _resolve_pipeline_path(pipeline_name)
     if not path.exists():
-        raise FileNotFoundError(f"Pipeline preset '{pipeline_name}' not found")
+        raise FileNotFoundError(f"Pipeline '{pipeline_name}' not found")
     raw = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
     if not isinstance(raw, dict):
         raise ValueError(f"Pipeline '{pipeline_name}' is not a valid YAML mapping")
@@ -114,21 +114,26 @@ def _step_type(step: StepYaml) -> str:
 
 
 async def pipeline_list(**kwargs) -> str:
-    if not PRESETS_DIR.exists():
+    if not _WORKSPACES_DIR.exists():
         return json.dumps({"ok": True, "presets": []})
 
     presets = []
-    for f in sorted(PRESETS_DIR.glob("*.pipeline.yaml")):
-        name = f.stem.removesuffix(".pipeline")
+    for d in sorted(_WORKSPACES_DIR.iterdir()):
+        if not d.is_dir() or d.name.startswith("."):
+            continue
+        pipe_path = d / "pipeline.yaml"
+        if not pipe_path.exists():
+            continue
+        name = d.name
         try:
-            raw = yaml.safe_load(f.read_text(encoding="utf-8")) or {}
+            raw = yaml.safe_load(pipe_path.read_text(encoding="utf-8")) or {}
             if not isinstance(raw, dict):
                 raise ValueError("not a mapping")
             desc = raw.get("description", "")
             steps = raw.get("steps", [])
             step_count = len(steps) if isinstance(steps, list) else 0
         except Exception:
-            logger.warning("pipeline_list: failed to parse %s", f, exc_info=True)
+            logger.warning("pipeline_list: failed to parse %s", pipe_path, exc_info=True)
             desc = "(parse error)"
             step_count = 0
         presets.append({
@@ -326,7 +331,7 @@ async def pipeline_create(
     except ValueError as e:
         return json.dumps({"ok": False, "error": str(e)})
 
-    safe_name = path.stem.removesuffix(".pipeline")
+    safe_name = path.parent.name
 
     step_models = []
     for s in steps:
@@ -344,7 +349,7 @@ async def pipeline_create(
     except Exception as e:
         return json.dumps({"ok": False, "error": f"Pipeline validation failed: {e}"})
 
-    PRESETS_DIR.mkdir(parents=True, exist_ok=True)
+    path.parent.mkdir(parents=True, exist_ok=True)
     content = _dump_pipeline_yaml(pipeline)
 
     try:
@@ -368,7 +373,7 @@ async def pipeline_compile(
     except ValueError as e:
         return json.dumps({"ok": False, "error": str(e)})
 
-    safe_name = path.stem.removesuffix(".pipeline")
+    safe_name = path.parent.name
 
     from api.state import engine_state
 

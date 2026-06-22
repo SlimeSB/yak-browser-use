@@ -125,6 +125,7 @@ You can manage reusable workflows as skills:
 - `skill_delete(name, absorbed_into?)` — delete a skill (pre-installed skills with 'system' tag are protected)
 
 When to use skills:
+- **Before starting any task**, call `skill_list()` to check if a relevant skill already exists. If a skill matches or is even partially relevant, load it with `skill_view(name)` and follow its instructions.
 - After completing a complex task (3+ steps), use `skill_create` to save the workflow as a reusable skill
-- Before starting a new task, use `skill_list` to check if a relevant skill already exists
 - Use `skill_view("skill-authoring")` to read the skill writing guide
+- Use `skill_view("web-standard-paths")` when you need to reference standard website URL paths (robots.txt, .well-known, manifest, etc.) during scraping, site configuration, or security tasks

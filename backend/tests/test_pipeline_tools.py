@@ -53,7 +53,7 @@ SAMPLE_PIPELINE = {
 @pytest.fixture
 def temp_presets_dir(tmp_path, monkeypatch):
     monkeypatch.setattr(
-        "engine._harness.pipeline_tools.PRESETS_DIR",
+        "engine._harness.pipeline_tools._WORKSPACES_DIR",
         tmp_path,
     )
     return tmp_path
@@ -61,16 +61,18 @@ def temp_presets_dir(tmp_path, monkeypatch):
 
 @pytest.fixture
 def sample_pipeline_file(temp_presets_dir):
-    path = temp_presets_dir / "test_pipeline.pipeline.yaml"
+    path = temp_presets_dir / "test_pipeline" / "pipeline.yaml"
+    path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(yaml.dump(SAMPLE_PIPELINE, default_flow_style=False, allow_unicode=True, sort_keys=False), encoding="utf-8")
     return path
 
 
 def _mock_write_via_edit():
-    from engine._harness.pipeline_tools import PRESETS_DIR as pd
+    from engine._harness.pipeline_tools import _WORKSPACES_DIR as wd
 
     async def _fake_edit(pipeline_name, content, explanation=""):
-        path = pd / f"{pipeline_name}.pipeline.yaml"
+        path = wd / pipeline_name / "pipeline.yaml"
+        path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(content, encoding="utf-8")
         return "ok"
 
@@ -118,7 +120,8 @@ async def test_pipeline_load_empty_name():
 
 @pytest.mark.asyncio
 async def test_pipeline_load_corrupted(temp_presets_dir):
-    path = temp_presets_dir / "corrupt.pipeline.yaml"
+    path = temp_presets_dir / "corrupt" / "pipeline.yaml"
+    path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(": invalid yaml: :", encoding="utf-8")
     result = await pipeline_load(pipeline_name="corrupt")
     data = json.loads(result)
@@ -148,7 +151,8 @@ async def test_pipeline_list_with_files(sample_pipeline_file):
 
 @pytest.mark.asyncio
 async def test_pipeline_list_partial_corrupt(temp_presets_dir, sample_pipeline_file):
-    corrupt = temp_presets_dir / "corrupt.pipeline.yaml"
+    corrupt = temp_presets_dir / "corrupt" / "pipeline.yaml"
+    corrupt.parent.mkdir(parents=True, exist_ok=True)
     corrupt.write_text(": bad yaml", encoding="utf-8")
     result = await pipeline_list()
     data = json.loads(result)
@@ -482,7 +486,8 @@ async def test_pipeline_remove_last_step(temp_presets_dir):
             {"name": "only", "description": "The only step", "browser_ops": [{"goto": "x"}]},
         ],
     }
-    path = temp_presets_dir / "single.pipeline.yaml"
+    path = temp_presets_dir / "single" / "pipeline.yaml"
+    path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(yaml.dump(single_step, default_flow_style=False, allow_unicode=True, sort_keys=False), encoding="utf-8")
 
     result = await pipeline_remove_step(
@@ -511,7 +516,7 @@ async def test_pipeline_create(temp_presets_dir):
     data = json.loads(result)
     assert data["ok"] is True
 
-    path = temp_presets_dir / "new_pipeline.pipeline.yaml"
+    path = temp_presets_dir / "new_pipeline" / "pipeline.yaml"
     assert path.exists()
 
     raw = yaml.safe_load(path.read_text(encoding="utf-8"))
@@ -571,7 +576,8 @@ async def test_pipeline_create_type_conflict(temp_presets_dir):
 
 def test_resolve_pipeline_path():
     path = _resolve_pipeline_path("my_pipeline")
-    assert path.name == "my_pipeline.pipeline.yaml"
+    assert path.name == "pipeline.yaml"
+    assert path.parent.name == "my_pipeline"
 
 
 def test_resolve_pipeline_path_invalid():

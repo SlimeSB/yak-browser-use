@@ -386,14 +386,14 @@ app.whenReady().then(async () => {
   });
 
   // Chat endpoints
-  ipcMain.handle('api:chat', async (_event, { message }: { message: string }) => {
-    logger.debug('IPC: api:chat called');
+  ipcMain.handle('api:chat', async (_event, { message, pipelineName }: { message: string, pipelineName?: string }) => {
+    logger.debug('IPC: api:chat called pipelineName=%s', pipelineName || '(none)');
     const ac = new AbortController();
     chatAbortController = ac;
     try {
       return await _apiFetch('/api/chat', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message }),
+        body: JSON.stringify({ message, pipeline_name: pipelineName }),
       }, 'api:chat', ac.signal);
     } finally {
       if (chatAbortController === ac) chatAbortController = null;

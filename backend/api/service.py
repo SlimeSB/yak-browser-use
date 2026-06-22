@@ -23,7 +23,47 @@ logger = get_logger(__name__)
 # Default session directory
 _DATA_DIR = Path(__file__).resolve().parent.parent.parent / "userdata"
 _SESSIONS_DIR = _DATA_DIR / "sessions"
-_PRESETS_DIR = _DATA_DIR / "presets"
+_WORKSPACES_DIR = _DATA_DIR / "workspaces"
+
+
+def _build_pipeline_context(pipeline_name: str) -> str | None:
+    """Build a markdown snippet describing the currently selected pipeline.
+
+    Injects pipeline name, goal, and step names so the agent knows
+    which YAML the user is viewing and can operate on it by default.
+    """
+    import yaml
+
+    pipe_path = _WORKSPACES_DIR / pipeline_name / "pipeline.yaml"
+    if not pipe_path.exists():
+        logger.info("Pipeline %s not found for context injection", pipeline_name)
+        return None
+
+    try:
+        content = pipe_path.read_text(encoding="utf-8")
+        data = yaml.safe_load(content)
+        if not isinstance(data, dict):
+            return None
+
+        name = data.get("name", pipeline_name)
+        goal = data.get("goal", data.get("description", ""))
+        steps = data.get("steps", [])
+
+        lines = [f"## 当前选中的 Pipeline: {name}"]
+        if goal:
+            lines.append(f"目标: {goal}")
+        if steps:
+            lines.append("")
+            lines.append("### 步骤列表")
+            for i, step in enumerate(steps):
+                step_name = step.get("name") if isinstance(step, dict) else str(step)
+                lines.append(f"- {step_name or f'step_{i}'}")
+        lines.append("")
+        lines.append("你可以使用 pipeline_* 工具对此 pipeline 进行操作。")
+        return "\n".join(lines)
+    except Exception as exc:
+        logger.warning("Failed to load pipeline %s context: %s", pipeline_name, exc)
+        return None
 
 
 @dataclass
@@ -134,6 +174,11 @@ class Service:
 
             system_prompt = build_system_prompt()
 
+            if pipeline_name and pipeline_name != "chat":
+                pipeline_ctx = _build_pipeline_context(pipeline_name)
+                if pipeline_ctx:
+                    system_prompt += "\n\n" + pipeline_ctx
+
             def _stream_cb(event: dict) -> None:
                 event["session_id"] = session.session_id
                 self._push_event(event)
@@ -200,21 +245,24 @@ class Service:
             raise APIError(f"Failed to compile pipeline.yaml: {e}")
 
     def list_presets(self) -> list[dict]:
-        """List saved preset pipelines."""
-        presets_dir = _PRESETS_DIR
-        if not presets_dir.exists():
+        """List saved pipelines from workspaces/."""
+        if not _WORKSPACES_DIR.exists():
             return []
         presets: list[dict] = []
-        for f in sorted(presets_dir.glob("*.pipeline.yaml"), key=lambda p: p.stat().st_mtime, reverse=True):
+        for d in sorted(_WORKSPACES_DIR.iterdir()):
+            if not d.is_dir() or d.name.startswith("."):
+                continue
+            pipe_path = d / "pipeline.yaml"
+            if not pipe_path.exists():
+                continue
             try:
-                name = f.stem.replace(".pipeline", "")
                 presets.append({
-                    "name": name,
-                    "path": str(f),
-                    "modified": f.stat().st_mtime,
+                    "name": d.name,
+                    "path": str(pipe_path),
+                    "modified": pipe_path.stat().st_mtime,
                 })
             except Exception:
-                logger.warning("Failed to stat preset file for %s", f, exc_info=True)
+                logger.warning("Failed to stat pipeline in %s", d, exc_info=True)
         return presets
 
     # ── Events ──────────────────────────────────────────────────────
@@ -265,25 +313,25 @@ class Service:
         import os
         import time
 
-        presets_dir = _PRESETS_DIR
-        preset_path = presets_dir / f"{pipeline_name}.pipeline.yaml"
+        workspace_dir = _WORKSPACES_DIR / pipeline_name
+        pipeline_path = workspace_dir / "pipeline.yaml"
 
         edit_id = f"auto_{session_id}"
-        original = preset_path.read_text(encoding="utf-8") if preset_path.exists() else ""
+        original = pipeline_path.read_text(encoding="utf-8") if pipeline_path.exists() else ""
 
         if original.strip() == pipeline_text.strip():
             return
 
         # Save checkpoint
-        checkpoint_path = presets_dir / f"{pipeline_name}.pipeline.yaml.{edit_id}.orig"
-        presets_dir.mkdir(parents=True, exist_ok=True)
-        if preset_path.exists():
+        checkpoint_path = workspace_dir / f"{edit_id}.orig"
+        workspace_dir.mkdir(parents=True, exist_ok=True)
+        if pipeline_path.exists():
             checkpoint_path.write_text(original, encoding="utf-8")
         else:
             checkpoint_path.write_text("", encoding="utf-8")
 
         # Write new content
-        preset_path.write_text(pipeline_text, encoding="utf-8")
+        pipeline_path.write_text(pipeline_text, encoding="utf-8")
 
         # Compute diff
         diff_lines = list(difflib.unified_diff(
