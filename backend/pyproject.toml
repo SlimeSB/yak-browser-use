@@ -2,8 +2,21 @@
 name = "yak-browser-use"
 version = "0.1.0"
 description = "A clean, learnable browser automation framework — Chat mode + Preset replay via Playwright CDP"
-readme = "../README.md"
+readme = "README.md"
 requires-python = ">=3.12"
+authors = [
+    { name = "SlimeSB", email = "x56277534@gmail.com" },
+]
+license = "MIT"
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Internet :: WWW/HTTP :: Browsers",
+    "Topic :: Software Development :: Testing",
+]
 dependencies = [
     "aiohttp>=3.9.0",
     "ddddocr>=1.6.1",
@@ -17,6 +30,11 @@ dependencies = [
     "uvicorn[standard]>=0.30.0",
     "websockets==15.0.1",
 ]
+
+[project.urls]
+Homepage = "https://github.com/SlimeSB/yak-browser-use"
+Source = "https://github.com/SlimeSB/yak-browser-use"
+BugTracker = "https://github.com/SlimeSB/yak-browser-use/issues"
 
 [project.optional-dependencies]
 dev = [
@@ -33,5 +51,12 @@ dev = [
     "pytest-asyncio>=1.4.0",
 ]
 
+[tool.setuptools.packages.find]
+include = ["api*", "cdp*", "cli*", "compiler*", "engine*", "llm*", "params*", "prompts*", "static*", "tools*", "utils*", "workspace*"]
+
+[tool.setuptools.package-data]
+static = ["**/*"]
+prompts = ["**/*"]
+
 [project.scripts]
-yak-browser-use = "backend.cli.web:main"
+yak-browser-use = "cli.web:main"
