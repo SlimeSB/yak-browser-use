@@ -79,6 +79,9 @@ export default function App() {
 
   const [pipelineEditor, setPipelineEditor] = useState('');
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const [sessions, setSessions] = useState<Array<{ session_id: string; display_name?: string | null; created_at: string; message_count: number; status: string }>>([]);
+  const [currentSessionId, setCurrentSessionId] = useState<string>('');
+  const [loadingSession, setLoadingSession] = useState(false);
 
   useEffect(() => {
     const states = streamStatesRef.current;
@@ -103,11 +106,55 @@ export default function App() {
     }
   }, [chatMessages]);
 
+  const loadSessions = useCallback(async (pipelineName: string) => {
+    try {
+      const r = await window.electronAPI.listSessions(pipelineName);
+      if (r.sessions) {
+        setSessions(r.sessions);
+        if (r.sessions.length > 0) {
+          setCurrentSessionId(r.sessions[0].session_id);
+        } else {
+          setCurrentSessionId('');
+        }
+      }
+    } catch (e) {
+      console.error('listSessions failed: %s', String(e));
+      setSessions([]);
+      setCurrentSessionId('');
+    }
+  }, []);
+
+  const switchPipeline = useCallback(async (pipelineName: string) => {
+    setActivePreset(pipelineName);
+    try {
+      const r = await window.electronAPI.switchSession(pipelineName);
+      setChatMessages([]);
+      setCurrentSessionId('');
+      if (r.sessions) {
+        setSessions(r.sessions);
+        if (r.sessions.length > 0) {
+          setCurrentSessionId(r.sessions[0].session_id);
+        }
+      } else {
+        setSessions([]);
+      }
+    } catch (e) {
+      console.error('switchSession failed: %s', String(e));
+      setSessions([]);
+      setChatMessages([]);
+    }
+  }, []);
+
   useEffect(() => {
-    window.electronAPI.listPipelines().then(r => {
+    window.electronAPI.listPipelines().then(async r => {
       if (r.pipelines && r.pipelines.length > 0) {
         setPipelines(r.pipelines);
-        if (!activePreset) setActivePreset(r.pipelines[0].name);
+        const initial = r.pipelines[0].name;
+        setActivePreset(initial);
+        await loadSessions(initial);
+      } else {
+        // No pipelines — try restoring __chat__ session
+        await loadSessions('__chat__');
       }
     }).catch((e) => { console.error('listPipelines failed: %s', String(e)); });
   }, []);
@@ -123,6 +170,12 @@ export default function App() {
   useEffect(() => {
     setPendingEdits([]);
   }, [activePreset]);
+
+  // Sync sessions when activePreset changes (from pipeline list click)
+  useEffect(() => {
+    if (!activePreset) return;
+    loadSessions(activePreset);
+  }, [activePreset, loadSessions]);
 
   useEffect(() => {
     const preset = pipelines.find(p => p.name === activePreset);
@@ -685,7 +738,7 @@ export default function App() {
           connected={connected}
           pipelines={pipelines}
           activePreset={activePreset}
-          onPresetChange={setActivePreset}
+          onPresetChange={switchPipeline}
           pipelineEditor={pipelineEditor}
           onPipelineEditorChange={setPipelineEditor}
           onRefreshPipeline={refreshPipeline}
@@ -695,6 +748,40 @@ export default function App() {
           onDeletePipeline={handleDeletePipeline}
           reversed={chatLayoutReversed}
           theme={theme}
+          sessions={sessions}
+          currentSessionId={currentSessionId}
+          loadingSession={loadingSession}
+          onNewSession={async () => {
+            setLoadingSession(true);
+            try {
+              const r = await window.electronAPI.newSession(activePreset);
+              if (r.session_id) {
+                setCurrentSessionId(r.session_id);
+                setChatMessages([]);
+                // Refresh session list
+                const list = await window.electronAPI.listSessions(activePreset);
+                if (list.sessions) setSessions(list.sessions);
+              }
+            } catch (e) {
+              console.error('newSession failed: %s', String(e));
+            } finally {
+              setLoadingSession(false);
+            }
+          }}
+          onSelectSession={async (sessionId: string) => {
+            setLoadingSession(true);
+            try {
+              const r = await window.electronAPI.getSessionData(activePreset, sessionId);
+              if (r.session) {
+                setCurrentSessionId(sessionId);
+                setChatMessages(r.session.messages || []);
+              }
+            } catch (e) {
+              console.error('getSessionData failed: %s', String(e));
+            } finally {
+              setLoadingSession(false);
+            }
+          }}
         />
       </div>
 

@@ -5,6 +5,14 @@ import remarkGfm from 'remark-gfm';
 import type { ChatMessage, PipelineMeta, PendingEdit } from '../../types';
 import MonacoYamlEditor from '../editor/MonacoYamlEditor';
 
+interface SessionMeta {
+  session_id: string;
+  display_name?: string | null;
+  created_at: string;
+  message_count: number;
+  status: string;
+}
+
 interface ChatTabProps {
   messages: ChatMessage[];
   setMessages: React.Dispatch<React.SetStateAction<ChatMessage[]>>;
@@ -21,6 +29,11 @@ interface ChatTabProps {
   onDeletePipeline?: (name: string) => void;
   reversed?: boolean;
   theme?: string;
+  sessions?: SessionMeta[];
+  currentSessionId?: string;
+  loadingSession?: boolean;
+  onNewSession?: () => void;
+  onSelectSession?: (sessionId: string) => void;
 }
 
 export default function ChatTab({
@@ -30,6 +43,7 @@ export default function ChatTab({
   pendingEdit, onConfirmEdit, onRevertEdit,
   onDeletePipeline,
   reversed, theme,
+  sessions, currentSessionId, loadingSession, onNewSession, onSelectSession,
 }: ChatTabProps) {
   const { t } = useTranslation();
   const [input, setInput] = useState('');
@@ -213,9 +227,45 @@ export default function ChatTab({
     </div>
   );
 
+  const formatSessionLabel = (s: SessionMeta): string => {
+    try {
+      const datePart = s.created_at.slice(0, 16).replace('T', ' ');
+      return `${datePart} (${s.message_count})`;
+    } catch {
+      return s.session_id.slice(-8);
+    }
+  };
+
   return (
     <div className="chat-layout">
       <div className="chat-body" ref={bodyRef} style={{ flexDirection: reversed ? 'row-reverse' : 'row' }}>
+        <div className="chat-session-sidebar">
+          <div className="chat-session-header">
+            <span className="chat-session-title">{t('chat.sessions', 'Sessions')}</span>
+            <button
+              className="btn btn-small btn-primary"
+              onClick={onNewSession}
+              disabled={loadingSession}
+              title={t('chat.newSession', 'New Session')}
+            >
+              +
+            </button>
+          </div>
+          <div className="chat-session-list">
+            {(!sessions || sessions.length === 0) && (
+              <div className="chat-session-empty">{t('chat.noSessions', 'No sessions')}</div>
+            )}
+            {sessions?.map(s => (
+              <div
+                key={s.session_id}
+                className={`chat-session-item ${currentSessionId === s.session_id ? 'active' : ''}`}
+                onClick={() => onSelectSession?.(s.session_id)}
+              >
+                <span className="chat-session-label">{formatSessionLabel(s)}</span>
+              </div>
+            ))}
+          </div>
+        </div>
         <div className="chat-left" style={{ width: `${splitRatio}%`, flex: 'none' }}>
           <div className="chat-header">
             <div className="chat-header-left">

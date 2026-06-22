@@ -412,9 +412,36 @@ app.whenReady().then(async () => {
     return _apiFetch('/api/chat/cancel', { method: 'POST' }, 'api:chat-cancel');
   });
 
-  ipcMain.handle('api:session', async () => {
+  ipcMain.handle('api:session', async (_event, pipeline?: string) => {
     logger.debug('IPC: api:session called');
-    return _apiFetch('/api/session', {}, 'api:session');
+    const query = pipeline ? `?pipeline=${encodeURIComponent(pipeline)}` : '';
+    return _apiFetch(`/api/session${query}`, {}, 'api:session');
+  });
+
+  ipcMain.handle('api:session-new', async (_event, pipelineName: string) => {
+    logger.debug('IPC: api:session-new pipeline=%s', pipelineName);
+    return _apiFetch('/api/session/new', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ pipeline_name: pipelineName }),
+    }, 'api:session-new');
+  });
+
+  ipcMain.handle('api:session-switch', async (_event, pipelineName: string) => {
+    logger.debug('IPC: api:session-switch pipeline=%s', pipelineName);
+    return _apiFetch('/api/session/switch', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ pipeline_name: pipelineName }),
+    }, 'api:session-switch');
+  });
+
+  ipcMain.handle('api:session-list', async (_event, pipelineName: string) => {
+    logger.debug('IPC: api:session-list pipeline=%s', pipelineName);
+    return _apiFetch(`/api/session/${encodeURIComponent(pipelineName)}/list`, {}, 'api:session-list');
+  });
+
+  ipcMain.handle('api:session-get', async (_event, pipelineName: string, sessionId: string) => {
+    logger.debug('IPC: api:session-get pipeline=%s session=%s', pipelineName, sessionId);
+    return _apiFetch(`/api/session/${encodeURIComponent(pipelineName)}/${encodeURIComponent(sessionId)}`, {}, 'api:session-get');
   });
 
   ipcMain.handle('api:presets-list', async () => {

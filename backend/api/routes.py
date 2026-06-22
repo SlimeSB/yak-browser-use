@@ -1044,10 +1044,10 @@ def register_all_routes(app: FastAPI) -> None:
             raise ServerError(str(exc))
 
     @app.get("/api/session")
-    async def get_session() -> JSONResponse:
-        """Get the current session state."""
+    async def get_session(pipeline: str = Query("")) -> JSONResponse:
+        """Get the current session state for a pipeline."""
         service = await _get_service()
-        session = service.get_session()
+        session = service.get_session(pipeline if pipeline else None)
         if session is None:
             return JSONResponse({"session": None})
         return JSONResponse({
@@ -1058,6 +1058,41 @@ def register_all_routes(app: FastAPI) -> None:
                 "message_count": len(session.messages),
             },
         })
+
+    @app.post("/api/session/new")
+    async def session_new(request: dict) -> JSONResponse:
+        """Create a new session for a pipeline."""
+        service = await _get_service()
+        pipeline_name = request.get("pipeline_name", "")
+        result = service.new_session(pipeline_name)
+        return JSONResponse(result)
+
+    @app.post("/api/session/switch")
+    async def session_switch(request: dict) -> JSONResponse:
+        """Switch active pipeline, save current session, load target."""
+        service = await _get_service()
+        pipeline_name = request.get("pipeline_name", "")
+        sessions = service.switch_session(pipeline_name)
+        return JSONResponse({"sessions": sessions})
+
+    @app.get("/api/session/{pipeline_name}/list")
+    async def session_list(pipeline_name: str) -> JSONResponse:
+        """List all sessions for a pipeline."""
+        from workspace.session_store import SessionStore
+        store = SessionStore(pipeline_name)
+        store.ensure_session_dir()
+        sessions = store.list_sessions()
+        return JSONResponse({"sessions": sessions})
+
+    @app.get("/api/session/{pipeline_name}/{session_id}")
+    async def session_get(pipeline_name: str, session_id: str) -> JSONResponse:
+        """Get full session data (including messages) by ID."""
+        from workspace.session_store import SessionStore
+        store = SessionStore(pipeline_name)
+        data = store.load_session(session_id)
+        if data is None:
+            return JSONResponse({"session": None})
+        return JSONResponse({"session": data})
 
     # =================================================================
     # PRESET — save/load/list pipeline presets

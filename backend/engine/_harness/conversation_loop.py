@@ -95,6 +95,7 @@ class Agent:
         guardrail_config: object | None = None,
         preset_mode: bool = False,
         shared_store: dict | None = None,
+        on_turn_complete: Callable | None = None,
     ):
         self._llm_call = llm_call
         self._system_prompt = system_prompt
@@ -109,6 +110,7 @@ class Agent:
         self._guardrail_config = guardrail_config
         self._preset_mode = preset_mode
         self._shared_store = shared_store or {}
+        self._on_turn_complete = on_turn_complete
 
         self._guardrail_state = ToolCallGuardrailState()
         self._state = AgentRunState()
@@ -233,6 +235,10 @@ class Agent:
             logger.debug("conversation_loop: turn %d text response (%d chars)",
                          self._state.turn_count, len(final_response or ""))
 
+        # Notify caller that a turn completed (for persistence etc.)
+        if self._on_turn_complete:
+            self._on_turn_complete()
+
     def _check_exit(self) -> bool:
         if self._state.interrupted:
             return True
@@ -270,6 +276,7 @@ async def run_conversation_loop(
     guardrail_config: object | None = None,
     preset_mode: bool = False,
     shared_store: dict | None = None,
+    on_turn_complete: Callable | None = None,
 ) -> ConversationResult:
     agent = Agent(
         llm_call=llm_call,
@@ -285,6 +292,7 @@ async def run_conversation_loop(
         guardrail_config=guardrail_config,
         preset_mode=preset_mode,
         shared_store=shared_store,
+        on_turn_complete=on_turn_complete,
     )
     return await agent.run()
 

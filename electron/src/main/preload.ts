@@ -45,7 +45,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
   chat: (message: string, pipelineName?: string) => ipcRenderer.invoke('api:chat', { message, pipelineName }),
   chatReset: () => ipcRenderer.invoke('api:chat-reset'),
   chatCancel: () => ipcRenderer.invoke('api:chat-cancel'),
-  getSession: () => ipcRenderer.invoke('api:session'),
+  getSession: (pipeline?: string) => ipcRenderer.invoke('api:session', pipeline),
+  newSession: (pipelineName: string) => ipcRenderer.invoke('api:session-new', pipelineName),
+  switchSession: (pipelineName: string) => ipcRenderer.invoke('api:session-switch', pipelineName),
+  listSessions: (pipelineName: string) => ipcRenderer.invoke('api:session-list', pipelineName),
+  getSessionData: (pipelineName: string, sessionId: string) => ipcRenderer.invoke('api:session-get', pipelineName, sessionId),
   listPresets: () => ipcRenderer.invoke('api:presets-list'),
 
   // Provider config
