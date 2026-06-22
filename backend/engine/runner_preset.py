@@ -36,6 +36,7 @@ from workspace.path_guard import PathGuard
 
 logger = get_logger(__name__)
 
+_MAX_PLANNER_FAILURES = 3
 
 # ── helpers ──
 
@@ -661,7 +662,7 @@ async def run_pipeline(
                 # ── Tier 2: Local Planner ──
                 if error_code in ("BROWSER_ERROR", "TIMEOUT_ERROR", "RUNTIME_ERROR") and llm_call is not None:
                     planner_failures += 1
-                    if planner_failures > 3:
+                    if planner_failures > _MAX_PLANNER_FAILURES:
                         logger.error(
                             "  ✗ %s: Local Planner failed %d times consecutively, terminal failure",
                             ctx.current_step, planner_failures,

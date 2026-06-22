@@ -469,26 +469,6 @@ async def execute_tool(
     return result
 
 
-async def execute_goal(
-    description: str,
-    cdp_helpers: object,
-    pipeline_name: str,
-    tools_dir: Path,
-    frontmatter: dict | None = None,
-    pipeline_path: Path | None = None,
-    system_prompt: str = "",
-) -> dict:
-    """Execute a goal — stub that delegates to main LLM via todo + browser_*.
-
-    Goal execution no longer spawns a browser-use Agent. The main LLM uses
-    todo + browser_* tools to execute complex tasks step by step.
-    """
-    return {
-        "ok": True,
-        "result": "Goal execution delegated to main LLM via todo + browser_* tools",
-    }
-
-
 # ──────────────────────────────────────────────────────────────
 #  Programmatic check (step verification)
 # ──────────────────────────────────────────────────────────────
