@@ -997,12 +997,28 @@ class PlaywrightBridge:
         except Exception:
             logger.warning("ensure_highlights failed for %s", pg.url[:60] if pg.url else "(no url)", exc_info=True)
 
+    async def _snapshot_current_page(self) -> dict:
+        """Snapshot current page according to ``_highlight_mode``.
+
+        ``"a11y"`` → :meth:`a11y_snapshot` with automatic fallback to
+        :meth:`_progressive_snapshot` when the CDP Accessibility domain
+        is unavailable.  ``"progressive"`` → :meth:`_progressive_snapshot`.
+        """
+        if self._highlight_mode == "a11y":
+            try:
+                return await self.a11y_snapshot()
+            except A11yNotAvailable:
+                logger.debug("a11y_snapshot unavailable, falling back to progressive")
+                return await self._progressive_snapshot()
+        else:
+            return await self._progressive_snapshot()
+
     async def _auto_scan(self) -> None:
-        """Auto-scan current page with progressive snapshot."""
+        """Auto-scan current page — delegates to :meth:`_snapshot_current_page`."""
         try:
-            await self._progressive_snapshot()
+            await self._snapshot_current_page()
         except Exception:
-            logger.debug("_auto_scan: progressive snapshot failed", exc_info=True)
+            logger.debug("_auto_scan: snapshot failed", exc_info=True)
 
     async def _on_page_load(self, page: Page) -> None:
         """Page load / reload 后自动重注高亮 + 扫描。"""
@@ -1135,7 +1151,7 @@ class PlaywrightBridge:
                     if self._context and self._page not in self._context.pages:
                         if self._context.pages:
                             self._page = self._context.pages[0]
-                            await self._progressive_snapshot()
+                            await self._snapshot_current_page()
                         else:
                             self._page = None
                             return
