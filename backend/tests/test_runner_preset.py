@@ -77,14 +77,14 @@ class TestResolveStepUrls:
         steps = [
             {"name": "s1", "goal_description": "Visit {home} page"},
         ]
-        result = _resolve_step_urls(steps, {"home": "https://x.com"})
-        assert "https://x.com" in result[0]["goal_description"]
+        result = _resolve_step_urls(steps, {"home": "https://www.baidu.com"})
+        assert "https://www.baidu.com" in result[0]["goal_description"]
 
     def test_unknown_alias_left_untouched(self):
         steps = [
             {"name": "s1", "browser_ops": [{"type": "goto", "value": "{unknown}"}]},
         ]
-        result = _resolve_step_urls(steps, {"home": "https://x.com"})
+        result = _resolve_step_urls(steps, {"home": "https://www.baidu.com"})
         assert result[0]["browser_ops"][0]["value"] == "{unknown}"
 
     def test_does_not_mutate_input(self):
@@ -96,9 +96,9 @@ class TestResolveStepUrls:
         assert result[0]["browser_ops"][0]["value"] == "https://example.com"
 
     def test_empty_url_aliases(self):
-        steps = [{"name": "s1", "browser_ops": [{"type": "goto", "value": "https://x.com"}]}]
+        steps = [{"name": "s1", "browser_ops": [{"type": "goto", "value": "https://www.baidu.com"}]}]
         result = _resolve_step_urls(steps, {})
-        assert result[0]["browser_ops"][0]["value"] == "https://x.com"
+        assert result[0]["browser_ops"][0]["value"] == "https://www.baidu.com"
 
     def test_mixed_ops_some_aliased(self):
         steps = [
@@ -190,19 +190,20 @@ class TestCollectInputFiles:
 
 class TestRunPipeline:
     @pytest.mark.asyncio
-    async def test_empty_steps_returns_immediately(self):
+    async def test_empty_steps_returns_immediately(self, tmp_path):
         """Pipeline with no steps should complete immediately."""
         from yak_browser_use.engine.runner_preset import run_pipeline
 
         with (
             patch("yak_browser_use.engine.runner_preset.WorkspaceManager") as MockWM,
+            patch("yak_browser_use.engine.runner_preset._setup_run_logger", return_value=None),
             patch("yak_browser_use.engine.runner_preset.EventSink"),
         ):
             mock_wm = MagicMock()
-            mock_wm.root = Path("/mock/root")
-            mock_wm.versions_dir = Path("/mock/versions")
-            mock_wm.tools_dir = Path("/mock/tools")
-            mock_wm.create_run.return_value = Path("/mock/run_1")
+            mock_wm.root = tmp_path
+            mock_wm.versions_dir = tmp_path / "versions"
+            mock_wm.tools_dir = tmp_path / "tools"
+            mock_wm.create_run.return_value = tmp_path / "run_1"
             mock_wm.get_status.return_value = "running"
             mock_wm.get_latest_version.return_value = "v1"
             MockWM.return_value = mock_wm
@@ -219,11 +220,11 @@ class TestRunPipeline:
         assert mock_wm.set_status.call_count >= 1
 
     @pytest.mark.asyncio
-    async def test_browser_step_executes(self):
+    async def test_browser_step_executes(self, tmp_path):
         from yak_browser_use.engine.runner_preset import run_pipeline
 
         steps = [
-            {"name": "navigate", "browser_ops": [{"type": "goto", "value": "https://x.com"}]},
+            {"name": "navigate", "browser_ops": [{"type": "goto", "value": "https://www.baidu.com"}]},
         ]
 
         with (
@@ -236,10 +237,10 @@ class TestRunPipeline:
             patch("yak_browser_use.engine.runner_preset.EventSink") as MockEvents,
         ):
             mock_wm = MagicMock()
-            mock_wm.root = Path("/mock/root")
-            mock_wm.versions_dir = Path("/mock/versions")
-            mock_wm.tools_dir = Path("/mock/tools")
-            mock_wm.create_run.return_value = Path("/mock/run_1")
+            mock_wm.root = tmp_path
+            mock_wm.versions_dir = tmp_path / "versions"
+            mock_wm.tools_dir = tmp_path / "tools"
+            mock_wm.create_run.return_value = tmp_path / "run_1"
             mock_wm.get_status.return_value = "running"
             mock_wm.get_latest_version.return_value = "v1"
             MockWM.return_value = mock_wm
@@ -261,28 +262,33 @@ class TestRunPipeline:
             assert len(ctx.errors) == 0
 
     @pytest.mark.asyncio
-    async def test_cancelled_during_run(self):
+    async def test_cancelled_during_run(self, tmp_path):
         from yak_browser_use.engine.runner_preset import run_pipeline
 
         steps = [
-            {"name": "s1", "browser_ops": [{"type": "goto", "value": "https://x.com"}]},
+            {"name": "s1", "browser_ops": [{"type": "goto", "value": "https://www.baidu.com"}]},
+            {"name": "s2", "browser_ops": [{"type": "goto", "value": "https://www.baidu.com"}]},
         ]
 
         with (
             patch("yak_browser_use.engine.runner_preset.WorkspaceManager") as MockWM,
-            patch("yak_browser_use.engine.runner_preset.execute_browser_step", new_callable=AsyncMock),
+            patch("yak_browser_use.engine.runner_preset.execute_browser_step", new_callable=AsyncMock) as mock_exec,
+            patch("yak_browser_use.engine.runner_preset.write_step_json"),
+            patch("yak_browser_use.engine.runner_preset.sanitize_result", side_effect=lambda x: x),
             patch("yak_browser_use.engine.runner_preset._write_execution_tree"),
             patch("yak_browser_use.engine.runner_preset._setup_run_logger", return_value=None),
             patch("yak_browser_use.engine.runner_preset.EventSink") as MockEvents,
         ):
             mock_wm = MagicMock()
-            mock_wm.root = Path("/mock/root")
-            mock_wm.versions_dir = Path("/mock/versions")
-            mock_wm.tools_dir = Path("/mock/tools")
-            mock_wm.create_run.return_value = Path("/mock/run_1")
+            mock_wm.root = tmp_path
+            mock_wm.versions_dir = tmp_path / "versions"
+            mock_wm.tools_dir = tmp_path / "tools"
+            mock_wm.create_run.return_value = tmp_path / "run_1"
             mock_wm.get_status.side_effect = ["running", "cancelled"]
             mock_wm.get_latest_version.return_value = "v1"
             MockWM.return_value = mock_wm
+
+            mock_exec.return_value = {"status": "completed", "duration_ms": 100}
 
             mock_events = MagicMock()
             MockEvents.return_value = mock_events
@@ -294,3 +300,137 @@ class TestRunPipeline:
             )
 
             assert ctx is not None
+            # Pipeline was cancelled before executing second step
+            assert mock_events.emit_run_end.call_args[0][0] == "cancelled"
+
+    @pytest.mark.asyncio
+    async def test_no_bridge_fails(self, tmp_path):
+        """When cdp_helpers is None, browser step should fail with NO_BROWSER."""
+        from yak_browser_use.engine.runner_preset import run_pipeline
+
+        steps = [
+            {"name": "s1", "browser_ops": [{"type": "goto", "value": "https://www.baidu.com"}]},
+        ]
+
+        with (
+            patch("yak_browser_use.engine.runner_preset.WorkspaceManager") as MockWM,
+            patch("yak_browser_use.engine.runner_preset.write_step_json"),
+            patch("yak_browser_use.engine.runner_preset.sanitize_result", side_effect=lambda x: x),
+            patch("yak_browser_use.engine.runner_preset._write_execution_tree"),
+            patch("yak_browser_use.engine.runner_preset._setup_run_logger", return_value=None),
+            patch("yak_browser_use.engine.runner_preset.EventSink") as MockEvents,
+        ):
+            mock_wm = MagicMock()
+            mock_wm.root = tmp_path
+            mock_wm.versions_dir = tmp_path / "versions"
+            mock_wm.tools_dir = tmp_path / "tools"
+            mock_wm.create_run.return_value = tmp_path / "run_1"
+            mock_wm.get_status.return_value = "running"
+            mock_wm.get_latest_version.return_value = "v1"
+            MockWM.return_value = mock_wm
+
+            mock_events = MagicMock()
+            MockEvents.return_value = mock_events
+
+            ctx = await run_pipeline(
+                pipeline_name="no_bridge_test",
+                steps=steps,
+                cdp_helpers=None,
+            )
+
+            assert len(ctx.errors) == 1
+            assert ctx.errors[0]["code"] == "NO_BROWSER"
+
+    @pytest.mark.asyncio
+    async def test_browser_step_fails_terminally(self, tmp_path):
+        """Browser step with non-retryable error should fail terminally."""
+        from yak_browser_use.engine.runner_preset import run_pipeline
+
+        steps = [
+            {"name": "failing_step", "browser_ops": [{"type": "goto", "value": "https://www.baidu.com"}]},
+        ]
+
+        with (
+            patch("yak_browser_use.engine.runner_preset.WorkspaceManager") as MockWM,
+            patch("yak_browser_use.engine.runner_preset.execute_browser_step", new_callable=AsyncMock) as mock_exec,
+            patch("yak_browser_use.engine.runner_preset.write_step_json"),
+            patch("yak_browser_use.engine.runner_preset.sanitize_result", side_effect=lambda x: x),
+            patch("yak_browser_use.engine.runner_preset._write_execution_tree"),
+            patch("yak_browser_use.engine.runner_preset._setup_run_logger", return_value=None),
+            patch("yak_browser_use.engine.runner_preset.EventSink") as MockEvents,
+        ):
+            mock_wm = MagicMock()
+            mock_wm.root = tmp_path
+            mock_wm.versions_dir = tmp_path / "versions"
+            mock_wm.tools_dir = tmp_path / "tools"
+            mock_wm.create_run.return_value = tmp_path / "run_1"
+            mock_wm.get_status.return_value = "running"
+            mock_wm.get_latest_version.return_value = "v1"
+            MockWM.return_value = mock_wm
+
+            mock_exec.return_value = {"status": "failed", "error": {"code": "INPUT_ERROR", "message": "bad input"}}
+
+            mock_events = MagicMock()
+            MockEvents.return_value = mock_events
+
+            mock_cdp = MagicMock()
+            mock_cdp.bridge = MagicMock()
+
+            ctx = await run_pipeline(
+                pipeline_name="fail_test",
+                steps=steps,
+                cdp_helpers=mock_cdp,
+            )
+
+            assert len(ctx.errors) == 1
+            assert ctx.errors[0]["code"] == "INPUT_ERROR"
+
+    @pytest.mark.asyncio
+    async def test_browser_step_retry_then_fails(self, tmp_path):
+        """Browser step with retry should retry before terminal failure."""
+        from yak_browser_use.engine.runner_preset import run_pipeline
+
+        steps = [
+            {
+                "name": "retry_step",
+                "browser_ops": [{"type": "goto", "value": "https://www.baidu.com"}],
+                "params": {"max_retries": 1},
+            },
+        ]
+
+        with (
+            patch("yak_browser_use.engine.runner_preset.WorkspaceManager") as MockWM,
+            patch("yak_browser_use.engine.runner_preset.execute_browser_step", new_callable=AsyncMock) as mock_exec,
+            patch("yak_browser_use.engine.runner_preset.write_step_json"),
+            patch("yak_browser_use.engine.runner_preset.sanitize_result", side_effect=lambda x: x),
+            patch("yak_browser_use.engine.runner_preset._write_execution_tree"),
+            patch("yak_browser_use.engine.runner_preset._setup_run_logger", return_value=None),
+            patch("yak_browser_use.engine.runner_preset.EventSink") as MockEvents,
+        ):
+            mock_wm = MagicMock()
+            mock_wm.root = tmp_path
+            mock_wm.versions_dir = tmp_path / "versions"
+            mock_wm.tools_dir = tmp_path / "tools"
+            mock_wm.create_run.return_value = tmp_path / "run_1"
+            mock_wm.get_status.return_value = "running"
+            mock_wm.get_latest_version.return_value = "v1"
+            MockWM.return_value = mock_wm
+
+            mock_exec.return_value = {"status": "failed", "error": {"code": "BROWSER_ERROR", "message": "browser crashed"}}
+
+            mock_events = MagicMock()
+            MockEvents.return_value = mock_events
+
+            mock_cdp = MagicMock()
+            mock_cdp.bridge = MagicMock()
+
+            ctx = await run_pipeline(
+                pipeline_name="retry_test",
+                steps=steps,
+                cdp_helpers=mock_cdp,
+            )
+
+            assert len(ctx.errors) == 1
+            assert ctx.errors[0]["code"] == "BROWSER_ERROR"
+            # Original attempt + 1 retry = at least 2 executions
+            assert mock_exec.await_count >= 2
