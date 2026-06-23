@@ -16,6 +16,8 @@
 </p>
 
 <p align="center">
+  <img src="https://img.shields.io/pypi/v/yak-browser-use?style=flat-square&logo=pypi&label=PyPI" alt="PyPI">
+  <img src="https://img.shields.io/github/actions/workflow/status/SlimeSB/yak-browser-use/ci.yml?branch=main&style=flat-square&label=CI" alt="CI">
   <img src="https://img.shields.io/badge/python-%E2%89%A53.12-blue?style=flat-square&logo=python" alt="Python ≥3.12">
   <img src="https://img.shields.io/badge/license-MIT-green?style=flat-square" alt="MIT License">
   <img src="https://img.shields.io/badge/status-alpha-orange?style=flat-square" alt="Alpha">
@@ -71,6 +73,14 @@ Built on [Playwright](https://playwright.dev/) `connect_over_cdp()` and an OpenA
 
 ## Quick Start
 
+### One-command (no install required)
+
+```bash
+uvx yak-browser-use
+```
+
+Opens the Web UI in your browser — zero setup. The first run auto-installs the package and dependencies.
+
 ### Prerequisites
 
 | Dependency | Version | Install |
@@ -97,18 +107,16 @@ npm install                          # Install Electron frontend deps
 ### Start
 
 ```bash
-# CLI mode
+# Quickest — launch Web UI from PyPI (no local setup needed)
+uvx yak-browser-use
+
+# Or after local install:
 cd backend
-uv run python __main__.py --help
+uv run python -m yak_browser_use web      # Web UI (browser-based)
+uv run python -m yak_browser_use serve     # REST API server
+uv run python -m yak_browser_use --help    # All CLI commands
 
-# Start REST API server
-uv run python __main__.py serve --port 8080
-
-# Start Web UI (browser-based, no Electron needed)
-uv run python __main__.py web
-# Or one-command: uvx yak-browser-use
-
-# Start Electron desktop
+# Electron desktop (requires Node.js)
 cd electron
 npm run electron:dev
 ```
@@ -209,117 +217,85 @@ POST /api/run { pipeline: "..." }
 ## Project Structure
 
 ```
-yak-browser-use/
-├── __main__.py              # CLI entry (run/serve/logs)
-├── pyproject.toml            # Project config + deps
-│
-├── api/                      # FastAPI REST + WebSocket
-│   ├── routes.py             # Route registration
-│   ├── service.py            # Business logic
-│   ├── server.py             # Server lifecycle
-│   └── state.py / errors.py  # Engine state & error types
-│
-├── engine/                   # Core execution engine ★
-│   ├── agent.py              # Agent entry + streaming LLM call
-│   ├── runner.py             # Chat mode runner
-│   ├── runner_preset.py      # Preset mode orchestrator
-│   ├── executor.py           # Pipeline wrappers (browser/tool/goal)
-│   ├── ops.py                # Browser op dispatcher via BrowserBridge
-│   ├── scratchpad.py         # In-memory data cache
-│   ├── step_machine.py       # Pipeline DAG walker
-│   ├── eval_agent.py         # Eval Agent for verification
-│   ├── delivery.py / events.py / state.py
-│   ├── _param_resolver.py    # Templated param resolution
-│   │
-│   ├── _harness/             # Conversation loop infrastructure ★
-│   │   ├── conversation_loop.py   # Core agent turn loop
-│   │   ├── tools.py               # Tool definitions (browser_*/goal_run/…)
-│   │   ├── tool_executor.py       # Sequental dispatcher + shared_store
-│   │   ├── pipeline_tools.py      # Pipeline CRUD tools
-│   │   ├── pipeline_events.py     # Centralized WS event propagation
-│   │   ├── iteration_budget.py    # LLM turn budget control
-│   │   ├── tool_guardrails.py     # Tool call guardrails
-│   │   ├── turn_context.py        # Per-turn context (retry counters)
-│   │   ├── error_classifier.py    # Error classification
-│   │   ├── retry_utils.py         # Retry utilities
-│   │   └── skill_tools.py         # Skill injection
-│   │
-│   └── _lifecycle/           # Pipeline lifecycle management
-│       ├── guardian.py       # Approval gate + circuit breaker
-│       └── compensation.py   # Rollback / undo support
-│
-├── cdp/                      # Chrome DevTools Protocol layer ★
-│   ├── playwright_bridge.py  # PlaywrightBridge — unified driver
-│   │                        #   (health check / process watch / disconnect)
-│   ├── helpers.py            # CDPHelpers high-level API
-│   ├── protocols.py          # BrowserBridge protocol interface
-│   ├── profiles.py / session.py  # Profile & session management
-│   ├── discover.py           # Chrome discovery / connection
-│   └── launcher.py           # Chrome launch / port mgmt
-│
-├── compiler/                 # Pipeline compilation
-│   ├── models.py / schema.py # Data classes & Pydantic models
-│   ├── parser.py             # YAML parser
-│   ├── graph.py / resolver.py# DAG builder + dependency resolver
-│   ├── prepare.py            # Pre-execution step preparation
-│   ├── step_type.py          # Unified step type inference
-│   ├── diff.py               # Op diff computation
-│   ├── generator.py          # Handler prompt & code generation
-│
-├── tools/                    # Tool registry + implementations
-│   ├── registry.py           # ToolRegistry — central dispatch (43 tools)
-│   ├── adapters.py           # Tool data adaptation (csv↔json, field mapping)
-│   ├── captcha.py            # DOM-based CAPTCHA recognition (ddddocr)
-│   ├── file_read.py / file_write.py / format_convert.py
-│   ├── extract.py / data.py  # Data extraction & processing
-│   ├── todo.py / todo_store.py  # Todo list management
-│   ├── record_step.py        # Pipeline step recording
-│   ├── edit_pipeline.py      # Pipeline editing with rollback
-│   └── _path_utils.py        # Path traversal prevention
-│
-├── llm/                      # LLM client layer
-│   ├── client.py             # LLMClient — OpenAI-compatible adapter
-│   └── messages.py           # Message types (vendored OpenAI format)
-│
-├── prompts/                  # Prompt templates (Markdown)
-│   ├── _loader.py            # Prompt loader (load_prompt / build_system_prompt)
-│   ├── chat/system.md        # Chat mode system prompt (main)
-│   ├── eval_agent/           # Eval Agent prompts
-│   │   ├── system.md
-│   │   └── js_lib.js
-│   ├── guidance/             # Strategy & recovery guidance
-│   │   ├── tool_strategy.md  #   Tool selection strategy
-│   │   └── error_recovery.md #   Error recovery instructions
-│   ├── guardrails/           # Guardrail prompt fragments
-│   │   ├── blocked.md / exact_failure.md / no_progress.md
-│   │   └── same_tool_failure.md / warning_prefix.md
-│   ├── skill/                # System skills
-│   │   ├── goal-execution/SKILL.md
-│   │   ├── skill-authoring/SKILL.md
-│   │   └── web-standard-paths/SKILL.md
-│   ├── planner-plan.md / planner-expand.md
-│   ├── replan-on-failure.md / generate-handler.md
-│   └── _archived/            # Deprecated prompts
-│
-├── params/                   # Persistent parameter manager (ParamManager)
-├── workspace/                # Workspace management (manager/version/path/session)
-│   └── session_store.py      # Per-pipeline session persistence
-├── cli/                      # CLI (run.py / serve.py / logs.py / web.py)
-├── utils/                    # Utilities (browser/logging/tool_cdp/skill_loader/…)
-├── tests/                    # 800+ unit & integration tests
-│
-├── electron/                 # Electron desktop frontend
-│   └── src/
-│       └── renderer/         # React + Vite + Monaco Editor (diff)
-│
-├── docs/                     # Documentation
-│   └── architecture-overview.md  # Full architecture deep-dive
-│
-├── logo.png                  # Project logo
-├── install.bat               # Windows one-click installer
-├── run.bat                   # Quick launch script
-├── README.md                 # This file (English)
-└── README.zh-CN.md           # Chinese translation
+| yak-browser-use/
+| ├── backend/
+| │   ├── src/
+| │   │   └── yak_browser_use/        # All Python source code ★
+| │   │       ├── __main__.py         # CLI entry (run/serve/web/logs)
+| │   │       ├── pyproject.toml      # Project config + deps
+| │   │       │
+| │   │       ├── api/                # FastAPI REST + WebSocket
+| │   │       │   ├── routes.py       # Route registration
+| │   │       │   ├── service.py      # Business logic
+| │   │       │   ├── server.py       # Server lifecycle
+| │   │       │   └── state.py / errors.py
+| │   │       │
+| │   │       ├── engine/             # Core execution engine ★
+| │   │       │   ├── agent.py        # Agent entry + streaming LLM
+| │   │       │   ├── runner.py       # Chat mode runner
+| │   │       │   ├── runner_preset.py# Preset mode orchestrator
+| │   │       │   ├── executor.py     # Pipeline wrappers
+| │   │       │   ├── ops.py          # Browser op dispatcher
+| │   │       │   ├── scratchpad.py / step_machine.py
+| │   │       │   ├── eval_agent.py / delivery.py / events.py
+| │   │       │   ├── _param_resolver.py
+| │   │       │   │
+| │   │       │   ├── _harness/       # Conversation loop ★
+| │   │       │   │   ├── conversation_loop.py
+| │   │       │   │   ├── tools.py / tool_executor.py
+| │   │       │   │   ├── pipeline_tools.py / pipeline_events.py
+| │   │       │   │   ├── iteration_budget.py / turn_context.py
+| │   │       │   │   ├── tool_guardrails.py / error_classifier.py
+| │   │       │   │   ├── retry_utils.py / skill_tools.py
+| │   │       │   │
+| │   │       │   └── _lifecycle/     # Pipeline lifecycle
+| │   │       │       ├── guardian.py    # Approval gate + circuit breaker
+| │   │       │       └── compensation.py# Rollback / undo
+| │   │       │
+| │   │       ├── cdp/                # Chrome DevTools Protocol ★
+| │   │       │   ├── playwright_bridge.py  # Unified driver
+| │   │       │   ├── helpers.py / protocols.py
+| │   │       │   ├── profiles.py / session.py
+| │   │       │   ├── discover.py / launcher.py
+| │   │       │
+| │   │       ├── compiler/           # Pipeline compilation
+| │   │       │   ├── models.py / schema.py / parser.py
+| │   │       │   ├── graph.py / resolver.py / prepare.py
+| │   │       │   ├── diff.py / generator.py / step_type.py
+| │   │       │
+| │   │       ├── tools/              # Tool registry (43 tools)
+| │   │       │   ├── registry.py     # Central dispatch
+| │   │       │   ├── adapters.py / captcha.py
+| │   │       │   ├── file_read.py / file_write.py / format_convert.py
+| │   │       │   ├── extract.py / data.py
+| │   │       │   ├── todo.py / todo_store.py
+| │   │       │   ├── record_step.py / edit_pipeline.py
+| │   │       │   └── _path_utils.py
+| │   │       │
+| │   │       ├── llm/                # LLM client
+| │   │       ├── prompts/            # Prompt templates (Markdown)
+| │   │       ├── params/             # Persistent parameter manager
+| │   │       ├── workspace/          # Workspace management
+| │   │       ├── cli/                # CLI commands
+| │   │       ├── utils/              # Utilities
+| │   │       │   └── _path.py        # project_root() resolver
+| │   │       └── static/             # Web UI frontend (build artifact)
+| │   │
+| │   ├── tests/                      # 800+ unit & integration tests
+| │   ├── README.md                   # This file
+| │   └── uv.lock                     # Lockfile
+| │
+| ├── electron/                       # Electron desktop frontend
+| │   ├── src/renderer/               # React + Vite + Monaco Editor
+| │   ├── vite.web.config.ts          # Web build config → backend static/
+| │   └── package.json
+| │
+| ├── .github/workflows/              # CI/CD automation
+| │   ├── ci.yml                      # Test on push/PR
+| │   └── release.yml                 # Publish on tag / manual
+| │
+| ├── logo.png / install.bat / run.bat
+| └── README.md / README.zh-CN.md
 ```
 
 ---
@@ -358,10 +334,11 @@ chrome.exe --remote-debugging-port=9222
 
 | Command | Description |
 |---------|-------------|
-| `uv run python __main__.py serve --port 8080` | Start API server |
-| `uv run python __main__.py web` | Start Web UI (browser) |
-| `uv run python __main__.py run path/to/pipeline.yaml` | Run a pipeline |
-| `uv run python __main__.py logs -f` | Tail logs live |
+| `uv run python -m yak_browser_use serve --port 8080` | Start API server |
+| `uv run python -m yak_browser_use web` | Start Web UI (browser) |
+| `uv run python -m yak_browser_use run path/to/pipeline.yaml` | Run a pipeline |
+| `uv run python -m yak_browser_use logs -f` | Tail logs live |
+| `uv run python -m yak_browser_use --help` | Show all CLI commands |
 | `cd electron && npm run electron:dev` | Start Electron frontend |
 | `cd electron && npm run dev:web` | Start Web frontend dev server (Vite HMR + proxy) |
 

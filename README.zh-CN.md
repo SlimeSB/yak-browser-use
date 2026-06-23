@@ -16,11 +16,14 @@
 </p>
 
 <p align="center">
+  <img src="https://img.shields.io/pypi/v/yak-browser-use?style=flat-square&logo=pypi&label=PyPI" alt="PyPI">
+  <img src="https://img.shields.io/github/actions/workflow/status/SlimeSB/yak-browser-use/ci.yml?branch=main&style=flat-square&label=CI" alt="CI">
   <img src="https://img.shields.io/badge/python-%E2%89%A53.12-blue?style=flat-square&logo=python" alt="Python ≥3.12">
   <img src="https://img.shields.io/badge/license-MIT-green?style=flat-square" alt="MIT License">
   <img src="https://img.shields.io/badge/status-alpha-orange?style=flat-square" alt="Alpha">
   <img src="https://img.shields.io/badge/Playwright-ready-45ba4b?style=flat-square&logo=playwright" alt="Playwright">
   <img src="https://img.shields.io/badge/Electron-desktop-47848F?style=flat-square&logo=electron" alt="Electron Desktop">
+  <img src="https://img.shields.io/badge/Web%20UI-uvx-8A2BE2?style=flat-square&logo=web" alt="Web UI">
   <a href="./README.md"><img src="https://img.shields.io/badge/README-English-blue?style=flat-square" alt="English"></a>
 </p>
 <p align="center">
@@ -71,6 +74,14 @@
 
 ## 快速上手
 
+### 一行命令（无需安装）
+
+```bash
+uvx yak-browser-use
+```
+
+直接在浏览器中打开 Web UI — 零配置。首次运行会自动下载安装依赖。
+
 ### 前置要求
 
 | 依赖 | 版本 | 安装 |
@@ -79,6 +90,8 @@
 | [uv](https://docs.astral.sh/uv/) | ≥ 0.4 | `powershell -c "irm https://astral.sh/uv/install.ps1 \| iex"` |
 | Node.js | ≥ 18 | [nodejs.org](https://nodejs.org) |
 | Chrome / Chromium | ≥ 120 | 已安装的 Chrome，或 `uv run playwright install chromium` |
+
+> `uvx` 直接从 PyPI 启动 — 本地不需要 Python/Node.js 环境。
 
 ### 安装
 
@@ -97,14 +110,16 @@ npm install                          # 安装 Electron 前端依赖
 ### 启动
 
 ```bash
-# CLI 模式
+# 最快方式 — 从 PyPI 启动 Web UI（本地无需安装）
+uvx yak-browser-use
+
+# 或本地安装后：
 cd backend
-uv run python __main__.py --help
+uv run python -m yak_browser_use web        # Web UI（浏览器）
+uv run python -m yak_browser_use serve       # REST API 服务
+uv run python -m yak_browser_use --help      # 所有 CLI 命令
 
-# 启动 REST API 服务
-uv run python __main__.py serve --port 8080
-
-# 启动 Electron 桌面端
+# Electron 桌面端（需要 Node.js）
 cd electron
 npm run electron:dev
 ```
@@ -204,117 +219,85 @@ POST /api/run { pipeline: "..." }
 ## 项目结构
 
 ```
-yak-browser-use/
-├── __main__.py              # CLI 入口（run/serve/logs）
-├── pyproject.toml            # 项目配置 + 依赖
-│
-├── api/                      # FastAPI REST + WebSocket 接口
-│   ├── routes.py             # 路由注册
-│   ├── service.py            # 业务逻辑
-│   ├── server.py             # 服务器生命周期
-│   └── state.py / errors.py  # 引擎状态 & 错误类型
-│
-├── engine/                   # 核心执行引擎 ★
-│   ├── agent.py              # Agent 入口 + 流式 LLM call
-│   ├── runner.py             # Chat 模式 runner
-│   ├── runner_preset.py      # Preset 模式 orchestrator
-│   ├── executor.py           # Pipeline 包装执行器
-│   ├── ops.py                # 浏览器操作分发（通过 BrowserBridge）
-│   ├── scratchpad.py         # 内存数据缓存
-│   ├── step_machine.py       # Pipeline DAG 遍历
-│   ├── eval_agent.py         # Eval Agent 验收执行
-│   ├── delivery.py / events.py / state.py
-│   ├── _param_resolver.py    # 参数模板解析
-│   │
-│   ├── _harness/             # Conversation loop 基础设施 ★
-│   │   ├── conversation_loop.py   # 核心对话循环
-│   │   ├── tools.py               # 工具定义（browser_*/goal_run/…）
-│   │   ├── tool_executor.py       # 工具调用执行器 + shared_store
-│   │   ├── pipeline_tools.py      # Pipeline 管理工具
-│   │   ├── pipeline_events.py     # 集中式 WebSocket 事件推送
-│   │   ├── iteration_budget.py    # LLM 轮次预算控制
-│   │   ├── tool_guardrails.py     # 工具护栏
-│   │   ├── turn_context.py        # 每轮次上下文管理
-│   │   ├── error_classifier.py    # 错误分类
-│   │   ├── retry_utils.py         # 重试工具
-│   │   └── skill_tools.py         # Skill 注入
-│   │
-│   └── _lifecycle/           # Pipeline 生命周期
-│       ├── guardian.py       # 审核门控 + 熔断器
-│       └── compensation.py   # 回滚/撤销支持
-│
-├── cdp/                      # Chrome DevTools Protocol 层 ★
-│   ├── playwright_bridge.py  # PlaywrightBridge — 统一驱动
-│   │                        #   （健康检测 / 进程监控 / 断连处理）
-│   ├── helpers.py            # CDPHelpers 高级封装
-│   ├── protocols.py          # BrowserBridge 协议接口
-│   ├── profiles.py / session.py  # 配置 & 会话管理
-│   ├── discover.py           # Chrome 发现/连接
-│   └── launcher.py           # Chrome 启动 / 端口管理
-│
-├── compiler/                 # Pipeline 编译
-│   ├── models.py / schema.py # 数据类 & Pydantic 模型
-│   ├── parser.py             # YAML 解析
-│   ├── graph.py / resolver.py# DAG 构建 + 依赖解析
-│   ├── prepare.py            # 执行前步骤准备
-│   ├── step_type.py          # 统一步骤类型推断
-│   ├── diff.py               # Op diff 计算
-│   ├── generator.py          # Handler 生成 & 代码生成
-│
-├── tools/                    # 工具注册 + 实现
-│   ├── registry.py           # ToolRegistry — 集中调度（43 工具）
-│   ├── adapters.py           # 工具数据适配（csv↔json、字段映射）
-│   ├── captcha.py            # 验证码识别（ddddocr）
-│   ├── file_read.py / file_write.py / format_convert.py
-│   ├── extract.py / data.py  # 数据提取 & 处理
-│   ├── todo.py / todo_store.py  # 待办事项管理
-│   ├── record_step.py        # Pipeline 步骤录制
-│   ├── edit_pipeline.py      # Pipeline 编辑（支持回滚）
-│   └── _path_utils.py        # 路径遍历防护
-│
-├── llm/                      # LLM 客户端层
-│   ├── client.py             # LLMClient — OpenAI-compatible 适配器
-│   └── messages.py           # 消息类型（vendored OpenAI 格式）
-│
-├── prompts/                  # Prompt 模板（Markdown）
-│   ├── _loader.py            # Prompt 加载器（load_prompt / build_system_prompt）
-│   ├── chat/system.md        # Chat 模式系统提示（主 prompt）
-│   ├── eval_agent/           # Eval Agent prompts
-│   │   ├── system.md
-│   │   └── js_lib.js
-│   ├── guidance/             # 策略 & 恢复指导
-│   │   ├── tool_strategy.md  #   工具选择策略
-│   │   └── error_recovery.md #   错误恢复指引
-│   ├── guardrails/           # 护栏 prompt 片段
-│   │   ├── blocked.md / exact_failure.md / no_progress.md
-│   │   └── same_tool_failure.md / warning_prefix.md
-│   ├── skill/                # 系统技能
-│   │   ├── goal-execution/SKILL.md
-│   │   ├── skill-authoring/SKILL.md
-│   │   └── web-standard-paths/SKILL.md
-│   ├── planner-plan.md / planner-expand.md
-│   ├── replan-on-failure.md / generate-handler.md
-│   └── _archived/            # 已废弃 prompt
-│
-├── params/                   # 持久化参数管理（ParamManager）
-├── workspace/                # 工作区管理（manager/version/path/session）
-│   └── session_store.py      # 每个 Pipeline 独立 session 持久化
-├── cli/                      # CLI 命令（run.py / serve.py / logs.py）
-├── utils/                    # 工具函数（browser/logging/tool_cdp/skill_loader/…）
-├── tests/                    # 800+ 单元 & 集成测试
-│
-├── electron/                 # Electron 桌面前端
-│   └── src/
-│       └── renderer/         # React + Vite + Monaco Editor（Diff 支持）
-│
-├── docs/                     # 文档
-│   └── architecture-overview.md  # 架构详解
-│
-├── logo.png                  # 项目 Logo
-├── install.bat               # Windows 一键安装脚本
-├── run.bat                   # 快速启动脚本
-├── README.md                 # 英文 README
-└── README.zh-CN.md           # 中文 README（本文件）
+| yak-browser-use/
+| ├── backend/
+| │   ├── src/
+| │   │   └── yak_browser_use/        # 全部 Python 源码 ★
+| │   │       ├── __main__.py         # CLI 入口（run/serve/web/logs）
+| │   │       ├── pyproject.toml      # 项目配置 + 依赖
+| │   │       │
+| │   │       ├── api/                # FastAPI REST + WebSocket 接口
+| │   │       │   ├── routes.py       # 路由注册
+| │   │       │   ├── service.py      # 业务逻辑
+| │   │       │   ├── server.py       # 服务器生命周期
+| │   │       │   └── state.py / errors.py
+| │   │       │
+| │   │       ├── engine/             # 核心执行引擎 ★
+| │   │       │   ├── agent.py        # Agent 入口 + 流式 LLM
+| │   │       │   ├── runner.py       # Chat 模式 runner
+| │   │       │   ├── runner_preset.py# Preset 模式 orchestrator
+| │   │       │   ├── executor.py     # Pipeline 包装执行器
+| │   │       │   ├── ops.py          # 浏览器操作分发
+| │   │       │   ├── scratchpad.py / step_machine.py
+| │   │       │   ├── eval_agent.py / delivery.py / events.py
+| │   │       │   ├── _param_resolver.py
+| │   │       │   │
+| │   │       │   ├── _harness/       # Conversation loop ★
+| │   │       │   │   ├── conversation_loop.py
+| │   │       │   │   ├── tools.py / tool_executor.py
+| │   │       │   │   ├── pipeline_tools.py / pipeline_events.py
+| │   │       │   │   ├── iteration_budget.py / turn_context.py
+| │   │       │   │   ├── tool_guardrails.py / error_classifier.py
+| │   │       │   │   ├── retry_utils.py / skill_tools.py
+| │   │       │   │
+| │   │       │   └── _lifecycle/     # Pipeline 生命周期
+| │   │       │       ├── guardian.py    # 审核门控 + 熔断器
+| │   │       │       └── compensation.py# 回滚/撤销
+| │   │       │
+| │   │       ├── cdp/                # Chrome DevTools Protocol ★
+| │   │       │   ├── playwright_bridge.py  # 统一驱动
+| │   │       │   ├── helpers.py / protocols.py
+| │   │       │   ├── profiles.py / session.py
+| │   │       │   ├── discover.py / launcher.py
+| │   │       │
+| │   │       ├── compiler/           # Pipeline 编译
+| │   │       │   ├── models.py / schema.py / parser.py
+| │   │       │   ├── graph.py / resolver.py / prepare.py
+| │   │       │   ├── diff.py / generator.py / step_type.py
+| │   │       │
+| │   │       ├── tools/              # 工具注册（43 工具）
+| │   │       │   ├── registry.py     # 集中调度
+| │   │       │   ├── adapters.py / captcha.py
+| │   │       │   ├── file_read.py / file_write.py / format_convert.py
+| │   │       │   ├── extract.py / data.py
+| │   │       │   ├── todo.py / todo_store.py
+| │   │       │   ├── record_step.py / edit_pipeline.py
+| │   │       │   └── _path_utils.py
+| │   │       │
+| │   │       ├── llm/                # LLM 客户端
+| │   │       ├── prompts/            # Prompt 模板（Markdown）
+| │   │       ├── params/             # 持久化参数管理
+| │   │       ├── workspace/          # 工作区管理
+| │   │       ├── cli/                # CLI 命令
+| │   │       ├── utils/              # 工具函数
+| │   │       │   └── _path.py        # project_root() 路径解析器
+| │   │       └── static/             # Web UI 前端（构建产物）
+| │   │
+| │   ├── tests/                      # 800+ 单元 & 集成测试
+| │   ├── README.md                   # 英文文档
+| │   └── uv.lock                     # 依赖锁文件
+| │
+| ├── electron/                       # Electron 桌面前端
+| │   ├── src/renderer/               # React + Vite + Monaco Editor
+| │   ├── vite.web.config.ts          # Web 构建配置 → backend static/
+| │   └── package.json
+| │
+| ├── .github/workflows/              # CI/CD 自动化
+| │   ├── ci.yml                      # 推送/PR 自动测试
+| │   └── release.yml                 # Tag/手动发版
+| │
+| ├── logo.png / install.bat / run.bat
+| └── README.md / README.zh-CN.md
 ```
 
 ---
@@ -353,10 +336,12 @@ chrome.exe --remote-debugging-port=9222
 
 | 命令 | 说明 |
 |------|------|
-| `uv run python __main__.py serve --port 8080` | 启动 API 服务 |
-| `uv run python __main__.py run path/to/pipeline.yaml` | 执行 Pipeline |
-| `uv run python __main__.py logs -f` | 实时查看日志 |
-| `cd electron && npm run electron:dev` | 启动前端 |
+| `uv run python -m yak_browser_use serve --port 8080` | 启动 API 服务 |
+| `uv run python -m yak_browser_use web` | 启动 Web UI（浏览器） |
+| `uv run python -m yak_browser_use run path/to/pipeline.yaml` | 执行 Pipeline |
+| `uv run python -m yak_browser_use logs -f` | 实时查看日志 |
+| `uv run python -m yak_browser_use --help` | 查看全部命令 |
+| `cd electron && npm run electron:dev` | 启动 Electron 前端 |
 
 ---
 
