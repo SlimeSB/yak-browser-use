@@ -23,7 +23,7 @@ from yak_browser_use.utils._path import project_root
 logger = get_logger(__name__)
 
 _WORKSPACES_ROOT = project_root() / "userdata" / "workspaces"
-_LAST_ACTIVE_FILE = _WORKSPACES_ROOT / ".last_active"
+
 
 
 def _normalize_pipeline(name: str) -> str:
@@ -61,17 +61,22 @@ def _read_json(path: Path) -> dict:
         return json.load(f)
 
 
+def _last_active_path() -> Path:
+    return _WORKSPACES_ROOT / ".last_active"
+
+
 def read_last_active() -> str | None:
     """Read last active pipeline name from marker file."""
-    if _LAST_ACTIVE_FILE.exists():
-        return _LAST_ACTIVE_FILE.read_text(encoding="utf-8").strip() or None
+    path = _last_active_path()
+    if path.exists():
+        return path.read_text(encoding="utf-8").strip() or None
     return None
 
 
 def write_last_active(pipeline_name: str) -> None:
     """Write last active pipeline name to marker file."""
     _WORKSPACES_ROOT.mkdir(parents=True, exist_ok=True)
-    _LAST_ACTIVE_FILE.write_text(pipeline_name, encoding="utf-8")
+    _last_active_path().write_text(pipeline_name, encoding="utf-8")
 
 
 class SessionStore:
