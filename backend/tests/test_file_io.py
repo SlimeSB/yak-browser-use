@@ -3,8 +3,8 @@
 import pytest
 from pathlib import Path
 
-from tools.file_read import file_read
-from tools.file_write import file_write
+from yak_browser_use.tools.file_read import file_read
+from yak_browser_use.tools.file_write import file_write
 
 
 @pytest.mark.asyncio

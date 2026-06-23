@@ -11,7 +11,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from cdp.playwright_bridge import (
+from yak_browser_use.cdp.playwright_bridge import (
     A11Y_REF_PREFIX,
     PROGRESSIVE_REF_PREFIX,
     _flatten_a11y_tree,
@@ -185,7 +185,7 @@ def mock_bridge():
 @pytest.fixture
 def a11y_snapshot_fn(mock_bridge):
     """Import a11y_snapshot from the real bridge, bound to mock."""
-    from cdp.playwright_bridge import PlaywrightBridge
+    from yak_browser_use.cdp.playwright_bridge import PlaywrightBridge
 
     # Bind the method to our mock
     return PlaywrightBridge.a11y_snapshot.__get__(mock_bridge, PlaywrightBridge)
@@ -295,7 +295,7 @@ async def test_a11y_snapshot_has_selector(a11y_snapshot_fn, mock_bridge):
 
 def test_in_view_consistency():
     """I5: elements in view_elements have _in_view=True, others False."""
-    from cdp.playwright_bridge import PROGRESSIVE_REF_PREFIX
+    from yak_browser_use.cdp.playwright_bridge import PROGRESSIVE_REF_PREFIX
 
     elements_all = [
         {"ref": f"{PROGRESSIVE_REF_PREFIX}1", "_in_view": True, "_whitelist": True},
@@ -330,7 +330,7 @@ def test_ref_prefix_routing():
 
 
 def test_extract_text_from_children_direct_text():
-    from cdp.playwright_bridge import _extract_text_from_children
+    from yak_browser_use.cdp.playwright_bridge import _extract_text_from_children
     node = {
         "children": [
             {"nodeType": 3, "nodeValue": "Hello World"},
@@ -340,7 +340,7 @@ def test_extract_text_from_children_direct_text():
 
 
 def test_extract_text_from_children_nested():
-    from cdp.playwright_bridge import _extract_text_from_children
+    from yak_browser_use.cdp.playwright_bridge import _extract_text_from_children
     node = {
         "children": [
             {"nodeType": 1, "children": [
@@ -353,7 +353,7 @@ def test_extract_text_from_children_nested():
 
 def test_extract_text_from_children_deeply_nested():
     """#H6: recursive — handles arbitrary depth."""
-    from cdp.playwright_bridge import _extract_text_from_children
+    from yak_browser_use.cdp.playwright_bridge import _extract_text_from_children
     node = {
         "children": [
             {"nodeType": 1, "children": [
@@ -369,6 +369,6 @@ def test_extract_text_from_children_deeply_nested():
 
 
 def test_extract_text_from_children_empty():
-    from cdp.playwright_bridge import _extract_text_from_children
+    from yak_browser_use.cdp.playwright_bridge import _extract_text_from_children
     assert _extract_text_from_children({}) == ""
     assert _extract_text_from_children({"children": []}) == ""

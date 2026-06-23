@@ -1,6 +1,6 @@
 """Tests for tool_guardrails module."""
 
-from engine._harness.tool_guardrails import (
+from yak_browser_use.engine._harness.tool_guardrails import (
     ToolCallGuardrailConfig,
     ToolCallGuardrailState,
     create_chat_guardrail_config,

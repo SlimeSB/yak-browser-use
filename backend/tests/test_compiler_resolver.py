@@ -6,8 +6,8 @@ from pathlib import Path
 
 import pytest
 
-from compiler.resolver import resolve, resolve_with_generator, _load_handler_from_file
-from compiler.models import StepDef
+from yak_browser_use.compiler.resolver import resolve, resolve_with_generator, _load_handler_from_file
+from yak_browser_use.compiler.models import StepDef
 
 
 # ── _load_handler_from_file ───────────────────────────────────
@@ -101,7 +101,7 @@ class TestLoadHandlerFromFile:
 class TestResolve:
     def test_tier1_static_handler(self, tmp_path, monkeypatch):
         """Static handler in tasks/<pipeline>/handlers/<step_key>.py"""
-        monkeypatch.setattr("compiler.resolver.TASKS_DIR", tmp_path)
+        monkeypatch.setattr("yak_browser_use.compiler.resolver.TASKS_DIR", tmp_path)
         handler_dir = tmp_path / "test_pipe" / "handlers"
         handler_dir.mkdir(parents=True, exist_ok=True)
         (handler_dir / "step_1.py").write_text(
@@ -115,7 +115,7 @@ class TestResolve:
 
     def test_tier1_legacy_exec_py(self, tmp_path, monkeypatch):
         """Legacy format: tasks/<pipeline>/exec.py"""
-        monkeypatch.setattr("compiler.resolver.TASKS_DIR", tmp_path)
+        monkeypatch.setattr("yak_browser_use.compiler.resolver.TASKS_DIR", tmp_path)
         exec_dir = tmp_path / "test_pipe"
         exec_dir.mkdir(parents=True, exist_ok=True)
         (exec_dir / "exec.py").write_text(
@@ -143,7 +143,7 @@ class TestResolve:
 
     def test_tier3_none_when_no_handler(self, tmp_path, monkeypatch):
         """No handler found anywhere → returns None."""
-        monkeypatch.setattr("compiler.resolver.TASKS_DIR", tmp_path)
+        monkeypatch.setattr("yak_browser_use.compiler.resolver.TASKS_DIR", tmp_path)
         monkeypatch.chdir(tmp_path)
         step = StepDef(key="nonexistent", name="No Handler")
         handler = resolve(step, "test_pipe")
@@ -151,7 +151,7 @@ class TestResolve:
 
     def test_tier1_precedes_tier2(self, tmp_path, monkeypatch):
         """Static handler takes priority over generated."""
-        monkeypatch.setattr("compiler.resolver.TASKS_DIR", tmp_path)
+        monkeypatch.setattr("yak_browser_use.compiler.resolver.TASKS_DIR", tmp_path)
         monkeypatch.chdir(tmp_path)
         # Tier 1
         handler_dir = tmp_path / "test_pipe" / "handlers"
@@ -200,7 +200,7 @@ class TestResolveWithGenerator:
             return lambda: "fallback"
 
         with pytest.MonkeyPatch.context() as mp:
-            mp.setattr("compiler.resolver.TASKS_DIR", Path("/tmp/nonexistent_tasks"))
+            mp.setattr("yak_browser_use.compiler.resolver.TASKS_DIR", Path("/tmp/nonexistent_tasks"))
             mp.chdir(Path("/tmp"))
             handler = resolve_with_generator(step, "missing_pipe", generate_fn=fake_generate)
             # The handler should be from generate_fn since resolve returned None

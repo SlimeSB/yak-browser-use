@@ -1,6 +1,6 @@
 """Tests for retry_utils module."""
 
-from engine._harness.retry_utils import jittered_backoff, sleep_jittered
+from yak_browser_use.engine._harness.retry_utils import jittered_backoff, sleep_jittered
 
 
 def test_jittered_backoff_first_attempt():

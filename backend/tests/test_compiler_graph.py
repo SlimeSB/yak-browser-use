@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import pytest
 
-from compiler.models import StepDef
-from compiler.graph import build_graph, get_execution_order, validate_file_refs
+from yak_browser_use.compiler.models import StepDef
+from yak_browser_use.compiler.graph import build_graph, get_execution_order, validate_file_refs
 
 
 # ── build_graph ───────────────────────────────────────────────

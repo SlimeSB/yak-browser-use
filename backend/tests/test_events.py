@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from engine.events import EventSink
+from yak_browser_use.engine.events import EventSink
 
 
 class TestEventSink:

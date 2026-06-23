@@ -8,8 +8,8 @@ from pathlib import Path
 import pytest
 import yaml
 
-from compiler.models import StepDef
-from compiler.generator import (
+from yak_browser_use.compiler.models import StepDef
+from yak_browser_use.compiler.generator import (
     _extract_python_code,
     _cache_generated_handler,
     compile_handler_code,

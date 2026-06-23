@@ -18,7 +18,7 @@ from playwright.async_api import async_playwright
 
 # Import progressive mode code
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from cdp.playwright_bridge import (
+from yak_browser_use.cdp.playwright_bridge import (
     CollectState,
     build_llm_view,
     DENSITY_THRESHOLD,

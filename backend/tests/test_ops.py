@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from engine.ops import ToolContext
+from yak_browser_use.engine.ops import ToolContext
 
 
 class MockBridge:

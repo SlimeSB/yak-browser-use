@@ -1,1 +1,2 @@
-recursive-include static *
+recursive-include src/yak_browser_use/static *
+recursive-include src/yak_browser_use/prompts *

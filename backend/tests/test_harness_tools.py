@@ -1,6 +1,6 @@
 """Tests for tools registration module — via ToolRegistry."""
 
-from tools.registry import registry, build_registry
+from yak_browser_use.tools.registry import registry, build_registry
 
 
 def _ensure_registry():
@@ -56,7 +56,7 @@ def test_pipeline_tools_names():
 
 
 def test_get_all_tools_with_goal():
-    from engine._harness.tools import get_all_tools
+    from yak_browser_use.engine._harness.tools import get_all_tools
 
     tools = get_all_tools(include_goal_run=True)
     assert len(tools) >= 40
@@ -76,7 +76,7 @@ def test_get_all_tools_with_goal():
 
 
 def test_get_all_tools_without_goal():
-    from engine._harness.tools import get_all_tools
+    from yak_browser_use.engine._harness.tools import get_all_tools
 
     tools = get_all_tools(include_goal_run=False)
     assert len(tools) >= 40
@@ -87,7 +87,7 @@ def test_get_all_tools_without_goal():
 
 
 def test_get_browser_tools():
-    from engine._harness.tools import get_browser_tools
+    from yak_browser_use.engine._harness.tools import get_browser_tools
 
     tools = get_browser_tools()
     assert len(tools) >= 20
@@ -104,7 +104,7 @@ def test_get_browser_tools():
 
 
 def test_todo_tool_definition():
-    from engine._harness.tools import get_all_tools
+    from yak_browser_use.engine._harness.tools import get_all_tools
 
     tools = get_all_tools(include_goal_run=True)
     todo_tool = next((t for t in tools if t["function"]["name"] == "todo"), None)

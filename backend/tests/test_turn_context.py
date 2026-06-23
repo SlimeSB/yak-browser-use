@@ -4,14 +4,14 @@ from __future__ import annotations
 
 import pytest
 
-from engine._harness.turn_context import (
+from yak_browser_use.engine._harness.turn_context import (
     TurnContext,
     InterruptState,
     build_turn_context,
     save_interrupt_state,
 )
-from engine._harness.iteration_budget import IterationBudget
-from engine._harness.tool_guardrails import ToolCallGuardrailState
+from yak_browser_use.engine._harness.iteration_budget import IterationBudget
+from yak_browser_use.engine._harness.tool_guardrails import ToolCallGuardrailState
 
 
 class TestTurnContext:

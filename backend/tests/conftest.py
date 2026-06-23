@@ -52,7 +52,7 @@ def sample_pipeline_yaml(tmp_path) -> Path:
 
 # ── StepDef and PipelineDef fixtures ──────────────────────────
 
-from compiler.models import StepDef, PipelineDef
+from yak_browser_use.compiler.models import StepDef, PipelineDef
 
 
 @pytest.fixture

@@ -9,7 +9,7 @@ from unittest.mock import MagicMock
 # helpers that don't need the class — just module-level functions
 # ---------------------------------------------------------------------------
 
-from cdp.playwright_bridge import (
+from yak_browser_use.cdp.playwright_bridge import (
     _node_attrs,
     _is_interactive_progressive,
     _build_selector_from_attrs_progressive,

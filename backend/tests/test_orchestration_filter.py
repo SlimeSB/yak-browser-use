@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-from engine._harness.tool_executor import (
+from yak_browser_use.engine._harness.tool_executor import (
     _apply_heavy_data_filter,
     _try_scratchpad_element_lookup,
     _try_scratchpad_source_read,
     _normalize_ref,
 )
-from engine.scratchpad import _scratchpads, store, store_raw_html
+from yak_browser_use.engine.scratchpad import _scratchpads, store, store_raw_html
 
 
 class TestNormalizeRef:

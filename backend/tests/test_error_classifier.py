@@ -1,6 +1,6 @@
 """Tests for error_classifier module."""
 
-from engine._harness.error_classifier import (
+from yak_browser_use.engine._harness.error_classifier import (
     FailoverReason,
     ClassifiedError,
     classify_api_error,

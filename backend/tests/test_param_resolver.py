@@ -1,7 +1,7 @@
 """Unit tests for _param_resolver.py — resolve_params function."""
 
 import pytest
-from engine._param_resolver import resolve_params
+from yak_browser_use.engine._param_resolver import resolve_params
 
 
 class TestResolveParams:

@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import pytest
 
-from engine.scratchpad import (
+from yak_browser_use.engine.scratchpad import (
     ScratchpadRecord,
     _scratchpads,
     clear,
@@ -20,14 +20,14 @@ from engine.scratchpad import (
     store as store_scratchpad,
     store_raw_html,
 )
-from engine._harness.tool_executor import (
+from yak_browser_use.engine._harness.tool_executor import (
     _apply_heavy_data_filter,
     _try_scratchpad_element_lookup,
     _try_scratchpad_source_read,
 )
-from engine.executor import run_check
-from compiler.schema import StepYaml, PipelineYaml
-from compiler.models import StepDef, PipelineDef
+from yak_browser_use.engine.executor import run_check
+from yak_browser_use.compiler.schema import StepYaml, PipelineYaml
+from yak_browser_use.compiler.models import StepDef, PipelineDef
 
 
 class MockPage:

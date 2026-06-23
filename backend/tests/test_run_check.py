@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import pytest
-from engine.executor import run_check
+from yak_browser_use.engine.executor import run_check
 
 
 class MockPage:

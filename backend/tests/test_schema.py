@@ -4,8 +4,8 @@ import pytest
 import yaml
 from pydantic import ValidationError
 
-from compiler.schema import PipelineYaml, StepYaml, _convert_browser_op, ops_to_yaml
-from compiler.models import StepDef, PipelineDef
+from yak_browser_use.compiler.schema import PipelineYaml, StepYaml, _convert_browser_op, ops_to_yaml
+from yak_browser_use.compiler.models import StepDef, PipelineDef
 
 
 class TestPipelineYaml:

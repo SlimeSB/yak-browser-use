@@ -45,7 +45,7 @@ userdata/params.json
 userdata/provider.json
 
 # Web build output
-backend/static/
+backend/src/yak_browser_use/static/
 
 
 # Debug dumps (F8)

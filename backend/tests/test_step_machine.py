@@ -6,7 +6,7 @@ import time
 
 import pytest
 
-from engine.step_machine import StepMachine, StepNode, StepStatus
+from yak_browser_use.engine.step_machine import StepMachine, StepNode, StepStatus
 
 
 # ── StepStatus enum ───────────────────────────────────────────

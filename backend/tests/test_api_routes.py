@@ -14,8 +14,8 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from api.errors import register_error_handlers
-from api.routes import register_all_routes, _extract_pipeline_name
+from yak_browser_use.api.errors import register_error_handlers
+from yak_browser_use.api.routes import register_all_routes, _extract_pipeline_name
 
 
 # ── _extract_pipeline_name ─────────────────────────────────────────
@@ -80,8 +80,8 @@ def _mock_engine_state(**overrides):
 
 class TestProviderConfig:
     def test_get_config_default(self, client):
-        with patch("api.routes.engine_state", _mock_engine_state()):
-            with patch("utils.browser._get_config_path") as mock_path:
+        with patch("yak_browser_use.api.routes.engine_state", _mock_engine_state()):
+            with patch("yak_browser_use.utils.browser._get_config_path") as mock_path:
                 mock_path.return_value.exists.return_value = False
                 resp = client.get("/api/provider-config")
         assert resp.status_code == 200
@@ -93,8 +93,8 @@ class TestProviderConfig:
         config_path = tmp_path / "provider.json"
         config_path.write_text(json.dumps({"model": "gpt-4o"}), encoding="utf-8")
 
-        with patch("api.routes.engine_state", _mock_engine_state()):
-            with patch("utils.browser._get_config_path", return_value=config_path):
+        with patch("yak_browser_use.api.routes.engine_state", _mock_engine_state()):
+            with patch("yak_browser_use.utils.browser._get_config_path", return_value=config_path):
                 resp = client.get("/api/provider-config")
         assert resp.status_code == 200
         data = resp.json()
@@ -103,8 +103,8 @@ class TestProviderConfig:
 
     def test_set_config(self, client, tmp_path):
         config_path = tmp_path / "provider.json"
-        with patch("api.routes.engine_state", _mock_engine_state()):
-            with patch("utils.browser._get_config_path", return_value=config_path):
+        with patch("yak_browser_use.api.routes.engine_state", _mock_engine_state()):
+            with patch("yak_browser_use.utils.browser._get_config_path", return_value=config_path):
                 resp = client.post("/api/provider-config", json={"model": "custom-model"})
         assert resp.status_code == 200
         data = resp.json()
@@ -121,7 +121,7 @@ class TestChromeConnect:
     def test_connect_rejects_when_pipeline_running(self, client):
         state = _mock_engine_state(running_pipeline=MagicMock())
 
-        with patch("api.routes.engine_state", state):
+        with patch("yak_browser_use.api.routes.engine_state", state):
             resp = client.post("/api/chrome/connect", json={"mode": "user"})
         assert resp.status_code == 409
         data = resp.json()
@@ -130,21 +130,21 @@ class TestChromeConnect:
     def test_disconnect_rejects_when_pipeline_running(self, client):
         state = _mock_engine_state(running_pipeline=MagicMock(), chrome_connected=True)
 
-        with patch("api.routes.engine_state", state):
+        with patch("yak_browser_use.api.routes.engine_state", state):
             resp = client.post("/api/chrome/disconnect")
         assert resp.status_code == 409
 
 
 class TestChromeStatus:
     def test_disconnected_status(self, client):
-        with patch("api.routes.engine_state", _mock_engine_state(chrome_connected=False)):
+        with patch("yak_browser_use.api.routes.engine_state", _mock_engine_state(chrome_connected=False)):
             resp = client.get("/api/chrome/status")
         assert resp.status_code == 200
         data = resp.json()
         assert data["connected"] is False
 
     def test_connected_status(self, client):
-        with patch("api.routes.engine_state", _mock_engine_state(chrome_connected=True)):
+        with patch("yak_browser_use.api.routes.engine_state", _mock_engine_state(chrome_connected=True)):
             resp = client.get("/api/chrome/status")
         assert resp.status_code == 200
         data = resp.json()
@@ -152,7 +152,7 @@ class TestChromeStatus:
 
     def test_disconnect_when_already_disconnected(self, client):
         state = _mock_engine_state(chrome_connected=False)
-        with patch("api.routes.engine_state", state):
+        with patch("yak_browser_use.api.routes.engine_state", state):
             resp = client.post("/api/chrome/disconnect")
         assert resp.status_code == 200
         data = resp.json()
@@ -163,7 +163,7 @@ class TestChromeStatus:
 class TestChromeRestart:
     def test_restart_rejects_when_pipeline_running(self, client):
         state = _mock_engine_state(running_pipeline=MagicMock())
-        with patch("api.routes.engine_state", state):
+        with patch("yak_browser_use.api.routes.engine_state", state):
             resp = client.post("/api/chrome/restart")
         assert resp.status_code == 409
 
@@ -178,7 +178,7 @@ class TestHighlightConfig:
         bridge.ensure_highlights = AsyncMock()
         state = _mock_engine_state(bridge=bridge)
 
-        with patch("api.routes.engine_state", state):
+        with patch("yak_browser_use.api.routes.engine_state", state):
             resp = client.post("/api/highlight-config", json={"mode": "progressive"})
         assert resp.status_code == 200
         data = resp.json()
@@ -186,7 +186,7 @@ class TestHighlightConfig:
         assert data["mode"] == "progressive"
 
     def test_set_invalid_mode(self, client):
-        with patch("api.routes.engine_state", _mock_engine_state()):
+        with patch("yak_browser_use.api.routes.engine_state", _mock_engine_state()):
             resp = client.post("/api/highlight-config", json={"mode": "invalid"})
         assert resp.status_code == 400
 
@@ -197,8 +197,8 @@ class TestHighlightConfig:
 class TestParams:
     def test_list_params(self, client):
         with (
-            patch("api.routes.engine_state", _mock_engine_state()),
-            patch("params.manager.list_param_keys", return_value=["key1", "key2"]),
+            patch("yak_browser_use.api.routes.engine_state", _mock_engine_state()),
+            patch("yak_browser_use.params.manager.list_param_keys", return_value=["key1", "key2"]),
         ):
             resp = client.get("/api/params")
         assert resp.status_code == 200
@@ -206,19 +206,19 @@ class TestParams:
         assert data["params"] == ["key1", "key2"]
 
     def test_set_param_missing_key(self, client):
-        with patch("api.routes.engine_state", _mock_engine_state()):
+        with patch("yak_browser_use.api.routes.engine_state", _mock_engine_state()):
             resp = client.post("/api/params", json={"value": "val"})
         assert resp.status_code == 400
 
     def test_set_param_missing_value(self, client):
-        with patch("api.routes.engine_state", _mock_engine_state()):
+        with patch("yak_browser_use.api.routes.engine_state", _mock_engine_state()):
             resp = client.post("/api/params", json={"key": "k"})
         assert resp.status_code == 400
 
     def test_set_and_delete_param(self, client):
         with (
-            patch("api.routes.engine_state", _mock_engine_state()),
-            patch("params.manager.ParamManager") as MockPM,
+            patch("yak_browser_use.api.routes.engine_state", _mock_engine_state()),
+            patch("yak_browser_use.params.manager.ParamManager") as MockPM,
         ):
             mock_pm = MagicMock()
             MockPM.return_value = mock_pm
@@ -227,9 +227,9 @@ class TestParams:
             mock_pm.set.assert_called_once_with("mykey", "myval")
 
         with (
-            patch("api.routes.engine_state", _mock_engine_state()),
-            patch("params.manager.list_param_keys", return_value=["mykey"]),
-            patch("params.manager.delete_param") as mock_del,
+            patch("yak_browser_use.api.routes.engine_state", _mock_engine_state()),
+            patch("yak_browser_use.params.manager.list_param_keys", return_value=["mykey"]),
+            patch("yak_browser_use.params.manager.delete_param") as mock_del,
         ):
             resp = client.delete("/api/params/mykey")
             assert resp.status_code == 200
@@ -241,7 +241,7 @@ class TestParams:
 
 class TestPipelineEndpoints:
     def test_review_not_implemented(self, client):
-        with patch("api.routes.engine_state", _mock_engine_state()):
+        with patch("yak_browser_use.api.routes.engine_state", _mock_engine_state()):
             resp = client.post("/api/pipeline/some_id/review", json={"action": "approve"})
         assert resp.status_code == 501
 
@@ -251,7 +251,7 @@ class TestPipelineEndpoints:
 
 class TestChat:
     def test_empty_message_rejected(self, client):
-        with patch("api.routes.engine_state", _mock_engine_state()):
+        with patch("yak_browser_use.api.routes.engine_state", _mock_engine_state()):
             resp = client.post("/api/chat", json={"message": ""})
         assert resp.status_code == 400
 
@@ -266,8 +266,8 @@ class TestChat:
         state = _mock_engine_state()
         state._service = mock_service
 
-        with patch("api.routes.engine_state", state):
-            with patch("api.routes._get_service", return_value=mock_service):
+        with patch("yak_browser_use.api.routes.engine_state", state):
+            with patch("yak_browser_use.api.routes._get_service", return_value=mock_service):
                 resp = client.post("/api/chat/reset")
                 assert resp.status_code == 200
                 data = resp.json()
@@ -289,8 +289,8 @@ class TestSession:
         mock_service.get_session.return_value = None
 
         state = _mock_engine_state()
-        with patch("api.routes.engine_state", state):
-            with patch("api.routes._get_service", return_value=mock_service):
+        with patch("yak_browser_use.api.routes.engine_state", state):
+            with patch("yak_browser_use.api.routes._get_service", return_value=mock_service):
                 resp = client.get("/api/session")
         assert resp.status_code == 200
         data = resp.json()
@@ -307,8 +307,8 @@ class TestSession:
         mock_service.get_session.return_value = mock_session
 
         state = _mock_engine_state()
-        with patch("api.routes.engine_state", state):
-            with patch("api.routes._get_service", return_value=mock_service):
+        with patch("yak_browser_use.api.routes.engine_state", state):
+            with patch("yak_browser_use.api.routes._get_service", return_value=mock_service):
                 resp = client.get("/api/session")
         assert resp.status_code == 200
         data = resp.json()
@@ -328,8 +328,8 @@ class TestPresets:
         state._service = mock_service
 
         with (
-            patch("api.routes.engine_state", state),
-            patch("api.routes._get_service", return_value=mock_service),
+            patch("yak_browser_use.api.routes.engine_state", state),
+            patch("yak_browser_use.api.routes._get_service", return_value=mock_service),
         ):
             resp = client.get("/api/presets")
         assert resp.status_code == 200
@@ -341,7 +341,7 @@ class TestPresets:
 class TestPipelines:
     def test_list_pipelines(self, client):
         with (
-            patch("api.routes.engine_state", _mock_engine_state()),
+            patch("yak_browser_use.api.routes.engine_state", _mock_engine_state()),
             patch("pathlib.Path.exists", return_value=True),
             patch("pathlib.Path.iterdir") as mock_iter,
         ):
@@ -361,7 +361,7 @@ class TestPipelines:
 
     def test_get_pipeline_not_found(self, client):
         with (
-            patch("api.routes.engine_state", _mock_engine_state()),
+            patch("yak_browser_use.api.routes.engine_state", _mock_engine_state()),
             patch("pathlib.Path.exists", return_value=False),
         ):
             resp = client.get("/api/pipelines/nonexistent")
@@ -373,7 +373,7 @@ class TestPipelines:
 
 class TestStatus:
     def test_global_state(self, client):
-        with patch("api.routes.engine_state", _mock_engine_state(current_state="idle")):
+        with patch("yak_browser_use.api.routes.engine_state", _mock_engine_state(current_state="idle")):
             resp = client.get("/api/status")
         assert resp.status_code == 200
         data = resp.json()
@@ -381,8 +381,8 @@ class TestStatus:
 
     def test_pipeline_status(self, client):
         with (
-            patch("api.routes.engine_state", _mock_engine_state()),
-            patch("workspace.manager.WorkspaceManager") as MockWM,
+            patch("yak_browser_use.api.routes.engine_state", _mock_engine_state()),
+            patch("yak_browser_use.workspace.manager.WorkspaceManager") as MockWM,
         ):
             mock_wm = MagicMock()
             mock_wm.list_runs.return_value = [
@@ -400,7 +400,7 @@ class TestStatus:
 
 class TestLogs:
     def test_forward_logs(self, client):
-        with patch("api.routes.engine_state", _mock_engine_state()):
+        with patch("yak_browser_use.api.routes.engine_state", _mock_engine_state()):
             resp = client.post("/api/logs/forward", json={
                 "entries": [
                     {"ts": "12:00", "level": "INFO", "name": "test", "msg": "hello"},

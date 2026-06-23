@@ -4,7 +4,7 @@ import json
 
 import pytest
 
-from tools.todo_store import MAX_ITEMS, MAX_CONTENT_CHARS, TodoStore
+from yak_browser_use.tools.todo_store import MAX_ITEMS, MAX_CONTENT_CHARS, TodoStore
 
 
 class TestTodoStore:

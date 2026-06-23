@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, patch
 import pytest
 import yaml
 
-from engine._harness.pipeline_tools import (
+from yak_browser_use.engine._harness.pipeline_tools import (
     pipeline_load,
     pipeline_list,
     pipeline_update_step,
@@ -52,7 +52,7 @@ SAMPLE_PIPELINE = {
 @pytest.fixture
 def temp_presets_dir(tmp_path, monkeypatch):
     monkeypatch.setattr(
-        "engine._harness.pipeline_tools._WORKSPACES_DIR",
+        "yak_browser_use.engine._harness.pipeline_tools._WORKSPACES_DIR",
         tmp_path,
     )
     return tmp_path
@@ -67,7 +67,7 @@ def sample_pipeline_file(temp_presets_dir):
 
 
 def _mock_write_via_edit():
-    from engine._harness.pipeline_tools import _WORKSPACES_DIR as wd
+    from yak_browser_use.engine._harness.pipeline_tools import _WORKSPACES_DIR as wd
 
     async def _fake_edit(pipeline_name, content, explanation=""):
         path = wd / pipeline_name / "pipeline.yaml"
@@ -76,7 +76,7 @@ def _mock_write_via_edit():
         return "ok"
 
     return patch(
-        "tools.edit_pipeline.edit_pipeline",
+        "yak_browser_use.tools.edit_pipeline.edit_pipeline",
         side_effect=_fake_edit,
     )
 
@@ -501,7 +501,7 @@ async def test_pipeline_remove_last_step(temp_presets_dir):
 
 @pytest.mark.asyncio
 async def test_pipeline_create(temp_presets_dir):
-    with patch("engine._harness.pipeline_tools.push_pipeline_edit_event", return_value=None):
+    with patch("yak_browser_use.engine._harness.pipeline_tools.push_pipeline_edit_event", return_value=None):
         result = await pipeline_create(
             pipeline_name="new_pipeline",
             description="A new pipeline",
@@ -584,7 +584,7 @@ def test_resolve_pipeline_path_invalid():
 
 
 def test_dump_pipeline_yaml_roundtrip():
-    from compiler.schema import PipelineYaml, StepYaml
+    from yak_browser_use.compiler.schema import PipelineYaml, StepYaml
 
     pipeline = PipelineYaml(
         name="test",

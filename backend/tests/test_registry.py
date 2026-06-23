@@ -11,7 +11,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from tools.registry import (
+from yak_browser_use.tools.registry import (
     ToolDef,
     ToolContext,
     ToolRegistry,
@@ -194,13 +194,13 @@ class TestBuildRegistry:
 
     def test_build_registry_clear_on_error(self):
         """If build fails, registry should be in clean state."""
-        from tools.registry import registry as reg
+        from yak_browser_use.tools.registry import registry as reg
 
         with pytest.raises(Exception):
             with MagicMock() as mock_imports:
                 # Simulate failure during build
                 with pytest.MonkeyPatch().context() as mp:
-                    mp.setattr("tools.registry._build_registry_impl", lambda: (_ for _ in ()).throw(RuntimeError("fail")))
+                    mp.setattr("yak_browser_use.tools.registry._build_registry_impl", lambda: (_ for _ in ()).throw(RuntimeError("fail")))
                     try:
                         build_registry()
                     except RuntimeError:
@@ -270,7 +270,7 @@ class TestCaptchaHandler:
     @pytest.mark.asyncio
     async def test_direct_image_bytes(self):
         """Direct image_bytes should delegate to captcha solver."""
-        with patch("tools.captcha.captcha", new_callable=AsyncMock) as mock_captcha:
+        with patch("yak_browser_use.tools.captcha.captcha", new_callable=AsyncMock) as mock_captcha:
             mock_captcha.return_value = {"ok": True, "result": "abc"}
             result = await _captcha_handler(
                 {"type": "image", "image_bytes": "AAAA"},
@@ -283,9 +283,9 @@ class TestCaptchaHandler:
 class TestTodoHandler:
     @pytest.mark.asyncio
     async def test_returns_ok(self):
-        with patch("tools.todo_store.current_store") as mock_store:
+        with patch("yak_browser_use.tools.todo_store.current_store") as mock_store:
             mock_store.get.return_value = MagicMock()
-            with patch("tools.todo.todo", new_callable=AsyncMock) as mock_todo:
+            with patch("yak_browser_use.tools.todo.todo", new_callable=AsyncMock) as mock_todo:
                 mock_todo.return_value = "Todo list updated"
                 ctx = ToolContext()
                 result = await _todo_handler(
@@ -299,7 +299,7 @@ class TestTodoHandler:
 class TestFileHandlers:
     @pytest.mark.asyncio
     async def test_file_read_calls_through(self):
-        with patch("tools.file_read.file_read", new_callable=AsyncMock) as mock_read:
+        with patch("yak_browser_use.tools.file_read.file_read", new_callable=AsyncMock) as mock_read:
             mock_read.return_value = {"ok": True, "result": "content"}
             result = await _file_read_handler({"path": "/tmp/test.txt"}, ToolContext())
             assert result["ok"] is True
@@ -307,7 +307,7 @@ class TestFileHandlers:
 
     @pytest.mark.asyncio
     async def test_file_write_calls_through(self):
-        with patch("tools.file_write.file_write", new_callable=AsyncMock) as mock_write:
+        with patch("yak_browser_use.tools.file_write.file_write", new_callable=AsyncMock) as mock_write:
             mock_write.return_value = {"ok": True}
             result = await _file_write_handler(
                 {"path": "/tmp/test.txt", "content": "hello"},
@@ -318,7 +318,7 @@ class TestFileHandlers:
 
     @pytest.mark.asyncio
     async def test_format_convert_calls_through(self):
-        with patch("tools.format_convert.format_convert", new_callable=AsyncMock) as mock_convert:
+        with patch("yak_browser_use.tools.format_convert.format_convert", new_callable=AsyncMock) as mock_convert:
             mock_convert.return_value = {"ok": True, "result": "csv data"}
             result = await _format_convert_handler(
                 {"input": "data", "input_format": "json", "output_format": "csv"},
@@ -330,7 +330,7 @@ class TestFileHandlers:
 class TestRecordStepHandler:
     @pytest.mark.asyncio
     async def test_delegates_to_executor(self):
-        with patch("engine.executor.execute_tool", new_callable=AsyncMock) as mock_exec:
+        with patch("yak_browser_use.engine.executor.execute_tool", new_callable=AsyncMock) as mock_exec:
             mock_exec.return_value = {"ok": True}
             result = await _record_step_handler(
                 {"step": "Step 1 completed"},
@@ -343,7 +343,7 @@ class TestRecordStepHandler:
 class TestEvalAgentHandler:
     @pytest.mark.asyncio
     async def test_delegates_to_handle_eval_agent(self):
-        with patch("engine._harness.tool_executor._handle_eval_agent", new_callable=AsyncMock) as mock_eval:
+        with patch("yak_browser_use.engine._harness.tool_executor._handle_eval_agent", new_callable=AsyncMock) as mock_eval:
             mock_eval.return_value = {"ok": True, "result": "analysis"}
             ctx = ToolContext(
                 cdp_helpers=MagicMock(),

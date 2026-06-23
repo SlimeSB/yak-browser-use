@@ -1,13 +1,13 @@
 """Tests for tool_executor module (unit-level, no CDP)."""
 
-from engine._harness.tool_executor import (
+from yak_browser_use.engine._harness.tool_executor import (
     _extract_function_name,
     _extract_function_args,
     _format_tool_result,
     _truncate_args,
     _is_cdp_disconnect,
 )
-from engine.executor import _build_scroll_js
+from yak_browser_use.engine.executor import _build_scroll_js
 
 
 def test_extract_function_name():

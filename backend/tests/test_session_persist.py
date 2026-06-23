@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from workspace.session_store import (
+from yak_browser_use.workspace.session_store import (
     SessionStore,
     _generate_session_id,
     _normalize_pipeline,
@@ -28,7 +28,7 @@ def tmp_store():
         orig_root = Path("backend/userdata/workspaces")
         test_root = Path(td) / "workspaces"
         # Monkey-patch the root path
-        import workspace.session_store as ss
+        import yak_browser_use.workspace.session_store as ss
         orig = ss._WORKSPACES_ROOT
         ss._WORKSPACES_ROOT = test_root
         try:
@@ -105,7 +105,7 @@ def test_list_sessions(tmp_store):
 
 
 def test_atomic_write(tmp_store):
-    from workspace.session_store import _atomic_write_json
+    from yak_browser_use.workspace.session_store import _atomic_write_json
 
     tmp_store.ensure_session_dir()
     path = tmp_store._index_path()
@@ -122,7 +122,7 @@ def test_atomic_write(tmp_store):
 
 
 def test_last_active(tmp_store):
-    import workspace.session_store as ss
+    import yak_browser_use.workspace.session_store as ss
     orig_root = ss._WORKSPACES_ROOT
     with tempfile.TemporaryDirectory() as td:
         ss._WORKSPACES_ROOT = Path(td)

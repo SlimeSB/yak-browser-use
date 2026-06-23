@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from engine.executor import (
+from yak_browser_use.engine.executor import (
     mask_sensitive_patterns,
     sanitize_result,
     _build_scroll_js,

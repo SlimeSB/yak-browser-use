@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-from compiler.parser import (
+from yak_browser_use.compiler.parser import (
     parse_pipeline,
     inject_params_to_pipeline,
     _replace_placeholders,

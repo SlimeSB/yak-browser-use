@@ -9,7 +9,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from engine.runner_preset import (
+from yak_browser_use.engine.runner_preset import (
     _step_type,
     _safe_dirname,
     _resolve_step_urls,
@@ -17,7 +17,7 @@ from engine.runner_preset import (
     _write_execution_tree,
     _collect_input_files,
 )
-from engine.step_machine import StepMachine, StepStatus
+from yak_browser_use.engine.step_machine import StepMachine, StepStatus
 
 
 # ── _step_type ─────────────────────────────────────────────────────
@@ -172,7 +172,7 @@ class TestCollectInputFiles:
         mock_run_dir = Path("/runs/1")
 
         with patch(
-            "engine.executor._resolve_input_files",
+            "yak_browser_use.engine.executor._resolve_input_files",
             return_value={"data.json": "/runs/1/step_1/data.json"},
         ) as mock_resolve:
             result = _collect_input_files(mock_input_ref, mock_run_dir)
@@ -180,7 +180,7 @@ class TestCollectInputFiles:
             mock_resolve.assert_called_once_with(mock_input_ref, mock_run_dir)
 
     def test_empty_input_ref(self):
-        with patch("engine.executor._resolve_input_files", return_value={}):
+        with patch("yak_browser_use.engine.executor._resolve_input_files", return_value={}):
             result = _collect_input_files({}, Path("/"))
             assert result == {}
 
@@ -192,10 +192,10 @@ class TestRunPipeline:
     @pytest.mark.asyncio
     async def test_empty_steps_returns_immediately(self):
         """Pipeline with no steps should complete immediately."""
-        from engine.runner_preset import run_pipeline
+        from yak_browser_use.engine.runner_preset import run_pipeline
 
         with (
-            patch("engine.runner_preset.WorkspaceManager") as MockWM,
+            patch("yak_browser_use.engine.runner_preset.WorkspaceManager") as MockWM,
         ):
             mock_wm = MagicMock()
             mock_wm.root = Path("/mock/root")
@@ -219,20 +219,20 @@ class TestRunPipeline:
 
     @pytest.mark.asyncio
     async def test_browser_step_executes(self):
-        from engine.runner_preset import run_pipeline
+        from yak_browser_use.engine.runner_preset import run_pipeline
 
         steps = [
             {"name": "navigate", "browser_ops": [{"type": "goto", "value": "https://x.com"}]},
         ]
 
         with (
-            patch("engine.runner_preset.WorkspaceManager") as MockWM,
-            patch("engine.runner_preset.execute_browser_step", new_callable=AsyncMock) as mock_exec,
-            patch("engine.runner_preset.write_step_json"),
-            patch("engine.runner_preset.sanitize_result", side_effect=lambda x: x),
-            patch("engine.runner_preset._write_execution_tree"),
-            patch("engine.runner_preset._setup_run_logger", return_value=None),
-            patch("engine.runner_preset.EventSink") as MockEvents,
+            patch("yak_browser_use.engine.runner_preset.WorkspaceManager") as MockWM,
+            patch("yak_browser_use.engine.runner_preset.execute_browser_step", new_callable=AsyncMock) as mock_exec,
+            patch("yak_browser_use.engine.runner_preset.write_step_json"),
+            patch("yak_browser_use.engine.runner_preset.sanitize_result", side_effect=lambda x: x),
+            patch("yak_browser_use.engine.runner_preset._write_execution_tree"),
+            patch("yak_browser_use.engine.runner_preset._setup_run_logger", return_value=None),
+            patch("yak_browser_use.engine.runner_preset.EventSink") as MockEvents,
         ):
             mock_wm = MagicMock()
             mock_wm.root = Path("/mock/root")
@@ -261,18 +261,18 @@ class TestRunPipeline:
 
     @pytest.mark.asyncio
     async def test_cancelled_during_run(self):
-        from engine.runner_preset import run_pipeline
+        from yak_browser_use.engine.runner_preset import run_pipeline
 
         steps = [
             {"name": "s1", "browser_ops": [{"type": "goto", "value": "https://x.com"}]},
         ]
 
         with (
-            patch("engine.runner_preset.WorkspaceManager") as MockWM,
-            patch("engine.runner_preset.execute_browser_step", new_callable=AsyncMock),
-            patch("engine.runner_preset._write_execution_tree"),
-            patch("engine.runner_preset._setup_run_logger", return_value=None),
-            patch("engine.runner_preset.EventSink") as MockEvents,
+            patch("yak_browser_use.engine.runner_preset.WorkspaceManager") as MockWM,
+            patch("yak_browser_use.engine.runner_preset.execute_browser_step", new_callable=AsyncMock),
+            patch("yak_browser_use.engine.runner_preset._write_execution_tree"),
+            patch("yak_browser_use.engine.runner_preset._setup_run_logger", return_value=None),
+            patch("yak_browser_use.engine.runner_preset.EventSink") as MockEvents,
         ):
             mock_wm = MagicMock()
             mock_wm.root = Path("/mock/root")

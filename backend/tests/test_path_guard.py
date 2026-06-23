@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from workspace.path_guard import PathGuard
+from yak_browser_use.workspace.path_guard import PathGuard
 
 
 class TestPathGuard:

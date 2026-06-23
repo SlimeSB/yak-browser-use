@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from workspace.version_manager import VersionManager
+from yak_browser_use.workspace.version_manager import VersionManager
 
 
 class TestVersionManagerInit:

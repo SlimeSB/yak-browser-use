@@ -1,6 +1,6 @@
 """Tests for prompts/_loader module."""
 
-from prompts._loader import load_prompt
+from yak_browser_use.prompts._loader import load_prompt
 
 
 def test_load_prompt_basic():

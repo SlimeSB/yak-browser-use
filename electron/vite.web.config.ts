@@ -15,7 +15,7 @@ export default defineConfig({
     include: ['monaco-editor'],
   },
   build: {
-    outDir: '../../../backend/static', // relative to root (src/renderer); monaco plugin concatenates root+outDir
+    outDir: '../../../backend/src/yak_browser_use/static', // relative to root (src/renderer)
     emptyOutDir: true,
     rollupOptions: {
       output: {

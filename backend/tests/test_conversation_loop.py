@@ -1,12 +1,12 @@
 """Tests for conversation_loop module (unit-level, no LLM/CDP)."""
 
-from engine._harness.conversation_loop import (
+from yak_browser_use.engine._harness.conversation_loop import (
     _prepare_messages,
     ConversationResult,
     resume_conversation,
 )
-from engine._harness.iteration_budget import IterationBudget
-from engine._harness.turn_context import InterruptState, save_interrupt_state
+from yak_browser_use.engine._harness.iteration_budget import IterationBudget
+from yak_browser_use.engine._harness.turn_context import InterruptState, save_interrupt_state
 
 
 def test_prepare_messages_with_system():

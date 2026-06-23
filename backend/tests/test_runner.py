@@ -15,14 +15,14 @@ class TestRunChatLoop:
     @pytest.mark.asyncio
     async def test_default_messages_list(self):
         """When messages is None, should default to empty list."""
-        from engine.runner import run_chat_loop
+        from yak_browser_use.engine.runner import run_chat_loop
 
         mock_llm = MagicMock()
 
         with (
-            patch("engine._harness.conversation_loop.run_conversation_loop") as mock_loop,
-            patch("engine._harness.tools.get_all_tools", return_value=[]),
-            patch("prompts._loader.build_system_prompt", return_value="sys prompt"),
+            patch("yak_browser_use.engine._harness.conversation_loop.run_conversation_loop") as mock_loop,
+            patch("yak_browser_use.engine._harness.tools.get_all_tools", return_value=[]),
+            patch("yak_browser_use.prompts._loader.build_system_prompt", return_value="sys prompt"),
         ):
             mock_result = MagicMock()
             mock_result.final_response = "Hello!"
@@ -44,14 +44,14 @@ class TestRunChatLoop:
 
     @pytest.mark.asyncio
     async def test_interrupted_status(self):
-        from engine.runner import run_chat_loop
+        from yak_browser_use.engine.runner import run_chat_loop
 
         mock_llm = MagicMock()
 
         with (
-            patch("engine._harness.conversation_loop.run_conversation_loop") as mock_loop,
-            patch("engine._harness.tools.get_all_tools", return_value=[]),
-            patch("prompts._loader.build_system_prompt", return_value="sys"),
+            patch("yak_browser_use.engine._harness.conversation_loop.run_conversation_loop") as mock_loop,
+            patch("yak_browser_use.engine._harness.tools.get_all_tools", return_value=[]),
+            patch("yak_browser_use.prompts._loader.build_system_prompt", return_value="sys"),
         ):
             mock_result = MagicMock()
             mock_result.interrupted = True
@@ -69,14 +69,14 @@ class TestRunChatLoop:
 
     @pytest.mark.asyncio
     async def test_custom_system_prompt_passed_through(self):
-        from engine.runner import run_chat_loop
+        from yak_browser_use.engine.runner import run_chat_loop
 
         mock_llm = MagicMock()
         custom_prompt = "You are a custom assistant."
 
         with (
-            patch("engine._harness.conversation_loop.run_conversation_loop") as mock_loop,
-            patch("engine._harness.tools.get_all_tools", return_value=[]),
+            patch("yak_browser_use.engine._harness.conversation_loop.run_conversation_loop") as mock_loop,
+            patch("yak_browser_use.engine._harness.tools.get_all_tools", return_value=[]),
         ):
             mock_result = MagicMock()
             mock_result.final_response = "OK"
@@ -99,14 +99,14 @@ class TestRunChatLoop:
     @pytest.mark.asyncio
     async def test_empty_system_prompt_loads_default(self):
         """When system_prompt is empty, should call build_system_prompt()."""
-        from engine.runner import run_chat_loop
+        from yak_browser_use.engine.runner import run_chat_loop
 
         mock_llm = MagicMock()
 
         with (
-            patch("engine._harness.conversation_loop.run_conversation_loop") as mock_loop,
-            patch("engine._harness.tools.get_all_tools", return_value=[]),
-            patch("prompts._loader.build_system_prompt", return_value="default prompt") as mock_build,
+            patch("yak_browser_use.engine._harness.conversation_loop.run_conversation_loop") as mock_loop,
+            patch("yak_browser_use.engine._harness.tools.get_all_tools", return_value=[]),
+            patch("yak_browser_use.prompts._loader.build_system_prompt", return_value="default prompt") as mock_build,
         ):
             mock_result = MagicMock()
             mock_result.final_response = "OK"
@@ -123,15 +123,15 @@ class TestRunChatLoop:
 
     @pytest.mark.asyncio
     async def test_provided_messages_passed_through(self):
-        from engine.runner import run_chat_loop
+        from yak_browser_use.engine.runner import run_chat_loop
 
         mock_llm = MagicMock()
         msgs = [{"role": "system", "content": "be helpful"}]
 
         with (
-            patch("engine._harness.conversation_loop.run_conversation_loop") as mock_loop,
-            patch("engine._harness.tools.get_all_tools", return_value=[]),
-            patch("prompts._loader.build_system_prompt", return_value="sys"),
+            patch("yak_browser_use.engine._harness.conversation_loop.run_conversation_loop") as mock_loop,
+            patch("yak_browser_use.engine._harness.tools.get_all_tools", return_value=[]),
+            patch("yak_browser_use.prompts._loader.build_system_prompt", return_value="sys"),
         ):
             mock_result = MagicMock()
             mock_result.final_response = "OK"

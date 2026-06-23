@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from compiler.diff import (
+from yak_browser_use.compiler.diff import (
     _selector_matches,
     _selector_lists_match,
     diff_ops,
@@ -187,7 +187,7 @@ class TestFilterRejected:
         }
         (rejected_dir / "rejected.json").write_text(json.dumps(rejected_data), encoding="utf-8")
 
-        monkeypatch.setattr("compiler.diff.LEARN_DIR", tmp_path / "logs" / "learn")
+        monkeypatch.setattr("yak_browser_use.compiler.diff.LEARN_DIR", tmp_path / "logs" / "learn")
         ops = [
             {"type": "click", "value": "#btn"},
             {"type": "goto", "value": "https://x.com"},
@@ -207,7 +207,7 @@ class TestFilterRejected:
 
 class TestAddToRejected:
     def test_creates_new_rejected_file(self, tmp_path, monkeypatch):
-        monkeypatch.setattr("compiler.diff.LEARN_DIR", tmp_path / "logs" / "learn")
+        monkeypatch.setattr("yak_browser_use.compiler.diff.LEARN_DIR", tmp_path / "logs" / "learn")
         ops = [{"type": "click", "value": "#btn", "reason": "test rejection"}]
         add_to_rejected("test_pipe", ops, "test_user")
 
@@ -221,7 +221,7 @@ class TestAddToRejected:
         assert data["blocked"][0]["rejected_by"] == "test_user"
 
     def test_appends_to_existing(self, tmp_path, monkeypatch):
-        monkeypatch.setattr("compiler.diff.LEARN_DIR", tmp_path / "logs" / "learn")
+        monkeypatch.setattr("yak_browser_use.compiler.diff.LEARN_DIR", tmp_path / "logs" / "learn")
         existing = {"pipeline": "test_pipe", "blocked": [{"selector": "#old", "type": "click"}]}
         rdir = tmp_path / "logs" / "learn" / "test_pipe"
         rdir.mkdir(parents=True, exist_ok=True)
@@ -232,7 +232,7 @@ class TestAddToRejected:
         assert len(data["blocked"]) == 2
 
     def test_empty_reason_defaults(self, tmp_path, monkeypatch):
-        monkeypatch.setattr("compiler.diff.LEARN_DIR", tmp_path / "logs" / "learn")
+        monkeypatch.setattr("yak_browser_use.compiler.diff.LEARN_DIR", tmp_path / "logs" / "learn")
         add_to_rejected("test_pipe", [{"type": "click", "value": "#btn"}], "tester")
         rejected_path = tmp_path / "logs" / "learn" / "test_pipe" / "rejected.json"
         data = json.loads(rejected_path.read_text(encoding="utf-8"))
@@ -244,7 +244,7 @@ class TestAddToRejected:
 
 class TestSaveSuggestions:
     def test_saves_new_suggestion(self, tmp_path, monkeypatch):
-        monkeypatch.setattr("compiler.diff.LEARN_DIR", tmp_path / "logs" / "learn")
+        monkeypatch.setattr("yak_browser_use.compiler.diff.LEARN_DIR", tmp_path / "logs" / "learn")
         ops = [{"type": "click", "value": "#new_btn"}]
         sid = save_suggestions(ops, "test_pipe", "pending", "Found new ops")
 
@@ -258,7 +258,7 @@ class TestSaveSuggestions:
         assert data[0]["extra_ops"] == ops
 
     def test_appends_to_existing(self, tmp_path, monkeypatch):
-        monkeypatch.setattr("compiler.diff.LEARN_DIR", tmp_path / "logs" / "learn")
+        monkeypatch.setattr("yak_browser_use.compiler.diff.LEARN_DIR", tmp_path / "logs" / "learn")
         save_suggestions([], "test_pipe", "pending", "first")
         save_suggestions([], "test_pipe", "accepted", "second")
 
@@ -267,7 +267,7 @@ class TestSaveSuggestions:
         assert len(data) == 2
 
     def test_with_interrupt_reason(self, tmp_path, monkeypatch):
-        monkeypatch.setattr("compiler.diff.LEARN_DIR", tmp_path / "logs" / "learn")
+        monkeypatch.setattr("yak_browser_use.compiler.diff.LEARN_DIR", tmp_path / "logs" / "learn")
         sid = save_suggestions([], "test_pipe", "interrupted", "Interrupted",
                                interrupt_reason="user cancelled")
         sug_path = tmp_path / "logs" / "learn" / "test_pipe" / "suggestions.json"

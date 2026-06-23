@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from engine._harness.iteration_budget import IterationBudget
+from yak_browser_use.engine._harness.iteration_budget import IterationBudget
 
 
 class TestIterationBudget:

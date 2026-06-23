@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from engine.scratchpad import (
+from yak_browser_use.engine.scratchpad import (
     ScratchpadRecord,
     _scratchpads,
     get,
