@@ -15,6 +15,7 @@ from fastapi.responses import JSONResponse
 from yak_browser_use.api.errors import APIError, ServerError
 from yak_browser_use.api.state import engine_state
 from yak_browser_use.utils.logging import get_logger
+from yak_browser_use.utils._path import project_root
 
 logger = get_logger(__name__)
 
@@ -374,7 +375,7 @@ def register_all_routes(app: FastAPI) -> None:
         except Exception:
             logger.warning("save-page: pre-render failed", exc_info=True)
 
-        debug_dir = Path(__file__).resolve().parent.parent.parent / "debug-page"
+        debug_dir = project_root() / "debug-page"
         debug_dir.mkdir(parents=True, exist_ok=True)
         try:
             html = await page.content()
@@ -1051,7 +1052,7 @@ def register_all_routes(app: FastAPI) -> None:
         """Delete a pipeline workspace."""
         import shutil
         safe_name = Path(name).name
-        base = Path(__file__).resolve().parent.parent.parent
+        base = project_root()
         workspace_dir = base / "userdata" / "workspaces" / safe_name
         if workspace_dir.exists() and workspace_dir.is_dir():
             shutil.rmtree(str(workspace_dir))
@@ -1065,7 +1066,7 @@ def register_all_routes(app: FastAPI) -> None:
     @app.get("/api/pipelines")
     async def api_list_pipelines() -> JSONResponse:
         """List all pipelines from workspaces/."""
-        base = Path(__file__).resolve().parent.parent.parent
+        base = project_root()
         workspaces_dir = base / "userdata" / "workspaces"
         pipelines: list[dict] = []
         if workspaces_dir.exists():
@@ -1080,7 +1081,7 @@ def register_all_routes(app: FastAPI) -> None:
     async def api_get_pipeline(name: str) -> JSONResponse:
         """Get a specific pipeline's content from workspaces/."""
         safe_name = Path(name).name
-        base = Path(__file__).resolve().parent.parent.parent
+        base = project_root()
         pipe_path = base / "userdata" / "workspaces" / safe_name / "pipeline.yaml"
         if not pipe_path.exists():
             raise APIError("pipeline not found", status_code=404)
@@ -1092,7 +1093,7 @@ def register_all_routes(app: FastAPI) -> None:
         """Delete a pipeline workspace."""
         import shutil
         safe_name = Path(name).name
-        base = Path(__file__).resolve().parent.parent.parent
+        base = project_root()
         workspace_dir = base / "userdata" / "workspaces" / safe_name
         if workspace_dir.exists() and workspace_dir.is_dir():
             shutil.rmtree(str(workspace_dir))

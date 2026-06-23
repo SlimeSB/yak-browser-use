@@ -14,13 +14,14 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from yak_browser_use.utils.logging import get_logger
+from yak_browser_use.utils._path import project_root
 
 logger = get_logger(__name__)
 
 DEFAULT_MAX_RUNS = 20
 VALID_STATUSES = frozenset({"running", "completed", "failed", "paused", "cancelled", "crashed"})
 
-WORKSPACES_ROOT = Path(__file__).resolve().parent.parent.parent / "userdata" / "workspaces"
+WORKSPACES_ROOT = project_root() / "userdata" / "workspaces"
 
 
 class WorkspaceManager:

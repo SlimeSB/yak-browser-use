@@ -5,12 +5,13 @@ import json
 from pathlib import Path
 
 from yak_browser_use.utils.logging import get_logger
+from yak_browser_use.utils._path import project_root
 
 logger = get_logger(__name__)
 
 
 def _get_config_path() -> Path:
-    p = Path(__file__).resolve().parent.parent.parent / "userdata" / "provider.json"
+    p = project_root() / "userdata" / "provider.json"
     logger.debug("Config path: %s", p)
     return p
 

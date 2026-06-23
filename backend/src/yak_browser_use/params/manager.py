@@ -10,10 +10,11 @@ import os
 from pathlib import Path
 
 from yak_browser_use.utils.logging import get_logger
+from yak_browser_use.utils._path import project_root
 
 logger = get_logger(__name__)
 
-_DEFAULT_STORE_PATH = Path(__file__).resolve().parent.parent.parent / "userdata" / "params.json"
+_DEFAULT_STORE_PATH = project_root() / "userdata" / "params.json"
 
 
 class ParamRef:

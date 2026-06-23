@@ -21,11 +21,12 @@ import asyncio
 from pathlib import Path
 
 from yak_browser_use.utils.logging import get_logger
+from yak_browser_use.utils._path import project_root
 
 logger = get_logger(__name__)
 
-_LOG_DIR = (Path(__file__).resolve().parent.parent.parent / "logs").resolve()
-_WORKSPACES_ROOT = Path(__file__).resolve().parent.parent.parent / "userdata" / "workspaces"
+_LOG_DIR = (project_root() / "logs").resolve()
+_WORKSPACES_ROOT = project_root() / "userdata" / "workspaces"
 
 
 def _find_run_dir(run_id: str) -> Path | None:

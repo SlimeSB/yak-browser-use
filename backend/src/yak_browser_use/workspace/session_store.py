@@ -18,10 +18,11 @@ from datetime import datetime
 from pathlib import Path
 
 from yak_browser_use.utils.logging import get_logger
+from yak_browser_use.utils._path import project_root
 
 logger = get_logger(__name__)
 
-_WORKSPACES_ROOT = Path(__file__).resolve().parent.parent.parent / "userdata" / "workspaces"
+_WORKSPACES_ROOT = project_root() / "userdata" / "workspaces"
 _LAST_ACTIVE_FILE = _WORKSPACES_ROOT / ".last_active"
 
 

@@ -6,11 +6,12 @@ import logging
 import sys
 from logging.handlers import TimedRotatingFileHandler
 from pathlib import Path
+from yak_browser_use.utils._path import project_root
 
 _initialized = False
 
 # Resolve the project root directory (two levels above this file)
-_LOG_DIR = (Path(__file__).resolve().parent.parent.parent / "logs").resolve()
+_LOG_DIR = (project_root() / "logs").resolve()
 
 
 def get_logger(name: str) -> logging.Logger:

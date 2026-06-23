@@ -44,6 +44,11 @@ userdata/workspaces/
 userdata/params.json
 userdata/provider.json
 
+# Web test artifacts (should go under workspace/)
+backend/*.csv
+backend/*.json
+backend/*.yaml
+
 # Web build output
 backend/src/yak_browser_use/static/
 

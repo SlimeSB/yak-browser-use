@@ -5,10 +5,11 @@ import logging
 import time
 from pathlib import Path
 from typing import Any
+from yak_browser_use.utils._path import project_root
 
 logger = logging.getLogger("ybu.response_logger")
 
-_RESPONSES_DIR = Path(__file__).resolve().parent.parent.parent / "logs" / "llm"
+_RESPONSES_DIR = project_root() / "logs" / "llm"
 
 
 def _ensure_dir() -> Path:
