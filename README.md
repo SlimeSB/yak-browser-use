@@ -76,7 +76,7 @@ Built on [Playwright](https://playwright.dev/) `connect_over_cdp()` and an OpenA
 ### One-command (no install required)
 
 ```bash
-uvx yak-browser-use
+uvx yak-browser-use web
 ```
 
 Opens the Web UI in your browser — zero setup. The first run auto-installs the package and dependencies.
@@ -108,7 +108,7 @@ npm install                          # Install Electron frontend deps
 
 ```bash
 # Quickest — launch Web UI from PyPI (no local setup needed)
-uvx yak-browser-use
+uvx yak-browser-use web
 
 # Or after local install:
 cd backend

@@ -77,7 +77,7 @@
 ### 一行命令（无需安装）
 
 ```bash
-uvx yak-browser-use
+uvx yak-browser-use web
 ```
 
 直接在浏览器中打开 Web UI — 零配置。首次运行会自动下载安装依赖。
@@ -111,7 +111,7 @@ npm install                          # 安装 Electron 前端依赖
 
 ```bash
 # 最快方式 — 从 PyPI 启动 Web UI（本地无需安装）
-uvx yak-browser-use
+uvx yak-browser-use web
 
 # 或本地安装后：
 cd backend

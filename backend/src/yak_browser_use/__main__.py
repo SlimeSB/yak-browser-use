@@ -15,9 +15,9 @@ def main() -> None:
         "--log-level", default=None, choices=["DEBUG", "INFO", "WARNING", "ERROR"],
         help="Log level (default DEBUG, overridable via YBU_LOG_LEVEL env var)",
     )
-    sub = parser.add_subparsers(dest="command", required=True)
+    sub = parser.add_subparsers(dest="command")
 
-    # ── web ──
+    # ── web (default) ──
     web_p = sub.add_parser("web", help="Start the web UI (backend + static frontend)")
     web_p.add_argument("--port", type=int, default=8787, help="Port number (default: 8787)")
     web_p.add_argument("--host", default="127.0.0.1")
@@ -69,8 +69,9 @@ def main() -> None:
         web_main(host=args.host, port=args.port)
 
     else:
-        parser.print_help()
-        sys.exit(1)
+        # no subcommand → default to web
+        from yak_browser_use.cli.web import main as web_main
+        web_main()
 
 
 if __name__ == "__main__":

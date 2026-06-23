@@ -63,7 +63,7 @@ where = ["src"]
 "yak_browser_use.prompts" = ["**/*"]
 
 [project.scripts]
-yak-browser-use = "yak_browser_use.cli.web:main"
+yak-browser-use = "yak_browser_use.__main__:main"
 
 [tool.setuptools_scm]
 root = ".."
