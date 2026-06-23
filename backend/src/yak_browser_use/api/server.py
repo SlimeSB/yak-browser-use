@@ -53,6 +53,16 @@ def create_app() -> FastAPI:
     register_all_routes(app)
     register_error_handlers(app)
 
+    # ── Favicon ────────────────────────────────────────────────────
+    from yak_browser_use.utils._path import project_root
+    logo = project_root() / "logo.png"
+    if logo.exists():
+
+        @app.get("/favicon.ico", include_in_schema=False)
+        async def favicon():
+            from fastapi.responses import FileResponse
+            return FileResponse(str(logo))
+
     # ── Static files (Web mode) ────────────────────────────────────
     static_dir = os.path.join(os.path.dirname(__file__), "..", "static")
     if os.path.isdir(static_dir):

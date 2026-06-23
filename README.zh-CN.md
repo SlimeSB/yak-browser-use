@@ -54,7 +54,7 @@
 | # | 特性 | 为什么重要 |
 |---|------|-----------|
 | 1 | **跨 Tab 隔离的实时 DOM 高亮** — 双层覆盖层（容器 + 浮动高亮块），RAF 节流重绘，MutationObserver 轻量增量更新。后台定时守卫线程防止跨 tab 不同步。每个 tab 保有独立高亮状态。 | 大多数浏览器 AI 工具要么没有实时高亮，要么用内联样式——滚动就崩、跨 tab 就串。Ybu 的高亮经受了真实业务压力测试——导航、滚动、SPA 切换后仍然稳定。 |
-| 2 | **三种快照策略适配不同页面类型** — `progressive`（密度自适应 DOM 遍历，≤200 元素，折叠密集容器，`expand_branch` 按需展开）适合普通页面；`a11y`（无障碍树，iframe / 锁定 DOM 仍可用）适合复杂页面；`simplified`（结构化摘要：标题、链接、列表、表格、正文）适合低成本概览。LLM 自动选择最合适的策略，不需要你操心。 | 单一快照策略在不同页面类型（SPA、iframe 密集、锁定 DOM）上各自失败。三种策略最大化覆盖率，LLM 不需要理解页面结构细节——只管选对模式就行。 |
+| 2 | **三种快照策略适配不同页面类型** — `aria`（Playwright aria_snapshot(mode="ai")，YAML 语义树，LLM 最省 token）适合快速概览；`a11y`（CDP Accessibility.getFullAXTree，结构化元素，含 ref/selector 支持 click/fill）适合可操作交互；`progressive`（密度自适应 DOM 遍历，≤200 元素，折叠密集容器，`expand_branch` 按需展开）适合复杂长页面。LLM 自动选择最合适的策略，不需要你操心。 | 单一快照策略在不同页面类型（SPA、iframe 密集、锁定 DOM）上各自失败。三种策略最大化覆盖率，LLM 不需要理解页面结构细节——只管选对模式就行。 |
 | 3 | **渐进式快照的密度自适应折叠** — 不是简单的截断。遍历器深度优先读文档，每层测量容器密度，折叠超过阈值的内容，展平后通过 `expand_branch` 句柄让 LLM 按需展开。 | 其他框架截断 N 个元素后直接丢掉剩余内容。Ybu 的折叠-展开机制让 LLM 看到页面全貌，然后只深入感兴趣的区域，不浪费 token 在模板代码上。 |
 | 4 | **Pipeline 是副产品** — 不需要预先定义 Pipeline。先聊天，后录制。`pipeline.yaml` 是聊天过程的录制产物，不是设计的起点。有用的流程保留下来后续回放。 | 降低使用门槛：不需要规划自动化流程，只管跟 Agent 聊天，它替你写。Pipeline 设计从真实交互中涌现，而不是前期写死。 |
 | 5 | **共享存储的双语法模板解析** — `{path}`（全值引用，保留类型）+ `${path}`（内联字符串插值，`$` 前缀消歧义避免跟 JSON 花括号打架）。刻意设计的两个独立语法，不是无心不一致。 | 在不同工具间传递整个数据结构（`{step_3}`），或在 URL 和模板里插值（`https://${host}/api`）。每种语法有清晰的语义和失败模式。 |
@@ -66,7 +66,7 @@
 | 11 | **Chat + 浏览器同步与流式 LLM** — 用户输入指令 → Agent 操作浏览器 → 推理过程、文本增量、工具调用结果全部通过 WebSocket 实时流式推送 | 无需配置文件、无需脚本。用自然语言就能驱动浏览器。看到 Agent 边思考边工作，而不是只看到最终结果。 |
 | 12 | **丰富浏览器工具集** — 22 个浏览器原子操作（goto、click、fill、snapshot、scroll、eval、hover、tab…）覆盖日常自动化 | 足够全面应对真实任务，又足够精细实现精确控制。 |
 | 13 | **自定义工具脚本** — 通过 ToolRegistry 热加载 Python 脚本；内置验证码、文件 IO、格式转换 | 不修改核心代码即可扩展 Agent 能力。丢进一个脚本，它就工作。 |
-| 14 | **Electron 桌面 + REST API** — React + Vite + Monaco 编辑器前端（支持 Diff）；FastAPI 后端同时提供 REST 端点和实时 WebSocket 事件流 | 一个 IDE 级环境用于编写和调试自动化流程，同时提供 API 对接任何前端或 CI pipeline。 |
+| 14 | **Electron 桌面 + Web UI** — React + Vite + Monaco 编辑器前端（支持 Diff 编辑器）；FastAPI 后端提供 REST 端点、WebSocket 事件流和静态前端。支持 Electron 桌面应用或 `uvx yak-browser-use` 一键浏览器 UI。 | 一个 IDE 级环境用于编写和调试自动化流程，内置 API 可对接任何前端或 CI pipeline。一行命令启动 Web 模式，无需 Electron 即可快速演示。 |
 | 15 | **连接健康检测与会话持久化** — CDP 心跳 + 进程监控 + 自动断线处理；每个 Pipeline 独立 session 目录保存完整对话历史 | 让长时间运行的自动化在网络抖动和浏览器重启后仍保持在线。再也不丢上下文——重启后从上一次的地方继续。 |
 | 16 | **Provider 灵活配置** — 支持 DeepSeek / OpenAI / 任意 OpenAI-compatible 提供商，平铺 JSON 配置 | 用你想用的模型，不是我们替你选的。 |
 
@@ -143,10 +143,11 @@ npm run electron:dev
 ```text
 ybu run <path>                执行 pipeline.yaml
 ybu serve [--port PORT]       启动 REST API 服务
+ybu web                       启动 Web UI（浏览器，无需 Electron）
 ybu logs [-f] [--source all]  查看统一日志
 ```
 
-> CLI 命令只有 `serve`、`run`、`logs`。配置通过 REST API / Electron 设置面板进行，不存在 `ybu param` 等子命令。
+> CLI 命令：`serve`、`run`、`web`、`logs`。配置通过 Web UI / Electron 设置面板进行，不是 CLI 子命令。
 
 ---
 
@@ -342,6 +343,7 @@ chrome.exe --remote-debugging-port=9222
 | `uv run python -m yak_browser_use logs -f` | 实时查看日志 |
 | `uv run python -m yak_browser_use --help` | 查看全部命令 |
 | `cd electron && npm run electron:dev` | 启动 Electron 前端 |
+| `cd electron && npm run dev:web` | 启动 Web 前端开发服务器（Vite HMR + 代理） |
 
 ---
 
