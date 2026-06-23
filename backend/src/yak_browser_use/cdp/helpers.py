@@ -65,6 +65,9 @@ class CDPHelpers:
     async def capture_snapshot(self) -> dict:
         return await self._bridge.capture_snapshot()
 
+    async def interactive_snapshot(self, query: str = "", in_viewport: bool = False) -> dict:
+        return await self._bridge.interactive_snapshot(query=query, in_viewport=in_viewport)
+
     async def get_page_html(self) -> str:
         return await self._bridge.source()
 

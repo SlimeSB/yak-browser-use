@@ -1213,10 +1213,13 @@ class PlaywrightBridge:
 
     async def click(self, selector: str, click_count: int = 1) -> dict:
         locator = self._page.locator(selector)
-        if click_count > 1:
-            await locator.dblclick()
-        else:
-            await locator.click()
+        try:
+            if click_count > 1:
+                await locator.dblclick()
+            else:
+                await locator.click()
+        except Exception:
+            await locator.evaluate("el => el.click()")
         return {"selector": selector}
 
     # ------------------------------------------------------------------
@@ -1227,7 +1230,13 @@ class PlaywrightBridge:
     # ------------------------------------------------------------------
 
     async def fill(self, selector: str, text: str) -> dict:
-        await self._page.locator(selector).fill(text)
+        locator = self._page.locator(selector)
+        try:
+            await locator.fill(text)
+        except Exception:
+            await locator.focus()
+            await locator.fill("")
+            await self._page.keyboard.type(text)
         return {"selector": selector}
 
     async def scroll(self, direction: str = "down", amount: int = 300) -> dict:
@@ -1371,13 +1380,16 @@ class PlaywrightBridge:
                 url = p.url
                 title = await p.title()
                 pid = await p.evaluate("() => window.__ybu_page_id || ''")
+                if not pid:
+                    pid = str(uuid.uuid4())[:8]
+                    await p.evaluate("(id) => { window.__ybu_page_id = id }", pid)
             except Exception:
                 url = ""
                 title = ""
                 pid = ""
             result.append({
                 "index": i,
-                "targetId": pid or f"tab_{i}",
+                "targetId": pid,
                 "url": url,
                 "title": title,
             })
@@ -1670,6 +1682,97 @@ class PlaywrightBridge:
             "lists": data.get("lists", []),
             "tables": data.get("tables", []),
             "mode": "simplified",
+        }
+
+    async def interactive_snapshot(self, query: str = "", in_viewport: bool = False) -> dict:
+        """CDP DOM walk collecting all interactive elements with CSS selectors.
+
+        Supports query filtering (text/tag/role match) and in_viewport filtering.
+        Unlike progressive mode, this returns ALL interactive elements without
+        density-adaptive folding — useful for precise element targeting.
+        """
+        cdp = await self._context.new_cdp_session(self._page)
+        try:
+            doc = await cdp.send("DOM.getDocument", {"depth": -1, "pierce": True})
+        finally:
+            await cdp.detach()
+
+        elements: list[dict] = []
+
+        def walk(node: dict) -> None:
+            if node.get("nodeType") != 1:
+                for child in node.get("children", []):
+                    walk(child)
+                return
+            attrs_list = node.get("attributes", [])
+            attrs: dict[str, str] = {}
+            for i in range(0, len(attrs_list), 2):
+                if i + 1 < len(attrs_list):
+                    attrs[attrs_list[i]] = attrs_list[i + 1]
+            tag = node["nodeName"].lower()
+            bid = node["backendNodeId"]
+            if not _is_interactive_progressive(tag, attrs):
+                for child in node.get("children", []):
+                    walk(child)
+                return
+            selector = _build_selector_from_node(tag, attrs)
+            ref = f"@e_{bid}"
+            text = (attrs.get("aria-label", "")
+                    or attrs.get("title", "")
+                    or attrs.get("value", "")
+                    or attrs.get("placeholder", "")
+                    or _extract_text_from_children(node))
+            elements.append({
+                "ref": ref,
+                "selector": selector,
+                "tag": tag,
+                "text": text,
+                "type": attrs.get("type", ""),
+                "role": attrs.get("role", ""),
+                "backendNodeId": bid,
+            })
+            for child in node.get("children", []):
+                walk(child)
+
+        walk(doc.get("root", {}))
+
+        if in_viewport:
+            js = """
+            (function() {
+                var vp = {w: window.innerWidth, h: window.innerHeight};
+                var sels = arguments[0];
+                return sels.map(function(sel) {
+                    try {
+                        var el = document.querySelector(sel);
+                        if (!el) return false;
+                        var r = el.getBoundingClientRect();
+                        return r.top < vp.h && r.bottom > 0 && r.left < vp.w && r.right > 0;
+                    } catch(e) { return false; }
+                });
+            })
+            """
+            sels = [e["selector"] for e in elements]
+            in_vp = await self._page.evaluate(js, sels)
+            elements = [e for e, v in zip(elements, in_vp) if v]
+
+        if query:
+            q = query.lower()
+            if q.startswith("#") or q.startswith("."):
+                elements = [e for e in elements if q in e.get("selector", "").lower()]
+            else:
+                elements = [
+                    e for e in elements
+                    if (q in e.get("text", "").lower()
+                        or q in e.get("tag", "").lower()
+                        or q in e.get("role", "").lower()
+                        or q in e.get("type", "").lower())
+                ]
+
+        return {
+            "elements": elements,
+            "mode": "interactive",
+            "url": self._page.url,
+            "title": await self._page.title(),
         }
 
     async def capture_snapshot(self) -> dict:

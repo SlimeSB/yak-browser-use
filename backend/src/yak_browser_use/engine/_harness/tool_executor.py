@@ -161,7 +161,7 @@ async def execute_tool_calls_sequential(
                 "type": EVENT_TOOL_END,
                 "tool_name": fn_name,
                 "ok": ok,
-                "duration_ms": result_dict.get("duration_ms", 0),
+                "duration_ms": result_dict.get("duration_ms", int((time.time() - start) * 1000)),
                 "error": error_msg if not ok else None,
                 "id": tool_call_id,
             })

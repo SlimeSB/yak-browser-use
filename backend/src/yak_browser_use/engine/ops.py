@@ -132,16 +132,17 @@ class ToolContext:
 
     async def snapshot(
         self,
-        mode: str = "a11y",
+        mode: str = "simplified",
         query: str = "",
         in_viewport: bool = False,
     ) -> dict:
         """Capture a page snapshot.
 
         *mode* values:
-          - ``"a11y"`` (default) — Accessibility Tree via ``a11y_snapshot`` (lightweight)
+          - ``"simplified"`` (default) — simplified text-only snapshot (titles, links, lists, tables)
+          - ``"interactive"`` — CDP DOM walk, all interactive elements with CSS selectors
           - ``"progressive"`` — CDP DOM walk + density-adaptive disclosure
-          - ``"simplified"`` — simplified text-only snapshot
+          - ``"a11y"`` — Accessibility Tree via ``a11y_snapshot`` (requires browser support)
           - ``"full"`` — complete DOM + screenshot via ``capture_snapshot``
         """
         self._check_domain()
@@ -153,6 +154,8 @@ class ToolContext:
                 result = await self._bridge._progressive_snapshot(query=query)
             elif mode == "simplified":
                 result = await self._bridge.simplified_snapshot()
+            elif mode == "interactive":
+                result = await self._bridge.interactive_snapshot(query=query, in_viewport=in_viewport)
             else:
                 result = await self._bridge.capture_snapshot()
             self._fail_count = 0

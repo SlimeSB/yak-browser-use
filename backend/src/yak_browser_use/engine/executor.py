@@ -154,7 +154,7 @@ async def execute_browser_op(
                 result["result"] = {"selector": selector}
 
             elif op_type == "snapshot":
-                mode = params.get("mode", "a11y")
+                mode = params.get("mode", "simplified")
                 query = params.get("query", "")
                 in_viewport = params.get("in_viewport", False)
                 if mode == "a11y":
@@ -169,6 +169,13 @@ async def execute_browser_op(
                     else:
                         logger.warning("simplified_snapshot not available on bridge, returning empty result")
                         result["result"] = {"summary": "", "lists": [], "tables": [], "mode": "simplified"}
+                elif mode == "interactive":
+                    if hasattr(bridge, "interactive_snapshot"):
+                        result["result"] = await bridge.interactive_snapshot(query=query, in_viewport=in_viewport)
+                    else:
+                        logger.warning("interactive_snapshot not available on bridge, falling back to capture_snapshot")
+                        snapshot = await bridge.capture_snapshot()
+                        result["result"] = {"mode": "interactive", "elements": [], "url": snapshot.get("url", ""), "title": snapshot.get("title", "")}
                 else:
                     snapshot = await bridge.capture_snapshot()
                     result["result"] = {}
@@ -229,21 +236,25 @@ async def execute_browser_op(
 
             elif op_type == "hover":
                 selector = params.get("selector", "")
+                selector = await _resolve_element_ref(selector, element_map, bridge)
                 await bridge.hover(selector)
                 result["result"] = {"selector": selector}
 
             elif op_type == "unhover":
                 selector = params.get("selector", "")
+                selector = await _resolve_element_ref(selector, element_map, bridge)
                 await bridge.unhover(selector)
                 result["result"] = {"selector": selector}
 
             elif op_type == "focus":
                 selector = params.get("selector", "")
+                selector = await _resolve_element_ref(selector, element_map, bridge)
                 await bridge.focus(selector)
                 result["result"] = {"selector": selector}
 
             elif op_type == "select":
                 selector = params.get("selector", "")
+                selector = await _resolve_element_ref(selector, element_map, bridge)
                 value = params.get("value", "")
                 mode = params.get("mode", "value")
                 await bridge.select(selector, value, mode)
@@ -251,6 +262,7 @@ async def execute_browser_op(
 
             elif op_type == "clear":
                 selector = params.get("selector", "")
+                selector = await _resolve_element_ref(selector, element_map, bridge)
                 mode = params.get("mode", "js")
                 await bridge.clear(selector, mode)
                 result["result"] = {"selector": selector}
@@ -358,11 +370,11 @@ def _write_full_artifacts(core_result: dict, step_dir: Path, _base64, _time) -> 
 
 
 async def _resolve_element_ref(selector: str, element_map: dict | None, bridge: BrowserBridge | None = None) -> str:
-    """Resolve @eN element references to CSS selectors using the element map.
+    """Resolve @-prefixed element references (e.g. @a_0, @p_12345, @e_42) to CSS selectors.
 
     In chat mode (element_map is None), falls back to bridge.get_element_by_index().
     """
-    if selector.startswith("@e"):
+    if selector.startswith("@"):
         if element_map:
             resolved = element_map.get(selector)
             if resolved is None:

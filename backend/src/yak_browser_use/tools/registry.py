@@ -177,17 +177,19 @@ def _build_registry_impl() -> None:
             },
         },
         "snapshot": {
-            "description": "Capture page snapshot. a11y（默认）通过 Accessibility Tree 获取可交互元素，轻量快速；"
+            "description": "Capture page snapshot. a11y（默认）通过 Accessibility Tree 获取可交互元素，轻量快速，但需要浏览器支持 Accessibility Tree；"
                            "progressive 通过 CDP DOM 深度扫描 + 密度自适应 + 分层抽样（最多 200 个元素，8 个区域等额分配），"
                            "密集容器自动折叠为 folded_containers，可用 expand_branch 展开浏览；"
-                           "simplified 纯文本概览。推荐用法：简单表单用 a11y，复杂列表/商品页用 progressive。",
+                           "interactive 通过 CDP DOM 全量扫描所有可交互元素（无折叠），支持 query 文本/CSS 过滤和 in_viewport 可见区域过滤；"
+                           "simplified 纯文本概览（标题、链接、列表、表格），token 最少；"
+                           "full 截图+HTML。推荐用法：简单页面用 simplified，复杂列表用 progressive，精确定位元素用 interactive。",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "mode": {
                         "type": "string",
                         "enum": ["a11y", "progressive", "interactive", "full", "simplified"],
-                        "description": "a11y（默认，推荐）→ progressive（复杂长列表页面）→ interactive（CDP 全量扫描）→ simplified（纯文本概览）→ full（截图+HTML，token 最多）。",
+                        "description": "simplified（推荐，纯文本概览 token 最少）→ interactive（CDP 全量扫描，支持 query/in_viewport 过滤）→ progressive（复杂长列表页面，密度自适应折叠）→ a11y（Accessibility Tree，需浏览器支持）→ full（截图+HTML，token 最多）。",
                     },
                     "query": {
                         "type": "string",
