@@ -127,6 +127,7 @@ async def launch_user_chrome(profile_name: str | None = None) -> str | None:
             "--no-first-run",
             "--no-default-browser-check",
             "--remote-allow-origins=*",
+            "--force-renderer-accessibility",
             f"--lang={_detect_lang()}",
         ]
         if profile_name:
@@ -242,6 +243,7 @@ async def launch_isolated_chrome(
                 "--no-first-run",
                 "--no-default-browser-check",
                 "--remote-allow-origins=*",
+                "--force-renderer-accessibility",
                 f"--lang={_detect_lang()}",
                 stdout=asyncio.subprocess.DEVNULL,
                 stderr=asyncio.subprocess.DEVNULL,
@@ -270,6 +272,7 @@ async def launch_isolated_chrome(
                 args=[
                     f"--remote-debugging-port={port}",
                     f"--user-data-dir={user_data_dir}",
+                    "--force-renderer-accessibility",
                     f"--lang={_detect_lang()}",
                 ],
             )

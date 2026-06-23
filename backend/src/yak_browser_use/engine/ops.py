@@ -132,30 +132,33 @@ class ToolContext:
 
     async def snapshot(
         self,
-        mode: str = "simplified",
+        mode: str = "aria",
         query: str = "",
         in_viewport: bool = False,
     ) -> dict:
         """Capture a page snapshot.
 
         *mode* values:
-          - ``"simplified"`` (default) — simplified text-only snapshot (titles, links, lists, tables)
-          - ``"interactive"`` — CDP DOM walk, all interactive elements with CSS selectors
-          - ``"progressive"`` — CDP DOM walk + density-adaptive disclosure
-          - ``"a11y"`` — Accessibility Tree via ``a11y_snapshot`` (requires browser support)
-          - ``"full"`` — complete DOM + screenshot via ``capture_snapshot``
+          - ``aria`` (default) — Playwright aria_snapshot(mode="ai"), YAML 语义树.
+            LLM 友好的页面快照：展示所有可交互元素的 role/name 层级结构。
+            token 最少，适合"先看一眼这页有什么"。
+          - ``a11y`` — CDP Accessibility.getFullAXTree, 结构化元素列表.
+            每个元素带 ref/role/name/nth/selector。
+            LLM 可以拿着 ref 直接 click/fill/hover（如点击 @a_3）。
+          - ``progressive`` — CDP DOM 深度扫描 + 密度自适应折叠.
+            最多 200 元素，密集容器自动折叠为 folded_containers，可用 expand_branch 展开。
+            适合超长列表/复杂页面。
+          - ``full`` — screenshot + HTML 全量转储.
         """
         self._check_domain()
         self._check_failures()
         try:
-            if mode == "a11y":
+            if mode == "a11y" or mode == "interactive":
                 result = await self._bridge.a11y_snapshot()
+            elif mode == "aria" or mode == "simplified":
+                result = await self._bridge.aria_snapshot()
             elif mode == "progressive":
                 result = await self._bridge._progressive_snapshot(query=query)
-            elif mode == "simplified":
-                result = await self._bridge.simplified_snapshot()
-            elif mode == "interactive":
-                result = await self._bridge.interactive_snapshot(query=query, in_viewport=in_viewport)
             else:
                 result = await self._bridge.capture_snapshot()
             self._fail_count = 0

@@ -28,8 +28,8 @@ class MockBridge:
     async def capture_snapshot(self):
         return {"html": "<html></html>"}
 
-    async def simplified_snapshot(self):
-        return {"summary": "simplified"}
+    async def aria_snapshot(self) -> dict:
+        return {"summary": "", "mode": "aria"}
 
     async def screenshot(self):
         return "base64string"
@@ -96,7 +96,12 @@ async def test_snapshot_full(ctx, bridge):
 @pytest.mark.asyncio
 async def test_snapshot_simplified(ctx, bridge):
     result = await ctx.snapshot(mode="simplified")
-    assert result == {"summary": "simplified"}
+    assert result == {"summary": "", "mode": "aria"}
+
+
+async def test_snapshot_aria(ctx, bridge):
+    result = await ctx.snapshot(mode="aria")
+    assert result == {"summary": "", "mode": "aria"}
 
 
 @pytest.mark.asyncio

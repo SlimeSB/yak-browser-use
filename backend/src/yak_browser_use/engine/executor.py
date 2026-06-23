@@ -21,6 +21,7 @@ from typing import Any
 from yak_browser_use.utils.logging import get_logger
 
 from yak_browser_use.cdp.protocols import BrowserBridge
+from yak_browser_use.cdp.playwright_bridge import A11yNotAvailable
 from yak_browser_use.engine._lifecycle.compensation import CompensationRegistry
 
 logger = get_logger(__name__)
@@ -154,28 +155,27 @@ async def execute_browser_op(
                 result["result"] = {"selector": selector}
 
             elif op_type == "snapshot":
-                mode = params.get("mode", "simplified")
+                mode = params.get("mode", "aria")
                 query = params.get("query", "")
                 in_viewport = params.get("in_viewport", False)
-                if mode == "a11y":
-                    snapshot = await bridge.a11y_snapshot()
+                if mode == "a11y" or mode == "interactive":
+                    try:
+                        snapshot = await bridge.a11y_snapshot()
+                    except A11yNotAvailable:
+                        logger.warning(
+                            "a11y snapshot not available in this browser environment, "
+                            "falling back to progressive mode"
+                        )
+                        snapshot = await bridge._progressive_snapshot(query=query)
+                        snapshot["degraded"] = True
+                        snapshot["_fallback_reason"] = "accessibility_tree_unavailable"
+                    result["result"] = snapshot
+                elif mode == "aria" or mode == "simplified":
+                    snapshot = await bridge.aria_snapshot()
                     result["result"] = snapshot
                 elif mode == "progressive":
                     snapshot = await bridge._progressive_snapshot(query=query)
                     result["result"] = snapshot
-                elif mode == "simplified":
-                    if hasattr(bridge, "simplified_snapshot"):
-                        result["result"] = await bridge.simplified_snapshot()
-                    else:
-                        logger.warning("simplified_snapshot not available on bridge, returning empty result")
-                        result["result"] = {"summary": "", "lists": [], "tables": [], "mode": "simplified"}
-                elif mode == "interactive":
-                    if hasattr(bridge, "interactive_snapshot"):
-                        result["result"] = await bridge.interactive_snapshot(query=query, in_viewport=in_viewport)
-                    else:
-                        logger.warning("interactive_snapshot not available on bridge, falling back to capture_snapshot")
-                        snapshot = await bridge.capture_snapshot()
-                        result["result"] = {"mode": "interactive", "elements": [], "url": snapshot.get("url", ""), "title": snapshot.get("title", "")}
                 else:
                     snapshot = await bridge.capture_snapshot()
                     result["result"] = {}

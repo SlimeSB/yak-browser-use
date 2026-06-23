@@ -597,9 +597,10 @@ def _apply_heavy_data_filter(
         return
 
     if fn_name == "browser_snapshot":
-        mode = fn_args.get("mode", "a11y")
+        mode = fn_args.get("mode", "aria")
 
-        if mode == "simplified":
+        if mode in ("aria", "simplified"):
+            # aria snapshot returns mode="aria"
             result_payload = result_dict.get("result", {})
             if isinstance(result_payload, dict) and result_payload.get("degraded"):
                 result_payload.pop("screenshot_base64", None)
@@ -609,22 +610,41 @@ def _apply_heavy_data_filter(
                     "url": result_payload.get("url", ""),
                     "title": result_payload.get("title", ""),
                 })
-                result_dict["result"] = "简化快照已获取（降级为 full 模式），数据已缓存"
+                result_dict["result"] = "ARIA 快照已获取（降级为 full 模式），数据已缓存"
             return
 
         result_payload = result_dict.get("result", {})
 
-        if mode == "a11y":
+        if mode in ("a11y", "interactive"):
             if isinstance(result_payload, dict):
-                elements = result_payload.get("elements", [])
-                url = result_payload.get("url", "")
-                title = result_payload.get("title", "")
-                store_scratchpad({
-                    "elements": elements,
-                    "url": url,
-                    "title": title,
-                })
-                result_dict["result"] = get_scratchpad().summary
+                # a11y → progressive fallback: data is progressive format
+                if result_payload.get("degraded"):
+                    elements = result_payload.get("elements", [])
+                    folded = result_payload.get("folded_containers", [])
+                    branch_info = result_payload.get("branch_index", {})
+                    url = result_payload.get("url", "")
+                    title = result_payload.get("title", "")
+                    store_scratchpad({
+                        "elements": elements,
+                        "folded_containers": folded,
+                        "branch_index": branch_info,
+                        "url": url,
+                        "title": title,
+                    })
+                    result_dict["result"] = (
+                        "⚠️ Accessibility Tree 不可用，已降级到 progressive 模式\n\n"
+                        + get_scratchpad().summary
+                    )
+                else:
+                    elements = result_payload.get("elements", [])
+                    url = result_payload.get("url", "")
+                    title = result_payload.get("title", "")
+                    store_scratchpad({
+                        "elements": elements,
+                        "url": url,
+                        "title": title,
+                    })
+                    result_dict["result"] = get_scratchpad().summary
             else:
                 result_dict["result"] = "a11y 快照已获取（摘要不可用）"
                 logger.warning("browser_snapshot a11y returned non-dict result, using fallback")
@@ -648,29 +668,6 @@ def _apply_heavy_data_filter(
             else:
                 result_dict["result"] = "progressive 快照已获取（摘要不可用）"
                 logger.warning("browser_snapshot progressive returned non-dict result, using fallback")
-            return
-
-        if mode == "interactive":
-            if isinstance(result_payload, dict):
-                degraded = result_payload.get("degraded", False)
-                elements = result_payload.get("elements", [])
-                url = result_payload.get("url", "")
-                title = result_payload.get("title", "")
-                store_scratchpad({
-                    "elements": elements,
-                    "url": url,
-                    "title": title,
-                })
-                if degraded:
-                    result_payload.pop("screenshot_base64", None)
-                    result_payload.pop("html", None)
-                    el_count = len(elements)
-                    result_dict["result"] = f"\U0001F4F8 快照已获取（降级为 full 模式，{el_count}个可交互元素），数据已缓存"
-                else:
-                    result_dict["result"] = get_scratchpad().summary
-            else:
-                result_dict["result"] = "快照已获取（摘要不可用）"
-                logger.warning("browser_snapshot interactive returned non-dict result, using fallback")
             return
 
         elif mode == "full":

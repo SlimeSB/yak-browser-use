@@ -26,6 +26,11 @@ from playwright.async_api import async_playwright, Browser, BrowserContext, Page
 
 logger = logging.getLogger(__name__)
 
+
+class A11yNotAvailable(RuntimeError):
+    """Raised when the browser environment does not support Accessibility Tree."""
+
+
 # ---------------------------------------------------------------------------
 # Interactive element detection heuristics
 # ---------------------------------------------------------------------------
@@ -66,12 +71,11 @@ def _build_selector_from_node(tag: str, attrs: dict[str, str]) -> str:
 
 
 # ---------------------------------------------------------------------------
-# a11y snapshot — Accessibility Tree + DOM stamping
+# a11y snapshot — CDP Accessibility.getFullAXTree
 # ---------------------------------------------------------------------------
 
 A11Y_REF_PREFIX = "@a_"
 PROGRESSIVE_REF_PREFIX = "@p_"
-
 
 # Only these roles are considered "interactive" for a11y snapshot
 _A11Y_INTERACTIVE_ROLES = frozenset({
@@ -82,23 +86,39 @@ _A11Y_INTERACTIVE_ROLES = frozenset({
 })
 
 
-def _flatten_a11y_tree(node: dict, elements: list | None = None) -> list[dict]:
-    """Recursively flatten Playwright Accessibility Tree, keeping interactive elements only."""
-    if elements is None:
-        elements = []
-    role = (node.get("role") or "").lower()
-    name = (node.get("name") or "").strip()
-    if role in _A11Y_INTERACTIVE_ROLES:
+def _ax_value(value_obj: dict | None) -> str:
+    """Extract the string value from a CDP AX ``{value, type}`` object."""
+    if not value_obj:
+        return ""
+    v = value_obj.get("value")
+    if isinstance(v, str):
+        return v
+    if isinstance(v, bool | int | float):
+        return str(v)
+    return ""
+
+
+def _flatten_cdp_ax_nodes(nodes: list[dict]) -> list[dict]:
+    """Flatten CDP ``Accessibility.getFullAXTree`` nodes, keeping interactive elements only.
+
+    CDP returns a flat array ``[{nodeId, childIds, backendDOMNodeId, role: {value, type},
+    name: {value, type}, ...}]``.  This function filters by interactive role and normalises
+    field names to match the downstream ``{role, name, value, description, checked, disabled}``
+    format expected by ``a11y_snapshot``.
+    """
+    elements: list[dict] = []
+    for node in nodes:
+        role = _ax_value(node.get("role")).lower()
+        if role not in _A11Y_INTERACTIVE_ROLES:
+            continue
         elements.append({
             "role": role,
-            "name": name,
-            "value": node.get("value", ""),
-            "description": node.get("description", ""),
+            "name": _ax_value(node.get("name")),
+            "value": _ax_value(node.get("value")),
+            "description": _ax_value(node.get("description")),
             "checked": node.get("checked"),
             "disabled": node.get("disabled", False),
         })
-    for child in node.get("children", []):
-        _flatten_a11y_tree(child, elements)
     return elements
 
 
@@ -650,67 +670,6 @@ _HIGHLIGHT_BOOTSTRAP = """
 })();
 """
 
-_SIMPLIFIED_SNAPSHOT_JS = """
-(function() {
-    var r = {title: document.title, h: [], l: [], lists: [], tables: []};
-    var seen = {};
-    document.querySelectorAll('h1,h2,h3,h4,h5,h6').forEach(function(h) {
-        var t = (h.textContent || '').trim();
-        if (t) r.h.push({l: h.tagName.toLowerCase(), t: t});
-    });
-    document.querySelectorAll('a[href]').forEach(function(a) {
-        var t = (a.textContent || '').trim();
-        var hr = a.getAttribute('href');
-        if (t && hr && !seen[hr + '|' + t]) {
-            seen[hr + '|' + t] = 1;
-            r.l.push({t: t, h: hr});
-        }
-    });
-    document.querySelectorAll('ul,ol').forEach(function(lst) {
-        var items = [];
-        lst.querySelectorAll('li').forEach(function(li) {
-            var t = (li.textContent || '').trim();
-            if (t) items.push(t);
-        });
-        if (items.length) {
-            var sel = '';
-            if (lst.id) sel = '#' + lst.id;
-            else {
-                sel = lst.tagName.toLowerCase();
-                var c = lst.className;
-                if (c) sel += '.' + c.split(/\\s+/).filter(Boolean).join('.');
-            }
-            r.lists.push({
-                selector: sel,
-                tag: lst.tagName.toLowerCase(),
-                item_count: items.length,
-                sample_items: items.slice(0, 5)
-            });
-        }
-    });
-    document.querySelectorAll('table').forEach(function(tbl) {
-        var rows = [], headers = [];
-        tbl.querySelectorAll('tr').forEach(function(tr, i) {
-            var cells = [];
-            tr.querySelectorAll('th,td').forEach(function(c) {
-                cells.push((c.textContent || '').trim());
-            });
-            if (cells.length) {
-                if (i === 0) headers = cells.slice();
-                rows.push(cells);
-            }
-        });
-        if (rows.length) r.tables.push({
-            row_count: rows.length,
-            col_count: headers.length,
-            headers: headers
-        });
-    });
-    var body = document.body;
-    r.text = body ? body.innerText.substring(0, 2000) : '';
-    return JSON.stringify(r);
-})()
-"""
 
 
 class PlaywrightBridge:
@@ -1456,14 +1415,45 @@ class PlaywrightBridge:
         return base64.b64encode(data).decode("utf-8")
 
     async def a11y_snapshot(self) -> dict:
-        """Snapshot via Playwright Accessibility Tree with DOM stamping.
+        """Snapshot via CDP ``Accessibility.getFullAXTree`` with DOM stamping.
 
         Returns ``{elements: [{ref, role, name, nth}], mode: "a11y"}``.
         Coordinates are never stored — the JS renderer computes them live
         from ``[data-ybu-ref]`` elements via ``getBoundingClientRect()``.
+
+        .. note::
+
+           Uses a direct CDP ``Accessibility.getFullAXTree`` call rather than
+           Playwright's removed ``page.accessibility.snapshot()`` API (unavailable
+           since Playwright 1.48+).  Falls back to ``_progressive_snapshot()``
+           if the CDP Accessibility domain is not supported.
         """
-        tree = await self._page.accessibility.snapshot()
-        elements = _flatten_a11y_tree(tree) if tree else []
+        # Enable Accessibility domain, then get the full AX tree via CDP
+        try:
+            cdp = await self._context.new_cdp_session(self._page)
+        except Exception as exc:
+            logger.debug("a11y_snapshot: couldn't create CDP session", exc_info=True)
+            raise A11yNotAvailable(
+                f"CDP session not available: {exc}"
+            ) from exc
+        try:
+            try:
+                await cdp.send("Accessibility.enable")
+            except Exception:
+                logger.debug("a11y_snapshot: CDP Accessibility.enable failed", exc_info=True)
+            result = await cdp.send("Accessibility.getFullAXTree", {})
+        except A11yNotAvailable:
+            raise
+        except Exception as exc:
+            logger.debug("a11y_snapshot: CDP getFullAXTree failed", exc_info=True)
+            raise A11yNotAvailable(
+                f"CDP Accessibility.getFullAXTree failed: {exc}"
+            ) from exc
+        finally:
+            await cdp.detach()
+
+        nodes = result.get("nodes", [])
+        elements = _flatten_cdp_ax_nodes(nodes)
 
         # I1: clear old _ref_map so stale refs don't survive
         self._ref_map.clear()
@@ -1657,123 +1647,17 @@ class PlaywrightBridge:
         except Exception:
             pass
 
-    async def simplified_snapshot(self) -> dict:
-        raw = await self._page.evaluate(_SIMPLIFIED_SNAPSHOT_JS)
-        data = _json.loads(raw) if isinstance(raw, str) else raw
-        lines = []
-        if data.get("title"):
-            lines.append(f"Title: {data['title']}")
-        for h in data.get("h", []):
-            lines.append(f"{h['l'].upper()}: {h['t']}")
-        links = data.get("l", [])
-        if links:
-            lines.append("")
-            lines.append("Links:")
-            for link in links[:20]:
-                lines.append(f"  - {link['t']} ({link['h'][:60]})")
-            if len(links) > 20:
-                lines.append(f"  ... and {len(links) - 20} more")
-        text = data.get("text", "")
-        if text:
-            lines.append("")
-            lines.append(text[:1500])
-        return {
-            "summary": "\n".join(lines),
-            "lists": data.get("lists", []),
-            "tables": data.get("tables", []),
-            "mode": "simplified",
-        }
+    async def aria_snapshot(self) -> dict:
+        """Snapshot via Playwright's ``aria_snapshot(mode='ai')`` — text-based accessibility tree.
 
-    async def interactive_snapshot(self, query: str = "", in_viewport: bool = False) -> dict:
-        """CDP DOM walk collecting all interactive elements with CSS selectors.
-
-        Supports query filtering (text/tag/role match) and in_viewport filtering.
-        Unlike progressive mode, this returns ALL interactive elements without
-        density-adaptive folding — useful for precise element targeting.
+        Returns ``{summary: str, mode: "aria"}``.
+        Uses the browser's built-in accessibility engine — no JS injection, no CSP issues.
+        The ``"ai"`` mode produces a LLM-optimized YAML-like tree of all interactive
+        and semantic elements with their roles, accessible names, and hierarchy.
         """
-        cdp = await self._context.new_cdp_session(self._page)
-        try:
-            doc = await cdp.send("DOM.getDocument", {"depth": -1, "pierce": True})
-        finally:
-            await cdp.detach()
+        text = await self._page.aria_snapshot(mode="ai")
+        return {"summary": text, "mode": "aria"}
 
-        elements: list[dict] = []
-
-        def walk(node: dict) -> None:
-            if node.get("nodeType") != 1:
-                for child in node.get("children", []):
-                    walk(child)
-                return
-            attrs_list = node.get("attributes", [])
-            attrs: dict[str, str] = {}
-            for i in range(0, len(attrs_list), 2):
-                if i + 1 < len(attrs_list):
-                    attrs[attrs_list[i]] = attrs_list[i + 1]
-            tag = node["nodeName"].lower()
-            bid = node["backendNodeId"]
-            if not _is_interactive_progressive(tag, attrs):
-                for child in node.get("children", []):
-                    walk(child)
-                return
-            selector = _build_selector_from_node(tag, attrs)
-            ref = f"@e_{bid}"
-            text = (attrs.get("aria-label", "")
-                    or attrs.get("title", "")
-                    or attrs.get("value", "")
-                    or attrs.get("placeholder", "")
-                    or _extract_text_from_children(node))
-            elements.append({
-                "ref": ref,
-                "selector": selector,
-                "tag": tag,
-                "text": text,
-                "type": attrs.get("type", ""),
-                "role": attrs.get("role", ""),
-                "backendNodeId": bid,
-            })
-            for child in node.get("children", []):
-                walk(child)
-
-        walk(doc.get("root", {}))
-
-        if in_viewport:
-            js = """
-            (function() {
-                var vp = {w: window.innerWidth, h: window.innerHeight};
-                var sels = arguments[0];
-                return sels.map(function(sel) {
-                    try {
-                        var el = document.querySelector(sel);
-                        if (!el) return false;
-                        var r = el.getBoundingClientRect();
-                        return r.top < vp.h && r.bottom > 0 && r.left < vp.w && r.right > 0;
-                    } catch(e) { return false; }
-                });
-            })
-            """
-            sels = [e["selector"] for e in elements]
-            in_vp = await self._page.evaluate(js, sels)
-            elements = [e for e, v in zip(elements, in_vp) if v]
-
-        if query:
-            q = query.lower()
-            if q.startswith("#") or q.startswith("."):
-                elements = [e for e in elements if q in e.get("selector", "").lower()]
-            else:
-                elements = [
-                    e for e in elements
-                    if (q in e.get("text", "").lower()
-                        or q in e.get("tag", "").lower()
-                        or q in e.get("role", "").lower()
-                        or q in e.get("type", "").lower())
-                ]
-
-        return {
-            "elements": elements,
-            "mode": "interactive",
-            "url": self._page.url,
-            "title": await self._page.title(),
-        }
 
     async def capture_snapshot(self) -> dict:
         result: dict = {}

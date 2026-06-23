@@ -114,25 +114,27 @@ class TestApplyHeavyDataFilter:
         assert result_dict["result"]["cached"] is False
         assert "无缓存" in result_dict["result"]["note"]
 
-    def test_interactive_snapshot_filter(self):
+    def test_a11y_snapshot_filter(self):
         _scratchpads.clear()
         result_dict = {
             "ok": True,
             "result": {
                 "elements": [
-                    {"ref": "@e1", "tag": "button", "text": "OK", "selector": "button#ok"},
+                    {"role": "button", "name": "OK", "value": "", "description": "",
+                     "checked": None, "disabled": False, "nth": 0, "prog_label": "a_0",
+                     "selector": 'role=button[name="OK"]'},
                 ],
                 "url": "https://example.com",
                 "title": "Example",
-                "mode": "interactive",
+                "mode": "a11y",
             },
         }
-        _apply_heavy_data_filter("browser_snapshot", {"mode": "interactive"}, result_dict)
+        _apply_heavy_data_filter("browser_snapshot", {"mode": "a11y"}, result_dict)
         assert isinstance(result_dict["result"], str)
         assert "Example" in result_dict["result"]
         assert "1个可交互元素" in result_dict["result"]
 
-    def test_interactive_degraded_filter(self):
+    def test_a11y_degraded_filter(self):
         _scratchpads.clear()
         result_dict = {
             "ok": True,
@@ -140,13 +142,13 @@ class TestApplyHeavyDataFilter:
                 "elements": [],
                 "url": "https://x.com",
                 "title": "X",
-                "mode": "interactive",
+                "mode": "a11y",
                 "degraded": True,
                 "screenshot_base64": "aaaa",
                 "html": "<html></html>",
             },
         }
-        _apply_heavy_data_filter("browser_snapshot", {"mode": "interactive"}, result_dict)
+        _apply_heavy_data_filter("browser_snapshot", {"mode": "a11y"}, result_dict)
         assert "降级" in result_dict["result"]
         assert isinstance(result_dict["result"], str)
 
@@ -190,5 +192,5 @@ class TestApplyHeavyDataFilter:
 
     def test_error_not_filtered(self):
         result_dict = {"ok": False, "error": "timeout", "result": "..."}
-        _apply_heavy_data_filter("browser_snapshot", {"mode": "interactive"}, result_dict)
+        _apply_heavy_data_filter("browser_snapshot", {"mode": "a11y"}, result_dict)
         assert result_dict["ok"] is False

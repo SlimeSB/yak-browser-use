@@ -18,6 +18,8 @@ from typing import Any, TYPE_CHECKING
 if TYPE_CHECKING:
     from yak_browser_use.cdp.playwright_bridge import PlaywrightBridge
 
+from yak_browser_use.cdp.playwright_bridge import A11yNotAvailable
+
 logger = logging.getLogger(__name__)
 
 
@@ -50,12 +52,21 @@ class ToolCDPHelpers:
 
     async def snapshot(self, mode: str = "a11y", query: str = "", in_viewport: bool = False) -> dict:
         self._check_failures()
-        if mode == "a11y":
-            result = await self._bridge.a11y_snapshot()
+        if mode == "a11y" or mode == "interactive":
+            try:
+                result = await self._bridge.a11y_snapshot()
+            except A11yNotAvailable:
+                logger.warning(
+                    "a11y snapshot not available in this environment, "
+                    "falling back to progressive mode"
+                )
+                result = await self._bridge._progressive_snapshot(query=query)
+                result["degraded"] = True
+                result["_fallback_reason"] = "accessibility_tree_unavailable"
+        elif mode == "aria" or mode == "simplified":
+            result = await self._bridge.aria_snapshot()
         elif mode == "progressive":
             result = await self._bridge._progressive_snapshot(query=query)
-        elif mode == "simplified":
-            result = await self._bridge.simplified_snapshot()
         else:
             result = await self._bridge.capture_snapshot()
         self._fail_count = 0

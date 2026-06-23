@@ -65,8 +65,6 @@ class CDPHelpers:
     async def capture_snapshot(self) -> dict:
         return await self._bridge.capture_snapshot()
 
-    async def interactive_snapshot(self, query: str = "", in_viewport: bool = False) -> dict:
-        return await self._bridge.interactive_snapshot(query=query, in_viewport=in_viewport)
 
     async def get_page_html(self) -> str:
         return await self._bridge.source()
@@ -79,85 +77,6 @@ class CDPHelpers:
 
     async def js(self, code: str) -> Any:
         return await self._bridge.evaluate(code)
-
-    async def capture_snapshot_simplified(self) -> dict:
-        try:
-            raw = await self.js((
-                "(function(){"
-                "var r={title:document.title,h:[],l:[],lists:[],tables:[]};"
-                "document.querySelectorAll('h1,h2,h3,h4,h5,h6').forEach(function(h){"
-                "var t=(h.textContent||'').trim();if(t)r.h.push({l:h.tagName.toLowerCase(),t:t});"
-                "});"
-                "var seen={};"
-                "document.querySelectorAll('a[href]').forEach(function(a){"
-                "var t=(a.textContent||'').trim();var hr=a.getAttribute('href');"
-                "if(t&&hr&&!seen[hr+'|'+t]){seen[hr+'|'+t]=1;r.l.push({t:t,h:hr});}"
-                "});"
-                "document.querySelectorAll('ul,ol').forEach(function(lst){"
-                "var items=[];"
-                "lst.querySelectorAll('li').forEach(function(li){var t=(li.textContent||'').trim();if(t)items.push(t);});"
-                "if(items.length){"
-                "var sel='';"
-                "if(lst.id)sel='#'+lst.id;"
-                "else{sel=lst.tagName.toLowerCase();var c=lst.className;if(c)sel+='.'+c.split(/\\s+/).filter(Boolean).join('.');}"
-                "r.lists.push({selector:sel,tag:lst.tagName.toLowerCase(),item_count:items.length,sample_items:items.slice(0,5)});"
-                "}"
-                "});"
-                "document.querySelectorAll('table').forEach(function(tbl){"
-                "var rows=[];var headers=[];"
-                "tbl.querySelectorAll('tr').forEach(function(tr,i){"
-                "var cells=[];"
-                "tr.querySelectorAll('th,td').forEach(function(c){cells.push((c.textContent||'').trim());});"
-                "if(cells.length){"
-                "if(i===0)headers=cells.slice();"
-                "rows.push(cells);"
-                "}"
-                "});"
-                "if(rows.length)r.tables.push({row_count:rows.length,col_count:headers.length,headers:headers});"
-                "});"
-                "var body=document.body;"
-                "r.text=body?body.innerText.substring(0,2000):'';"
-                "return JSON.stringify(r);"
-                "})()"
-            ))
-            if not raw:
-                raise ValueError("empty JS result")
-            data = _json.loads(raw) if isinstance(raw, str) else raw
-        except Exception:
-            logger.info("simplified snapshot degraded to full")
-            full = await self.capture_snapshot()
-            return {"summary": "", "lists": [], "tables": [], "mode": "simplified", **full}
-
-        lines = []
-        if data.get("title"):
-            lines.append(f"Title: {data['title']}")
-        headings = data.get("h", [])
-        for h in headings:
-            lines.append(f"{h['l'].upper()}: {h['t']}")
-        links = data.get("l", [])
-        if links:
-            lines.append("")
-            lines.append("Links:")
-            for link in links[:20]:
-                lines.append(f"  - {link['t']} ({link['h'][:60]})")
-            if len(links) > 20:
-                lines.append(f"  ... and {len(links) - 20} more")
-        text = data.get("text", "")
-        if text:
-            lines.append("")
-            lines.append(text[:1500])
-
-        try:
-            await self.add_dom_highlights()
-        except Exception:
-            logger.warning("auto-highlight after simplified snapshot failed", exc_info=True)
-
-        return {
-            "summary": "\n".join(lines),
-            "lists": data.get("lists", []),
-            "tables": data.get("tables", []),
-            "mode": "simplified",
-        }
 
     async def add_dom_highlights(self, elements: list[dict] | None = None) -> dict:
         """Push element data to the browser's bootstrap highlight renderer.

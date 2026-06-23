@@ -14,90 +14,88 @@ import pytest
 from yak_browser_use.cdp.playwright_bridge import (
     A11Y_REF_PREFIX,
     PROGRESSIVE_REF_PREFIX,
-    _flatten_a11y_tree,
+    _flatten_cdp_ax_nodes,
+    _ax_value,
 )
 
 
-# ── Sample data ────────────────────────────────────────────────
-
-SAMPLE_A11Y_TREE = {
-    "role": "WebArea",
-    "name": "Test Page",
-    "children": [
-        {
-            "role": "button",
-            "name": "Submit",
-            "children": [],
-        },
-        {
-            "role": "button",
-            "name": "Cancel",
-            "children": [],
-        },
-        {
-            "role": "textbox",
-            "name": "Search",
-            "value": "hello",
-            "children": [],
-        },
-        {
-            "role": "checkbox",
-            "name": "Agree",
-            "checked": True,
-            "children": [],
-        },
-        # Non-interactive (no name, no value, no checked)
-        {
-            "role": "generic",
-            "name": "",
-            "children": [],
-        },
-        # Nested
-        {
-            "role": "navigation",
-            "name": "Main Nav",
-            "children": [
-                {
-                    "role": "link",
-                    "name": "Home",
-                    "children": [],
-                },
-                {
-                    "role": "link",
-                    "name": "About",
-                    "children": [],
-                },
-            ],
-        },
-    ],
-}
+# ── _ax_value ──────────────────────────────────────────────────
 
 
-# ── _flatten_a11y_tree ─────────────────────────────────────────
+def test_ax_value_returns_string():
+    assert _ax_value({"value": "hello", "type": "string"}) == "hello"
 
 
-def test_flatten_a11y_tree_extracts_interactive():
-    elements = _flatten_a11y_tree(SAMPLE_A11Y_TREE)
+def test_ax_value_returns_bool():
+    assert _ax_value({"value": True, "type": "boolean"}) == "True"
+
+
+def test_ax_value_none():
+    assert _ax_value(None) == ""
+
+
+def test_ax_value_empty():
+    assert _ax_value({}) == ""
+
+
+# ── _flatten_cdp_ax_nodes ──────────────────────────────────────
+
+
+CDP_SAMPLE_NODES = [
+    {
+        "nodeId": "1", "childIds": ["2", "3"],
+        "role": {"value": "WebArea", "type": "role"},
+        "name": {"value": "Test Page"},
+        "backendDOMNodeId": 1,
+    },
+    {
+        "nodeId": "2", "childIds": [],
+        "role": {"value": "button", "type": "role"},
+        "name": {"value": "Submit"},
+        "backendDOMNodeId": 2,
+    },
+    {
+        "nodeId": "3", "childIds": ["4"],
+        "role": {"value": "navigation", "type": "role"},
+        "name": {"value": "Main Nav"},
+        "backendDOMNodeId": 3,
+    },
+    {
+        "nodeId": "4", "childIds": [],
+        "role": {"value": "link", "type": "role"},
+        "name": {"value": "Home"},
+        "backendDOMNodeId": 4,
+    },
+    {
+        "nodeId": "5", "childIds": [],
+        "role": {"value": "generic", "type": "role"},
+        "name": {"value": "ignored"},
+        "backendDOMNodeId": 5,
+    },
+]
+
+
+def test_flatten_cdp_ax_nodes_extracts_interactive():
+    elements = _flatten_cdp_ax_nodes(CDP_SAMPLE_NODES)
     roles = [e["role"] for e in elements]
-    assert roles == ["button", "button", "textbox", "checkbox", "link", "link"]
+    assert roles == ["button", "link"]
 
 
-def test_flatten_a11y_tree_skips_non_interactive():
-    elements = _flatten_a11y_tree(SAMPLE_A11Y_TREE)
-    names = [e["name"] for e in elements]
-    assert "" not in names  # generic with empty name excluded
+def test_flatten_cdp_ax_nodes_skips_non_interactive():
+    elements = _flatten_cdp_ax_nodes(CDP_SAMPLE_NODES)
+    # navigation, WebArea, generic all excluded
+    for el in elements:
+        assert el["role"] not in ("navigation", "WebArea", "generic")
 
 
-def test_flatten_a11y_tree_preserves_fields():
-    elements = _flatten_a11y_tree(SAMPLE_A11Y_TREE)
-    search = next(e for e in elements if e["role"] == "textbox")
-    assert search["value"] == "hello"
-    agree = next(e for e in elements if e["role"] == "checkbox")
-    assert agree["checked"] is True
+def test_flatten_cdp_ax_nodes_preserves_name():
+    elements = _flatten_cdp_ax_nodes(CDP_SAMPLE_NODES)
+    names = {e["role"]: e["name"] for e in elements}
+    assert names == {"button": "Submit", "link": "Home"}
 
 
-def test_flatten_a11y_tree_empty():
-    assert _flatten_a11y_tree({}) == []
+def test_flatten_cdp_ax_nodes_empty():
+    assert _flatten_cdp_ax_nodes([]) == []
 
 
 # ── a11y_snapshot ──────────────────────────────────────────────
@@ -107,8 +105,6 @@ class MockPage:
     """Mock Playwright Page for a11y_snapshot tests."""
 
     def __init__(self):
-        self.accessibility = MagicMock()
-        self.accessibility.snapshot = AsyncMock(return_value=SAMPLE_A11Y_TREE)
         self.evaluate = AsyncMock(return_value=None)
         self.url = "about:blank"
         self.title = AsyncMock(return_value="Mock Page")
@@ -125,11 +121,21 @@ class MockPage:
         self.mouse.click = AsyncMock(return_value=None)
 
 
+def _make_cdp_send_side_effect():
+    """Return a side_effect for MockCDPSession.send that returns CDP-like data."""
+    async def side_effect(method, params=None):
+        if method == "Accessibility.getFullAXTree":
+            return {"nodes": CDP_SAMPLE_NODES}
+        # Accessibility.enable and others return empty
+        return {}
+    return side_effect
+
+
 class MockCDPSession:
-    """Mock CDP session for progressive backendNodeId operations."""
+    """Mock CDP session for a11y snapshot tests."""
 
     def __init__(self):
-        self.send = AsyncMock()
+        self.send = AsyncMock(side_effect=_make_cdp_send_side_effect())
         self.detach = AsyncMock()
 
     async def __aenter__(self):
@@ -195,7 +201,7 @@ def a11y_snapshot_fn(mock_bridge):
 async def test_a11y_snapshot_returns_elements(a11y_snapshot_fn, mock_bridge):
     result = await a11y_snapshot_fn()
     assert result["mode"] == "a11y"
-    assert len(result["elements"]) == 6
+    assert len(result["elements"]) == 2  # CDP_SAMPLE_NODES: button + link
 
 
 @pytest.mark.asyncio
@@ -209,28 +215,46 @@ async def test_a11y_snapshot_uses_selector(a11y_snapshot_fn, mock_bridge):
 
 @pytest.mark.asyncio
 async def test_a11y_snapshot_nth_counts_same_role_name(a11y_snapshot_fn, mock_bridge):
-    # Two buttons: "Submit" (nth=0), "Cancel" (nth=0, different name)
+    # Two buttons with same name "Submit" → nth=0 and nth=1
+    cdp_nodes = [
+        {"nodeId": "1", "childIds": [],
+         "role": {"value": "button"}, "name": {"value": "Submit"}, "backendDOMNodeId": 1},
+        {"nodeId": "2", "childIds": [],
+         "role": {"value": "button"}, "name": {"value": "Submit"}, "backendDOMNodeId": 2},
+    ]
+
+    async def custom_send(method, params=None):
+        if method == "Accessibility.getFullAXTree":
+            return {"nodes": cdp_nodes}
+        return {}
+
+    mock_bridge._cdp_session.send = AsyncMock(side_effect=custom_send)
     result = await a11y_snapshot_fn()
     buttons = [e for e in result["elements"] if e["role"] == "button"]
     assert len(buttons) == 2
-    # Different names → each nth=0
+    # Same name → sequential nth
     assert buttons[0]["nth"] == 0
-    assert buttons[1]["nth"] == 0
+    assert buttons[1]["nth"] == 1
 
 
 @pytest.mark.asyncio
 async def test_a11y_snapshot_empty_name_nth(a11y_snapshot_fn, mock_bridge):
     """I1 + #18: empty name elements get unique nth via __empty__:{i}."""
-    tree = {
-        "role": "WebArea",
-        "name": "Page",
-        "children": [
-            {"role": "button", "name": "", "children": []},
-            {"role": "button", "name": "", "children": []},
-            {"role": "button", "name": "", "children": []},
-        ],
-    }
-    mock_bridge._page.accessibility.snapshot = AsyncMock(return_value=tree)
+    cdp_nodes = [
+        {"nodeId": "1", "childIds": [],
+         "role": {"value": "button"}, "name": {"value": ""}, "backendDOMNodeId": 1},
+        {"nodeId": "2", "childIds": [],
+         "role": {"value": "button"}, "name": {"value": ""}, "backendDOMNodeId": 2},
+        {"nodeId": "3", "childIds": [],
+         "role": {"value": "button"}, "name": {"value": ""}, "backendDOMNodeId": 3},
+    ]
+
+    async def custom_send(method, params=None):
+        if method == "Accessibility.getFullAXTree":
+            return {"nodes": cdp_nodes}
+        return {}
+
+    mock_bridge._cdp_session.send = AsyncMock(side_effect=custom_send)
     result = await a11y_snapshot_fn()
     buttons = [e for e in result["elements"] if e["role"] == "button"]
     assert len(buttons) == 3
@@ -246,7 +270,7 @@ async def test_a11y_snapshot_clears_ref_map(a11y_snapshot_fn, mock_bridge):
     mock_bridge._ref_map = {"@a_99": {"ref": "@a_99", "role": "button", "name": "stale"}}
     await a11y_snapshot_fn()
     assert "@a_99" not in mock_bridge._ref_map
-    assert len(mock_bridge._ref_map) == 6
+    assert len(mock_bridge._ref_map) == 2  # CDP_SAMPLE_NODES: button + link
 
 
 @pytest.mark.asyncio

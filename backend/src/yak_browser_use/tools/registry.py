@@ -177,19 +177,26 @@ def _build_registry_impl() -> None:
             },
         },
         "snapshot": {
-            "description": "Capture page snapshot. a11y（默认）通过 Accessibility Tree 获取可交互元素，轻量快速，但需要浏览器支持 Accessibility Tree；"
-                           "progressive 通过 CDP DOM 深度扫描 + 密度自适应 + 分层抽样（最多 200 个元素，8 个区域等额分配），"
-                           "密集容器自动折叠为 folded_containers，可用 expand_branch 展开浏览；"
-                           "interactive 通过 CDP DOM 全量扫描所有可交互元素（无折叠），支持 query 文本/CSS 过滤和 in_viewport 可见区域过滤；"
-                           "simplified 纯文本概览（标题、链接、列表、表格），token 最少；"
-                           "full 截图+HTML。推荐用法：简单页面用 simplified，复杂列表用 progressive，精确定位元素用 interactive。",
+            "description": "Capture page snapshot.\n"
+                           "aria（默认推荐）采用 Playwright aria_snapshot(mode='ai') 获取 YAML 语义树，\n"
+                           "展示页面所有可交互元素的 role/name 层级结构，LLM 友好、token 最少。\n"
+                           "适合先了解页面结构和可用操作，然后配合其他动作执行。\n"
+                           "a11y 采用 CDP Accessibility.getFullAXTree 获取结构化元素列表，\n"
+                           "每个元素带 ref/role/name/nth/selector，可间接用于 click/fill/hover 等操作。\n"
+                           "progressive 采用 CDP DOM 深度扫描 + 密度自适应折叠，\n"
+                           "最多 200 元素，密集容器折叠后可用 expand_branch 展开浏览。\n"
+                           "适合订单列表、搜索结果等复杂长页面。\n"
+                           "full 截图+HTML 全量转储作为最后兜底可用。",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "mode": {
                         "type": "string",
-                        "enum": ["a11y", "progressive", "interactive", "full", "simplified"],
-                        "description": "simplified（推荐，纯文本概览 token 最少）→ interactive（CDP 全量扫描，支持 query/in_viewport 过滤）→ progressive（复杂长列表页面，密度自适应折叠）→ a11y（Accessibility Tree，需浏览器支持）→ full（截图+HTML，token 最多）。",
+                        "enum": ["aria", "a11y", "progressive", "full"],
+                        "description": "aria（默认推荐）YAML 语义树，LLM 友好、token 少，适合了解页面结构；"
+                                       "a11y 结构化元素列表（带 ref/selector），适合后续操作；"
+                                       "progressive DOM 深度扫描+折叠，适合长列表复杂页面；"
+                                       "full 截图+HTML 全量转储。",
                     },
                     "query": {
                         "type": "string",
