@@ -196,6 +196,7 @@ class TestRunPipeline:
 
         with (
             patch("yak_browser_use.engine.runner_preset.WorkspaceManager") as MockWM,
+            patch("yak_browser_use.engine.runner_preset.EventSink"),
         ):
             mock_wm = MagicMock()
             mock_wm.root = Path("/mock/root")
