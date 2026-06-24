@@ -186,13 +186,11 @@ def register_all_routes(app: FastAPI) -> None:
             from yak_browser_use.cdp.helpers import CDPHelpers
             browser = CDPHelpers(engine_state.bridge)
 
-            # Import run_pipeline with fallback (being written simultaneously)
             try:
-                from yak_browser_use.engine.runner import run_pipeline
+                from yak_browser_use.engine.runner_preset import run_pipeline
             except ImportError:
                 raise ServerError(
-                    "engine.runner is not yet available — pipeline execution cannot start. "
-                    "Ensure engine/runner.py is implemented."
+                    "engine.runner_preset is not yet available — pipeline execution cannot start."
                 )
 
             ctx = await run_pipeline(
@@ -672,9 +670,9 @@ def register_all_routes(app: FastAPI) -> None:
             snapshot_path.write_text(pipeline_text, encoding="utf-8")
 
             try:
-                from yak_browser_use.engine.runner import run_pipeline
+                from yak_browser_use.engine.runner_preset import run_pipeline
             except ImportError:
-                raise ServerError("engine.runner is not yet available")
+                raise ServerError("engine.runner_preset is not yet available")
 
             from yak_browser_use.cdp.helpers import CDPHelpers
             browser = CDPHelpers(engine_state.bridge)

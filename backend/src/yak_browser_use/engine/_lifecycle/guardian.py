@@ -23,6 +23,17 @@ class StepReviewInterrupt(Exception):
         super().__init__(reason)
 
 
+class ApprovalResult:
+    """Result of a guardian approval check.
+
+    Use these constants instead of bare booleans so callers can
+    distinguish *why* a step was not allowed to proceed.
+    """
+    ALLOWED = "allowed"
+    REQUIRES_REVIEW = "requires_review"
+    BLOCKED_STALE = "blocked_stale"
+
+
 def step_guard(extra_ops: list, pipeline_name: str, helpers: object) -> str:
     """Classify extra ops as 'interrupt' (navigation) or 'auto_inject'.
 
@@ -231,7 +242,7 @@ class Guardian:
 
     # ── approval gating ──
 
-    def approve(self, step_name: str | None = None, step_def: dict | None = None, pipeline_name: str = "") -> bool:
+    def approve(self, step_name: str | None = None, step_def: dict | None = None, pipeline_name: str = "") -> str:
         """Check if a step requires manual approval.
 
         Conditions checked:
@@ -240,17 +251,17 @@ class Guardian:
         3. Circuit breaker has fired (STALE) — blocks all steps
 
         Returns:
-            True if execution can proceed, False if review is needed or pipeline is STALE.
+            One of ``ApprovalResult.ALLOWED``, ``.REQUIRES_REVIEW``, ``.BLOCKED_STALE``.
         """
         # Condition 1: frontmatter approval_steps list
         if step_name and self.approval_steps and step_name in self.approval_steps:
             logger.info("guardian: step '%s' requires approval (approval_steps)", step_name)
-            return False
+            return ApprovalResult.REQUIRES_REVIEW
 
         # Condition 2: inline approval_required flag
         if step_def and step_def.get("approval_required"):
             logger.info("guardian: step '%s' requires approval (approval_required)", step_name)
-            return False
+            return ApprovalResult.REQUIRES_REVIEW
 
         # Condition 3: circuit breaker fired (STALE)
         if self.read_stale_marker(pipeline_name) is not None:
@@ -258,9 +269,9 @@ class Guardian:
                 "guardian: step '%s' blocked — pipeline is STALE (circuit breaker fired)",
                 step_name,
             )
-            return False
+            return ApprovalResult.BLOCKED_STALE
 
-        return True
+        return ApprovalResult.ALLOWED
 
     async def circuit_breaker(self, pipeline_name: str, recent_success: bool) -> bool:
         """Track consecutive failures and signal STALE when threshold exceeded.
