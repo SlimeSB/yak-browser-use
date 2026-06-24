@@ -15,6 +15,7 @@ import re
 from pathlib import Path
 from typing import Any
 
+from yak_browser_use.utils.file_io import load_json_records, resolve_input_files
 from yak_browser_use.utils.logging import get_logger
 
 logger = get_logger(__name__)
@@ -22,31 +23,11 @@ logger = get_logger(__name__)
 CAPABILITIES: list[str] = []
 
 
-def _resolve_input_files(input_files: dict[str, str]) -> list[Path]:
-    """Resolve input file paths from the file mapping."""
-    paths = []
-    for key, path_str in input_files.items():
-        p = Path(path_str)
-        if p.exists():
-            paths.append(p)
-    return paths
-
-
 def _load_records(path: Path) -> list[dict]:
     """Load records from a JSON or CSV file."""
     ext = path.suffix.lower()
     if ext == ".json":
-        with open(path, "r", encoding="utf-8") as f:
-            data = json.load(f)
-        if isinstance(data, list):
-            return data
-        if isinstance(data, dict):
-            # Try common structures
-            for val in data.values():
-                if isinstance(val, list):
-                    return val
-            return [data]
-        return []
+        return load_json_records(path)
     elif ext == ".csv":
         with open(path, "r", encoding="utf-8-sig") as f:
             reader = csv.DictReader(f)
@@ -85,7 +66,7 @@ async def filter_data(
         key_field (str): Field to check for key presence (e.g., in a list).
         key_values (list): Values the key_field must be in (or not in if exclude=True).
     """
-    files = _resolve_input_files(input_files)
+    files = resolve_input_files(input_files)
     if not files:
         raise FileNotFoundError("No input files found from input_files mapping")
 
@@ -168,7 +149,7 @@ async def sort_data(
         reverse (bool): Sort descending if True (default: False).
         numeric (bool): Treat field values as numbers when sorting (default: True).
     """
-    files = _resolve_input_files(input_files)
+    files = resolve_input_files(input_files)
     if not files:
         raise FileNotFoundError("No input files found from input_files mapping")
 
@@ -214,7 +195,7 @@ async def deduplicate(
         key (str | list[str]): Field name(s) to use for dedup (default: first field).
         keep (str): 'first' or 'last' occurrence to keep (default: 'first').
     """
-    files = _resolve_input_files(input_files)
+    files = resolve_input_files(input_files)
     if not files:
         raise FileNotFoundError("No input files found from input_files mapping")
 
@@ -271,7 +252,7 @@ async def map_fields(
         defaults (dict[str, Any]): Default values for fields that don't exist.
         keep_original (bool): Keep original fields alongside renamed ones (default: False).
     """
-    files = _resolve_input_files(input_files)
+    files = resolve_input_files(input_files)
     if not files:
         raise FileNotFoundError("No input files found from input_files mapping")
 

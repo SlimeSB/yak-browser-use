@@ -13,6 +13,7 @@ import time
 from pathlib import Path
 from typing import Callable
 
+from yak_browser_use.utils.helpers import prepend_resolve_errors
 from yak_browser_use.utils.logging import get_logger
 
 from yak_browser_use.engine._harness.tool_guardrails import ToolCallGuardrailState
@@ -246,18 +247,7 @@ async def _execute_single_tool_call(
             if source_key and shared_store is not None:
                 shared_store[source_key] = result
 
-            # ── Prepend resolve errors to tool result ────────────────
-            if resolve_errors:
-                warning = f"⚠️ 参数模板解析失败: {resolve_errors}"
-                if result.get("ok"):
-                    existing = result.get("result", "")
-                    if isinstance(existing, str):
-                        result["result"] = warning + "\n\n" + existing
-                    else:
-                        result["result"] = warning
-                else:
-                    existing = result.get("error", "")
-                    result["error"] = warning + "\n\n" + existing
+            prepend_resolve_errors(result, resolve_errors)
 
             return result
 

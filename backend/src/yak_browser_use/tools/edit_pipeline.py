@@ -13,6 +13,7 @@ from pathlib import Path
 
 from yak_browser_use.workspace.manager import WORKSPACES_ROOT
 
+from yak_browser_use.utils.helpers import sanitize_pipeline_name
 from yak_browser_use.utils.logging import get_logger
 
 logger = get_logger(__name__)
@@ -60,8 +61,9 @@ async def edit_pipeline(
     """
     from yak_browser_use.api.state import engine_state
 
-    safe_name = os.path.basename(pipeline_name.replace("\\", "/"))
-    if not safe_name or safe_name != pipeline_name.replace("\\", "/"):
+    try:
+        safe_name = sanitize_pipeline_name(pipeline_name)
+    except ValueError:
         return f"Invalid pipeline name: {pipeline_name}"
 
     pipeline_path = _WORKSPACES_DIR / safe_name / "pipeline.yaml"

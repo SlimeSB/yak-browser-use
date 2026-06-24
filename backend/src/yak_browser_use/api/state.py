@@ -131,8 +131,10 @@ class _EngineState:
             except Exception:
                 dead.append(q)
         for q in dead:
-            if q in self.ws_clients:
+            try:
                 self.ws_clients.remove(q)
+            except ValueError:
+                pass
 
     # ── Cleanup  ────────────────────────────────────────────────────
 

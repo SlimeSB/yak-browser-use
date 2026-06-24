@@ -12,7 +12,6 @@ from __future__ import annotations
 
 import json
 import time
-from pathlib import PurePosixPath
 
 from yak_browser_use.workspace.manager import WORKSPACES_ROOT
 
@@ -21,6 +20,7 @@ from yak_browser_use.engine._harness.pipeline_events import push_pipeline_edit_e
 import yaml
 
 from yak_browser_use.compiler.schema import PipelineYaml, StepYaml
+from yak_browser_use.utils.helpers import sanitize_pipeline_name
 from yak_browser_use.utils.logging import get_logger
 
 logger = get_logger(__name__)
@@ -33,9 +33,7 @@ _VALID_UPDATE_KEYS = frozenset({
 
 
 def _resolve_pipeline_path(pipeline_name: str) -> Path:
-    safe_name = PurePosixPath(pipeline_name).name
-    if not safe_name or safe_name != pipeline_name.replace("\\", "/"):
-        raise ValueError(f"Invalid pipeline name: {pipeline_name}")
+    safe_name = sanitize_pipeline_name(pipeline_name)
     return _WORKSPACES_DIR / safe_name / "pipeline.yaml"
 
 

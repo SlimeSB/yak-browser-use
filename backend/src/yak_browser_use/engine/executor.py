@@ -18,6 +18,7 @@ from functools import partial
 from pathlib import Path
 from typing import Any
 
+from yak_browser_use.utils.helpers import prepend_resolve_errors
 from yak_browser_use.utils.logging import get_logger
 
 from yak_browser_use.cdp.protocols import BrowserBridge
@@ -878,17 +879,7 @@ async def execute_tool_step(
     else:
         core_result = dispatch_result
 
-    if resolve_errors:
-        warning = f"⚠️ 参数模板解析失败: {resolve_errors}"
-        if core_result.get("ok"):
-            existing = core_result.get("result", "")
-            if isinstance(existing, str):
-                core_result["result"] = warning + "\n\n" + existing
-            else:
-                core_result["result"] = warning
-        else:
-            existing = core_result.get("error", "")
-            core_result["error"] = warning + "\n\n" + existing
+    prepend_resolve_errors(core_result, resolve_errors)
 
     result["duration_ms"] = core_result.get("duration_ms", 0)
 

@@ -18,23 +18,12 @@ import inspect
 import logging
 from typing import Any, TYPE_CHECKING
 
+from yak_browser_use.utils.bridge import CircuitBreakerMixin, extract_bridge
+
 if TYPE_CHECKING:
     from yak_browser_use.cdp.playwright_bridge import PlaywrightBridge
 
 logger = logging.getLogger(__name__)
-
-
-def _extract_bridge(cdp_helpers: object | None):
-    """Extract PlaywrightBridge from helpers, falling back through known attribute names."""
-    if cdp_helpers is None:
-        return None
-    bridge = getattr(cdp_helpers, "bridge", None)
-    if bridge is not None:
-        return bridge
-    bridge = getattr(cdp_helpers, "_bridge", None)
-    if bridge is not None:
-        return bridge
-    return None
 
 
 def build_tool_kwargs(
@@ -54,7 +43,7 @@ def build_tool_kwargs(
     param_names = set(sig.parameters.keys())
 
     kwargs: dict = {}
-    bridge = _extract_bridge(cdp_helpers)
+    bridge = extract_bridge(cdp_helpers)
     if "ctx" in param_names and bridge is not None:
         kwargs["ctx"] = ToolContext(bridge=bridge, allowed_domains=allowed_domains)
     elif "cdp_helpers" in param_names and bridge is not None:
@@ -65,7 +54,7 @@ def build_tool_kwargs(
     return kwargs
 
 
-class ToolContext:
+class ToolContext(CircuitBreakerMixin):
     """Controlled browser API for tool functions.
 
     Wraps PlaywrightBridge via composition (not inheritance) to expose a
@@ -227,6 +216,4 @@ class ToolContext:
                 f"ToolContext: domain '{hostname}' not in allowed_domains {self._allowed_domains}"
             )
 
-    def _check_failures(self) -> None:
-        if self._fail_count >= self._max_fails:
-            raise RuntimeError(f"ToolContext circuit breaker: {self._max_fails} consecutive failures")
+    # _check_failures inherited from CircuitBreakerMixin

@@ -123,7 +123,7 @@ class Service:
         """Cancel current session, save history, start new."""
         current = self._sessions.get(self._active_pipeline)
         if current:
-            self._save_session_history(current)
+            self._save_session(current)
         return self.create_session(self._active_pipeline)
 
     def cancel_session(self) -> None:
@@ -147,7 +147,7 @@ class Service:
         # Save current session if dirty
         current = self._sessions.get(self._active_pipeline)
         if current:
-            self._save_session_history(current)
+            self._save_session(current)
 
         self._active_pipeline = target
         write_last_active(target)
@@ -257,7 +257,7 @@ class Service:
             self._chat_streaming = True
 
             def _on_turn_complete() -> None:
-                self._async_save_session(session)
+                self._save_session(session)
 
             try:
                 result: ConversationResult = await run_conversation_loop(
@@ -277,7 +277,7 @@ class Service:
                 session.budget_snapshot = result.budget.to_dict()
 
                 # Final save after conversation completes
-                self._async_save_session(session)
+                self._save_session(session)
 
                 resp_preview = (result.final_response or "")[:120]
                 logger.info("Chat [%s] done: status=%s turns=%d duration=%dms response: %s",
@@ -365,8 +365,8 @@ class Service:
 
     # ── Internal helpers ────────────────────────────────────────────
 
-    def _save_session_history(self, session: SessionState) -> None:
-        """Persist session history to workspace session dir."""
+    def _save_session(self, session: SessionState, context: str = "history") -> None:
+        """Persist session to workspace session dir, catching errors."""
         try:
             store = SessionStore(session.pipeline_name)
             store.ensure_session_dir()
@@ -380,23 +380,6 @@ class Service:
             }
             store.save_session(session.session_id, data)
         except Exception as e:
-            logger.warning("Failed to save session history: %s", e)
-
-    def _async_save_session(self, session: SessionState) -> None:
-        """Save session async (fire-and-forget with error catch)."""
-        try:
-            store = SessionStore(session.pipeline_name)
-            store.ensure_session_dir()
-            data = {
-                "session_id": session.session_id,
-                "pipeline_name": session.pipeline_name,
-                "status": session.status,
-                "created_at": session.created_at,
-                "messages": session.messages,
-                "budget_snapshot": session.budget_snapshot,
-            }
-            store.save_session(session.session_id, data)
-        except Exception as e:
-            logger.warning("Failed to async save session %s: %s", session.session_id, e)
+            logger.warning("Failed to save session %s: %s", context, e)
 
 

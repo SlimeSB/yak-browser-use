@@ -1512,7 +1512,7 @@ class PlaywrightBridge:
                         f'el => el.setAttribute("data-ybu-ref", {_json.dumps(ref)})'
                     )
                 except Exception:
-                    pass
+                    logger.warning("Set ref attr failed for %s", ref, exc_info=True)
 
             self._ref_map[ref] = {
                 "ref": ref, "role": el["role"], "name": el["name"], "nth": nth,
@@ -1595,7 +1595,7 @@ class PlaywrightBridge:
                             ),
                         })
                     except Exception:
-                        pass
+                        logger.warning("Prog-highlight stamp failed", exc_info=True)
             finally:
                 await cdp_stamp.detach()
 
@@ -1661,7 +1661,7 @@ class PlaywrightBridge:
                 "() => new Promise(r => requestAnimationFrame(r))"
             )
         except Exception:
-            pass
+            logger.warning("ensure_highlights wait/eval failed", exc_info=True)
 
     async def aria_snapshot(self) -> dict:
         """Snapshot via Playwright's ``aria_snapshot(mode='ai')`` — text-based accessibility tree.

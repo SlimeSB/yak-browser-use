@@ -19,11 +19,12 @@ if TYPE_CHECKING:
     from yak_browser_use.cdp.playwright_bridge import PlaywrightBridge
 
 from yak_browser_use.cdp.playwright_bridge import A11yNotAvailable
+from yak_browser_use.utils.bridge import CircuitBreakerMixin
 
 logger = logging.getLogger(__name__)
 
 
-class ToolCDPHelpers:
+class ToolCDPHelpers(CircuitBreakerMixin):
     """Restricted browser access for tool functions."""
 
     SAFE_OPS = frozenset({"click", "fill", "type", "wait", "snapshot", "evaluate"})
@@ -35,50 +36,40 @@ class ToolCDPHelpers:
         self._max_fails = 3
 
     async def click_selector(self, selector: str) -> dict:
-        self._check_failures()
-        result = await self._bridge.click(selector)
-        self._fail_count = 0
-        return result
+        return await self._run_breaker(self._bridge.click, selector)
 
     async def fill_input(self, selector: str, text: str) -> dict:
-        self._check_failures()
         logger.debug("fill_input: %s = <sensitive: %d chars>", selector, len(text))
-        result = await self._bridge.fill(selector, text)
-        self._fail_count = 0
-        return result
+        return await self._run_breaker(self._bridge.fill, selector, text)
 
     async def wait(self, seconds: float = 1.0) -> None:
         await asyncio.sleep(seconds)
 
     async def snapshot(self, mode: str = "a11y", query: str = "", in_viewport: bool = False) -> dict:
         self._check_failures()
-        if mode == "a11y" or mode == "interactive":
-            try:
-                result = await self._bridge.a11y_snapshot()
-            except A11yNotAvailable:
-                logger.warning(
-                    "a11y snapshot not available in this environment, "
-                    "falling back to progressive mode"
-                )
+        try:
+            if mode == "a11y" or mode == "interactive":
+                try:
+                    result = await self._bridge.a11y_snapshot()
+                except A11yNotAvailable:
+                    logger.warning(
+                        "a11y snapshot not available in this environment, "
+                        "falling back to progressive mode"
+                    )
+                    result = await self._bridge._progressive_snapshot(query=query)
+                    result["degraded"] = True
+                    result["_fallback_reason"] = "accessibility_tree_unavailable"
+            elif mode == "aria" or mode == "simplified":
+                result = await self._bridge.aria_snapshot()
+            elif mode == "progressive":
                 result = await self._bridge._progressive_snapshot(query=query)
-                result["degraded"] = True
-                result["_fallback_reason"] = "accessibility_tree_unavailable"
-        elif mode == "aria" or mode == "simplified":
-            result = await self._bridge.aria_snapshot()
-        elif mode == "progressive":
-            result = await self._bridge._progressive_snapshot(query=query)
-        else:
-            result = await self._bridge.capture_snapshot()
-        self._fail_count = 0
-        return result
+            else:
+                result = await self._bridge.capture_snapshot()
+            self._fail_count = 0
+            return result
+        except Exception:
+            self._fail_count += 1
+            raise
 
     async def evaluate(self, js: str) -> Any:
-        self._check_failures()
-        result = await self._bridge.evaluate(js)
-        self._fail_count = 0
-        return result
-
-    def _check_failures(self) -> None:
-        if self._fail_count >= self._max_fails:
-            raise RuntimeError(f"ToolCDP circuit breaker: {self._max_fails} consecutive failures")
-        self._fail_count += 1
+        return await self._run_breaker(self._bridge.evaluate, js)

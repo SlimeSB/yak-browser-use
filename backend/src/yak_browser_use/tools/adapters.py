@@ -10,6 +10,7 @@ import os
 from pathlib import Path
 from typing import Any
 
+from yak_browser_use.utils.file_io import load_json_records, resolve_input_files
 from yak_browser_use.utils.logging import get_logger
 
 logger = get_logger(__name__)
@@ -33,7 +34,7 @@ async def csv_to_json(
         key_field (str): If set, output a dict keyed by this field instead of a list.
         pretty (bool): Pretty-print JSON output (default: True).
     """
-    files = _resolve_input_files(input_files)
+    files = resolve_input_files(input_files)
     if not files:
         raise FileNotFoundError("No input files found from input_files mapping")
 
@@ -86,7 +87,7 @@ async def json_to_csv(
         fields (list[str]): Specific fields/columns to include (default: all).
         flatten (bool): Flatten nested dict values with dot notation (default: False).
     """
-    files = _resolve_input_files(input_files)
+    files = resolve_input_files(input_files)
     if not files:
         raise FileNotFoundError("No input files found from input_files mapping")
 
@@ -99,7 +100,7 @@ async def json_to_csv(
 
     all_records: list[dict] = []
     for filepath in files:
-        records = _load_json_records(filepath)
+        records = load_json_records(filepath)
         all_records.extend(records)
 
     if not all_records:
@@ -150,7 +151,7 @@ async def apply_field_mapping(
         drop_others (bool): Drop fields not in the mapping (default: False).
         default (Any): Default value for missing source fields.
     """
-    files = _resolve_input_files(input_files)
+    files = resolve_input_files(input_files)
     if not files:
         raise FileNotFoundError("No input files found from input_files mapping")
 
@@ -198,27 +199,6 @@ async def apply_field_mapping(
 
 # ── helpers ──
 
-
-def _resolve_input_files(input_files: dict[str, str]) -> list[Path]:
-    paths = []
-    for key, path_str in input_files.items():
-        p = Path(path_str)
-        if p.exists():
-            paths.append(p)
-    return paths
-
-
-def _load_json_records(path: Path) -> list[dict]:
-    with open(path, "r", encoding="utf-8") as f:
-        data = json.load(f)
-    if isinstance(data, list):
-        return data
-    if isinstance(data, dict):
-        for val in data.values():
-            if isinstance(val, list):
-                return val
-        return [data]
-    return []
 
 
 def _output_name(source: Path, target_ext: str) -> str:

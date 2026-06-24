@@ -6,13 +6,13 @@ pipeline file. Pushes a pipeline.edit WebSocket event for diff review.
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
 
 from yak_browser_use.workspace.manager import WORKSPACES_ROOT
 
 from yak_browser_use.engine._harness.pipeline_events import push_pipeline_edit_event
 
+from yak_browser_use.utils.helpers import sanitize_pipeline_name
 from yak_browser_use.utils.logging import get_logger
 
 logger = get_logger(__name__)
@@ -47,8 +47,9 @@ async def record_step(
     """
     import yaml
 
-    safe_name = os.path.basename(pipeline_name.replace("\\", "/"))
-    if not safe_name or safe_name != pipeline_name.replace("\\", "/"):
+    try:
+        safe_name = sanitize_pipeline_name(pipeline_name)
+    except ValueError:
         return f"Invalid pipeline name: {pipeline_name}"
 
     pipeline_path = _WORKSPACES_DIR / safe_name / "pipeline.yaml"

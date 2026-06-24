@@ -352,6 +352,7 @@ class TestPipelines:
             mock_subdir.name = "pipeline.yaml"
             mock_dir.__truediv__.return_value = mock_subdir
             mock_subdir.exists.return_value = True
+            mock_subdir.read_text.return_value = "name: my_pipe\nsteps: []\n"
             mock_iter.return_value = [mock_dir]
 
             resp = client.get("/api/pipelines")

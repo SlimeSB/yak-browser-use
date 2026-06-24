@@ -343,7 +343,7 @@ export default function App() {
           } catch (e) { console.log('WebSocket message parse error: %s', String(e)); }
         };
         ws.onclose = () => { if (!stopped) reconnectTimer = setTimeout(connect, 3000); };
-        ws.onerror = () => { ws?.close(); };
+        ws.onerror = () => { console.log('WebSocket error'); };
       } catch (e) {
         console.log('WebSocket connect failed: %s', String(e));
         if (!stopped) reconnectTimer = setTimeout(connect, 5000);
