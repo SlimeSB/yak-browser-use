@@ -33,6 +33,14 @@ async def _get_session() -> "aiohttp.ClientSession":
     return _session
 
 
+async def cleanup() -> None:
+    """Close the shared aiohttp ClientSession on shutdown."""
+    global _session
+    if _session is not None and not _session.closed:
+        await _session.close()
+        _session = None
+
+
 # ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------

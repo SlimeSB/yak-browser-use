@@ -23,6 +23,9 @@ async def lifespan(app: FastAPI):
     from yak_browser_use.api.state import engine_state
 
     await engine_state.cleanup()
+    from yak_browser_use.cdp.discover import cleanup as cleanup_discover
+
+    await cleanup_discover()
     logger.info("Yak Browser-Use API stopped")
 
 
@@ -44,7 +47,6 @@ def create_app() -> FastAPI:
     app.add_middleware(
         CORSMiddleware,
         allow_origins=["*"],
-        allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
     )

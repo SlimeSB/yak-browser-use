@@ -205,12 +205,14 @@ def register_all_routes(app: FastAPI) -> None:
             )
 
             status = "completed" if not ctx.errors else "failed"
+            first_error = ctx.errors[0].get("message", str(ctx.errors[0])) if ctx.errors else None
             return JSONResponse({
                 "run_id": ctx.run_id,
                 "pipeline": ctx.pipeline_name,
                 "status": status,
                 "step_count": len(steps),
                 "errors": ctx.errors,
+                "error": first_error,
             })
         except APIError:
             raise
@@ -1073,8 +1075,31 @@ def register_all_routes(app: FastAPI) -> None:
             for d in sorted(workspaces_dir.iterdir()):
                 if not d.is_dir() or d.name.startswith("."):
                     continue
-                if (d / "pipeline.yaml").exists():
-                    pipelines.append({"name": d.name, "title": d.name})
+                pipe_file = d / "pipeline.yaml"
+                if pipe_file.exists():
+                    name = d.name
+                    description = ""
+                    stages: list[str] = []
+                    step_count = 0
+                    try:
+                        import yaml
+                        raw = yaml.safe_load(pipe_file.read_text(encoding="utf-8"))
+                        if isinstance(raw, dict):
+                            name = raw.get("name", name)
+                            description = raw.get("description", "")
+                            steps_raw = raw.get("steps", [])
+                            if isinstance(steps_raw, list):
+                                stages = [s.get("name", f"step_{i}") for i, s in enumerate(steps_raw)]
+                                step_count = len(steps_raw)
+                    except Exception:
+                        pass
+                    pipelines.append({
+                        "name": name,
+                        "title": name,
+                        "description": description,
+                        "stages": stages,
+                        "step_count": step_count,
+                    })
         return JSONResponse({"pipelines": pipelines})
 
     @app.get("/api/pipelines/{name}")
@@ -1086,7 +1111,21 @@ def register_all_routes(app: FastAPI) -> None:
         if not pipe_path.exists():
             raise APIError("pipeline not found", status_code=404)
         content = pipe_path.read_text(encoding="utf-8")
-        return JSONResponse({"name": name, "content": content})
+        meta: dict = {"name": name, "title": name, "description": "", "stages": [], "step_count": 0}
+        try:
+            import yaml
+            raw = yaml.safe_load(content)
+            if isinstance(raw, dict):
+                meta["name"] = raw.get("name", name)
+                meta["title"] = meta["name"]
+                meta["description"] = raw.get("description", "")
+                steps_raw = raw.get("steps", [])
+                if isinstance(steps_raw, list):
+                    meta["stages"] = [s.get("name", f"step_{i}") for i, s in enumerate(steps_raw)]
+                    meta["step_count"] = len(steps_raw)
+        except Exception:
+            pass
+        return JSONResponse({"name": name, "content": content, "meta": meta})
 
     @app.delete("/api/pipelines/{name}")
     async def api_delete_pipeline(name: str) -> JSONResponse:
@@ -1111,7 +1150,7 @@ def register_all_routes(app: FastAPI) -> None:
         Each connected client receives event dicts as JSON text messages.
         """
         await websocket.accept()
-        q: asyncio.Queue = asyncio.Queue()
+        q: asyncio.Queue = asyncio.Queue(maxsize=256)
         engine_state.ws_clients.append(q)
         logger.debug("WebSocket client connected (%d total)", len(engine_state.ws_clients))
 
