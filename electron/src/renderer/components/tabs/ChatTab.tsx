@@ -57,6 +57,7 @@ export default function ChatTab({
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const draggingRef = useRef(false);
   const [expandedThinks, setExpandedThinks] = useState<Set<number>>(new Set());
+  const [expandedToolErrors, setExpandedToolErrors] = useState<Set<number>>(new Set());
   const cancelledRef = useRef(false);
 
   const [splitRatio, setSplitRatio] = useState(() => {
@@ -131,10 +132,6 @@ export default function ChatTab({
       const pipelineName = activePreset || undefined;
       const result = await api.chat(text, pipelineName);
       if (result.ok) {
-        const resp = result.response;
-        if (resp) {
-          setMessages(prev => [...prev, { role: 'assistant', content: resp }]);
-        }
         onRefreshPipeline();
       } else {
         setMessages(prev => [...prev, { role: 'assistant', content: `Error: ${result.error ?? 'Unknown'}` }]);
@@ -327,7 +324,24 @@ export default function ChatTab({
                       {msg.toolOk === undefined ? '...' : msg.toolOk ? '✓' : '✗'}
                     </span>
                     {failed && msg.content && msg.content !== 'Failed' && (
-                      <div className="chat-tool-error">{msg.content}</div>
+                      <div className={`chat-tool-error-block ${expandedToolErrors.has(i) ? 'expanded' : ''}`}>
+                        <div
+                          className="chat-tool-error-header"
+                          onClick={() => {
+                            setExpandedToolErrors(prev => {
+                              const next = new Set(prev);
+                              if (next.has(i)) { next.delete(i); } else { next.add(i); }
+                              return next;
+                            });
+                          }}
+                        >
+                          <span className="chat-tool-error-arrow">{expandedToolErrors.has(i) ? '▾' : '▸'}</span>
+                          <span className="chat-tool-error-label">{t('chat.errorDetail')}</span>
+                        </div>
+                        {expandedToolErrors.has(i) && (
+                          <div className="chat-tool-error-content">{msg.content}</div>
+                        )}
+                      </div>
                     )}
                   </div>
                 );

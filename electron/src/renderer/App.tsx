@@ -257,6 +257,13 @@ export default function App() {
             } else if (et === 'chat.stream_start') {
               const ti = event.turn_index as number;
               streamStatesRef.current[ti] = { accumulating: '', reasoningParts: [], complete: false };
+              setChatMessages(prev => {
+                const next = [...prev];
+                if (ti >= next.length) {
+                  next.push({ role: 'assistant', content: '' });
+                }
+                return next;
+              });
             } else if (et === 'chat.text_chunk') {
               const ti = event.turn_index as number;
               const content = event.content as string || '';
