@@ -67,3 +67,4 @@ yak-browser-use = "yak_browser_use.__main__:main"
 
 [tool.setuptools_scm]
 root = ".."
+local_scheme = "no-local-version"
