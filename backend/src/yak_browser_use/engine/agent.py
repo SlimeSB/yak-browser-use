@@ -1,80 +1,13 @@
-"""Agent integration — chat mode entry and LLM call factories.
+"""Agent integration — LLM call factory for chat mode.
 
 Provides:
-- start_chat_agent() — chat mode conversation_loop entry
 - _create_chat_llm_call() — streaming llm_call for interactive chat
 """
 from __future__ import annotations
 
-from pathlib import Path
-
 from yak_browser_use.utils.logging import get_logger
 
 logger = get_logger(__name__)
-
-
-# ── Chat mode entry ──────────────────────────────────────────────────
-
-
-async def start_chat_agent(
-    *,
-    user_message: str,
-    cdp_helpers: object,
-    pipeline_name: str = "",
-    tools_dir: Path | None = None,
-    messages: list[dict] | None = None,
-    llm_call=None,
-    budget: object | None = None,
-) -> dict:
-    """Start a chat-mode conversation_loop with the given user message.
-
-    This is the chat mode entry point — wraps run_conversation_loop
-    with default configuration suitable for interactive chat.
-
-    Args:
-        user_message: The user's text input.
-        cdp_helpers: CDPHelpers instance for browser operations.
-        pipeline_name: Pipeline name for goal_run context.
-        tools_dir: Directory containing tool modules.
-        messages: Pre-existing conversation messages (for resume).
-        llm_call: Async callable(messages, tools) -> LLMResponse.
-        budget: Pre-existing IterationBudget (for resume).
-
-    Returns:
-        Dict with response, status, messages, budget.
-    """
-    from yak_browser_use.engine._harness import run_conversation_loop, get_all_tools
-    from yak_browser_use.prompts._loader import build_system_prompt
-
-    if messages is None:
-        messages = []
-
-    messages.append({"role": "user", "content": user_message})
-
-    system_prompt = build_system_prompt()
-
-    if llm_call is None:
-        llm_call = _create_chat_llm_call()
-
-    result = await run_conversation_loop(
-        llm_call=llm_call,
-        system_prompt=system_prompt,
-        messages=messages,
-        tools=get_all_tools(),
-        cdp_helpers=cdp_helpers,
-        tools_dir=tools_dir,
-        pipeline_name=pipeline_name,
-        budget=budget,
-    )
-
-    return {
-        "response": result.final_response,
-        "status": "completed" if not result.interrupted else "cancelled",
-        "messages": result.messages,
-        "budget": result.budget.to_dict(),
-        "turn_count": result.turn_count,
-        "duration_ms": result.duration_ms,
-    }
 
 
 def _create_chat_llm_call(
