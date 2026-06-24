@@ -2,6 +2,7 @@
 
 import csv
 import json
+
 import pytest
 from pathlib import Path
 
@@ -9,18 +10,20 @@ from yak_browser_use.tools.format_convert import format_convert
 
 
 @pytest.mark.asyncio
-async def test_xlsx_to_csv(tmp_path):
+async def test_xlsx_to_csv(tmp_path, monkeypatch):
     import openpyxl
 
-    src = tmp_path / "data.xlsx"
+    monkeypatch.chdir(tmp_path)
+
+    src = Path("data.xlsx")
     wb = openpyxl.Workbook()
     ws = wb.active
     ws.append(["name", "age"])
     ws.append(["Alice", "30"])
-    wb.save(src)
+    wb.save(str(src))
     wb.close()
 
-    tgt = tmp_path / "data.csv"
+    tgt = Path("data.csv")
     result = await format_convert(str(src), str(tgt))
     assert result["ok"] is True
     assert tgt.exists()
@@ -31,13 +34,15 @@ async def test_xlsx_to_csv(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_csv_to_xlsx(tmp_path):
+async def test_csv_to_xlsx(tmp_path, monkeypatch):
     import openpyxl
 
-    src = tmp_path / "data.csv"
+    monkeypatch.chdir(tmp_path)
+
+    src = Path("data.csv")
     src.write_text("name,age\nBob,25\n", encoding="utf-8-sig")
 
-    tgt = tmp_path / "data.xlsx"
+    tgt = Path("data.xlsx")
     result = await format_convert(str(src), str(tgt))
     assert result["ok"] is True
     assert tgt.exists()
@@ -50,11 +55,13 @@ async def test_csv_to_xlsx(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_csv_to_json(tmp_path):
-    src = tmp_path / "data.csv"
+async def test_csv_to_json(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+
+    src = Path("data.csv")
     src.write_text("name,age\nCarol,28\n", encoding="utf-8-sig")
 
-    tgt = tmp_path / "data.json"
+    tgt = Path("data.json")
     result = await format_convert(str(src), str(tgt))
     assert result["ok"] is True
     assert tgt.exists()
@@ -64,11 +71,13 @@ async def test_csv_to_json(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_json_to_csv(tmp_path):
-    src = tmp_path / "data.json"
+async def test_json_to_csv(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+
+    src = Path("data.json")
     src.write_text(json.dumps([{"name": "Dave", "age": "35"}]), encoding="utf-8")
 
-    tgt = tmp_path / "data.csv"
+    tgt = Path("data.csv")
     result = await format_convert(str(src), str(tgt))
     assert result["ok"] is True
     assert tgt.exists()
@@ -78,18 +87,20 @@ async def test_json_to_csv(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_xlsx_to_json_two_step(tmp_path):
+async def test_xlsx_to_json_two_step(tmp_path, monkeypatch):
     import openpyxl
 
-    src = tmp_path / "data.xlsx"
+    monkeypatch.chdir(tmp_path)
+
+    src = Path("data.xlsx")
     wb = openpyxl.Workbook()
     ws = wb.active
     ws.append(["x", "y"])
     ws.append(["1", "2"])
-    wb.save(src)
+    wb.save(str(src))
     wb.close()
 
-    tgt = tmp_path / "data.json"
+    tgt = Path("data.json")
     result = await format_convert(str(src), str(tgt))
     assert result["ok"] is True
     assert tgt.exists()
@@ -99,13 +110,15 @@ async def test_xlsx_to_json_two_step(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_json_to_xlsx_two_step(tmp_path):
+async def test_json_to_xlsx_two_step(tmp_path, monkeypatch):
     import openpyxl
 
-    src = tmp_path / "data.json"
+    monkeypatch.chdir(tmp_path)
+
+    src = Path("data.json")
     src.write_text(json.dumps([{"a": "1", "b": "2"}]), encoding="utf-8")
 
-    tgt = tmp_path / "data.xlsx"
+    tgt = Path("data.xlsx")
     result = await format_convert(str(src), str(tgt))
     assert result["ok"] is True
     assert tgt.exists()
