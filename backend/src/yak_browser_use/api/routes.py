@@ -813,7 +813,7 @@ def register_all_routes(app: FastAPI) -> None:
         turn_index = (len(session.messages) if session else 0) + 1
 
         def _push(event: dict) -> None:
-            service._push_event(event)
+            service.events.push(event)
 
         def _on_stream_start() -> None:
             _push({"type": "chat.stream_start", "turn_index": turn_index})

@@ -2,37 +2,33 @@
 
 Bridges the API routes to the engine: session management,
 chat message processing, pipeline compilation, and event pushing.
+
+Delegates to :class:`SessionManager` and :class:`EventBus` for the
+respective sub-domains; Service itself handles chat orchestration
+and pipeline utilities.
 """
 
 from __future__ import annotations
 
 import asyncio
-import json
-import time
-from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable
 
 from yak_browser_use.utils.logging import get_logger
 
 from yak_browser_use.api.errors import APIError
-from yak_browser_use.tools.todo_store import TodoStore
+from yak_browser_use.api.event_bus import EventBus
+from yak_browser_use.api.session_manager import SessionManager, SessionState, _DEFAULT_PIPELINE
 from yak_browser_use.workspace.manager import WORKSPACES_ROOT
-from yak_browser_use.workspace.session_store import SessionStore, read_last_active, write_last_active
+from yak_browser_use.tools.todo_store import current_store
 
 logger = get_logger(__name__)
 
 _WORKSPACES_DIR = WORKSPACES_ROOT
 
-_DEFAULT_PIPELINE = "__chat__"
-
 
 def _build_pipeline_context(pipeline_name: str) -> str | None:
-    """Build a markdown snippet describing the currently selected pipeline.
-
-    Injects pipeline name, goal, and step names so the agent knows
-    which YAML the user is viewing and can operate on it by default.
-    """
+    """Build a markdown snippet describing the currently selected pipeline."""
     import yaml
 
     pipe_path = _WORKSPACES_DIR / pipeline_name / "pipeline.yaml"
@@ -67,126 +63,41 @@ def _build_pipeline_context(pipeline_name: str) -> str | None:
         return None
 
 
-@dataclass
-class SessionState:
-    """State for a single chat session."""
-
-    session_id: str
-    pipeline_name: str = ""
-    status: str = "idle"  # idle, running, paused, completed, cancelled
-    created_at: float = field(default_factory=time.time)
-    messages: list[dict] = field(default_factory=list)
-    error_info: dict | None = None
-    budget_snapshot: dict | None = None
-    todo_store: TodoStore = field(default_factory=TodoStore)
-
-
 class Service:
-    """Business logic service for the YBU API."""
+    """Business logic service for the YBU API.
+
+    Composes :class:`SessionManager` and :class:`EventBus` and
+    exposes the combined interface used by the route layer.
+    """
 
     def __init__(self, engine_state: object | None = None):
-        self._engine_state = engine_state
-        self._sessions: dict[str, SessionState] = {}
-        self._active_pipeline: str = _DEFAULT_PIPELINE
-        self._event_callbacks: list[Callable[[dict], None]] = []
+        self.sessions = SessionManager()
+        self.events = EventBus(engine_state)
+        self.sessions.set_event_pusher(self.events.push)
         self._chat_lock = asyncio.Lock()
-        self._chat_streaming = False
 
-    # ── Session management ──────────────────────────────────────────
-
-    def _normalize_pipeline(self, name: str) -> str:
-        return _DEFAULT_PIPELINE if not name or name == "chat" else name
+    # ── Session management (delegated) ──────────────────────────────
 
     def create_session(self, pipeline_name: str = "") -> SessionState:
-        """Create a new chat session for a pipeline. Rejects if one is running."""
-        normalized = self._normalize_pipeline(pipeline_name)
-        existing = self._sessions.get(normalized)
-        if existing and existing.status == "running":
-            raise APIError("当前有任务正在执行，请先结束或取消")
-        session_id = f"session_{int(time.time() * 1000)}"
-        session = SessionState(session_id=session_id, pipeline_name=normalized)
-        self._sessions[normalized] = session
-        self._active_pipeline = normalized
-        logger.info("Session created: %s (pipeline=%s)", session_id, normalized)
-        self._push_event({"type": "session.state", "status": "idle", "session_id": session_id})
-        return session
+        return self.sessions.create_session(pipeline_name)
 
     def get_session(self, pipeline_name: str | None = None) -> SessionState | None:
-        """Get the active session for a pipeline.
-
-        If pipeline_name is None, uses the current active pipeline.
-        """
-        name = self._normalize_pipeline(pipeline_name) if pipeline_name is not None else self._active_pipeline
-        return self._sessions.get(name)
+        return self.sessions.get_session(pipeline_name)
 
     def reset_session(self) -> SessionState:
-        """Cancel current session, save history, start new."""
-        current = self._sessions.get(self._active_pipeline)
-        if current:
-            self._save_session(current)
-        return self.create_session(self._active_pipeline)
+        return self.sessions.reset_session()
 
-    def cancel_session(self) -> None:
-        """Cancel the active session."""
-        session = self._sessions.get(self._active_pipeline)
-        if session:
-            session.status = "cancelled"
-            self._push_event({
-                "type": "session.state",
-                "status": "cancelled",
-                "session_id": session.session_id,
-            })
+    def cancel_session(self) -> SessionState | None:
+        return self.sessions.cancel_session()
 
     def switch_session(self, pipeline_name: str) -> list[dict]:
-        """Switch active pipeline: save current session, load target workspace.
-
-        Returns the target workspace's session list.
-        """
-        target = self._normalize_pipeline(pipeline_name)
-
-        # Save current session if dirty
-        current = self._sessions.get(self._active_pipeline)
-        if current:
-            self._save_session(current)
-
-        self._active_pipeline = target
-        write_last_active(target)
-
-        # Load sessions from workspace
-        store = SessionStore(target)
-        store.ensure_session_dir()
-        sessions = store.list_sessions()
-
-        logger.info("Switched to pipeline %s (%d sessions)", target, len(sessions))
-        return sessions
+        return self.sessions.switch_session(pipeline_name)
 
     def archive_session(self, pipeline_name: str, session_id: str) -> bool:
-        """Archive a session for the given pipeline."""
-        normalized = self._normalize_pipeline(pipeline_name)
-        store = SessionStore(normalized)
-        ok = store.archive_session(session_id)
-        if ok:
-            logger.info("Service: archived session %s in pipeline %s", session_id, normalized)
-        return ok
+        return self.sessions.archive_session(pipeline_name, session_id)
 
     def new_session(self, pipeline_name: str) -> dict:
-        """Create a new persisted session for the given pipeline."""
-        normalized = self._normalize_pipeline(pipeline_name)
-        store = SessionStore(normalized)
-        store.ensure_session_dir()
-        session_id = store.new_session()
-
-        # Create in-memory state
-        session = SessionState(session_id=session_id, pipeline_name=normalized)
-        self._sessions[normalized] = session
-        self._active_pipeline = normalized
-
-        logger.info("new_session: %s for pipeline %s", session_id, normalized)
-        return {
-            "session_id": session_id,
-            "created_at": session.created_at,
-            "pipeline_name": normalized,
-        }
+        return self.sessions.new_session(pipeline_name)
 
     # ── Chat message processing ─────────────────────────────────────
 
@@ -199,39 +110,23 @@ class Service:
         pipeline_name: str = "",
         llm_call: Callable | None = None,
     ) -> dict:
-        """Process a chat message through conversation_loop.
-
-        Args:
-            message: User's text message.
-            cdp_helpers: CDP helpers instance.
-            tools_dir: Directory for tool modules.
-            pipeline_name: Pipeline name.
-            llm_call: Async callable for LLM API calls.
-
-        Returns:
-            Result dict with response and status.
-        """
+        """Process a chat message through conversation_loop."""
         async with self._chat_lock:
-            from yak_browser_use.engine._harness.conversation_loop import run_conversation_loop, ConversationResult
+            from yak_browser_use.engine._harness.conversation_loop import (
+                run_conversation_loop,
+                ConversationResult,
+            )
             from yak_browser_use.engine._harness.tools import get_all_tools
             from yak_browser_use.prompts._loader import build_system_prompt
-            from yak_browser_use.tools.todo_store import current_store
 
-            normalized = self._normalize_pipeline(pipeline_name)
-            self._active_pipeline = normalized
-
-            session = self._sessions.get(normalized)
+            session = self.sessions.get_session(pipeline_name)
             if session is None:
-                session = SessionState(
-                    session_id=f"session_{int(time.time() * 1000)}",
-                    pipeline_name=normalized,
-                )
-                self._sessions[normalized] = session
+                session = self.sessions.create_session(pipeline_name)
 
             logger.info("Chat [%s] user: %s", session.session_id, message[:120])
 
             session.status = "running"
-            self._push_event({
+            self.events.push({
                 "type": "session.state",
                 "status": "running",
                 "session_id": session.session_id,
@@ -241,6 +136,8 @@ class Service:
 
             system_prompt = build_system_prompt()
 
+            normalized = self.sessions.normalize_pipeline(pipeline_name)
+            self.sessions.active_pipeline = normalized
             if normalized != _DEFAULT_PIPELINE:
                 pipeline_ctx = _build_pipeline_context(normalized)
                 if pipeline_ctx:
@@ -248,16 +145,16 @@ class Service:
 
             def _stream_cb(event: dict) -> None:
                 event["session_id"] = session.session_id
-                self._push_event(event)
+                self.events.push(event)
 
             def _interrupt_check() -> bool:
                 return session.status in ("cancelled",)
 
             _todo_token = current_store.set(session.todo_store)
-            self._chat_streaming = True
+            self.events.chat_streaming = True
 
             def _on_turn_complete() -> None:
-                self._save_session(session)
+                self.sessions.persist_session(session)
 
             try:
                 result: ConversationResult = await run_conversation_loop(
@@ -276,8 +173,7 @@ class Service:
                 session.status = "completed" if not result.interrupted else "cancelled"
                 session.budget_snapshot = result.budget.to_dict()
 
-                # Final save after conversation completes
-                self._save_session(session)
+                self.sessions.persist_session(session)
 
                 resp_preview = (result.final_response or "")[:120]
                 logger.info("Chat [%s] done: status=%s turns=%d duration=%dms response: %s",
@@ -299,8 +195,8 @@ class Service:
                 return {"ok": False, "error": str(e)}
 
             finally:
-                self._chat_streaming = False
-                self._push_event({
+                self.events.chat_streaming = False
+                self.events.push({
                     "type": "session.state",
                     "status": session.status,
                     "session_id": session.session_id,
@@ -340,46 +236,10 @@ class Service:
                 logger.warning("Failed to stat pipeline in %s", d, exc_info=True)
         return presets
 
-    # ── Events ──────────────────────────────────────────────────────
+    # ── Events (delegated) ─────────────────────────────────────────
 
     def on_event(self, callback: Callable[[dict], None]) -> None:
         """Register a callback for event streaming."""
-        self._event_callbacks.append(callback)
-
-    def _push_event(self, event: dict) -> None:
-        """Push an event to all registered callbacks AND engine_state WS clients."""
-        if event.get("type") == "chat.message" and self._chat_streaming:
-            return
-        event["_ts"] = time.time()
-        for cb in self._event_callbacks:
-            try:
-                cb(event)
-            except Exception:
-                logger.warning("Event callback failed for type=%s", event.get("type"), exc_info=True)
-        if self._engine_state and hasattr(self._engine_state, "ws_clients"):
-            for q in self._engine_state.ws_clients:
-                try:
-                    q.put_nowait(event)
-                except Exception:  # expected: queue full
-                    pass
-
-    # ── Internal helpers ────────────────────────────────────────────
-
-    def _save_session(self, session: SessionState, context: str = "history") -> None:
-        """Persist session to workspace session dir, catching errors."""
-        try:
-            store = SessionStore(session.pipeline_name)
-            store.ensure_session_dir()
-            data = {
-                "session_id": session.session_id,
-                "pipeline_name": session.pipeline_name,
-                "status": session.status,
-                "created_at": session.created_at,
-                "messages": session.messages,
-                "budget_snapshot": session.budget_snapshot,
-            }
-            store.save_session(session.session_id, data)
-        except Exception as e:
-            logger.warning("Failed to save session %s: %s", context, e)
+        self.events.on_event(callback)
 
 

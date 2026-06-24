@@ -6,14 +6,16 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from yak_browser_use.api.service import Service, SessionState
+from yak_browser_use.api.service import Service
+from yak_browser_use.api.session_manager import SessionState
 
 
 @pytest.fixture
 def svc():
-    """Return a fresh Service with mocked _save_session."""
+    """Return a fresh Service with disk-backed operations mocked."""
     s = Service()
-    s._save_session = MagicMock()
+    s.sessions.persist_session = MagicMock()
+    s.sessions._restore_from_disk = MagicMock(return_value=None)
     return s
 
 
@@ -78,9 +80,8 @@ async def test_session_reuse_messages_accumulate(svc, mock_loop_result):
         await svc.process_chat_message("first", cdp_helpers=MagicMock())
         await svc.process_chat_message("second", cdp_helpers=MagicMock())
 
-    session = svc._sessions.get("__chat__")
+    session = svc.sessions._sessions.get("__chat__")
     assert session is not None
-    # Two user messages appended to the session
     assert len(session.messages) == 2
     assert session.messages[0] == {"role": "user", "content": "first"}
     assert session.messages[1] == {"role": "user", "content": "second"}
@@ -139,8 +140,8 @@ async def test_error_returns_false(svc):
 
 @pytest.mark.asyncio
 async def test_stream_callback_injects_session_id(svc, mock_loop_result):
-    """Stream callback appends session_id to events pushed to _push_event."""
-    svc._push_event = MagicMock()
+    """Stream callback appends session_id to events pushed to EventBus."""
+    svc.events.push = MagicMock()
 
     with (
         patch("yak_browser_use.engine._harness.conversation_loop.run_conversation_loop") as mock_loop,
@@ -160,9 +161,9 @@ async def test_stream_callback_injects_session_id(svc, mock_loop_result):
 
         await svc.process_chat_message("hello", cdp_helpers=MagicMock())
 
-    assert svc._push_event.call_count >= 2
-    session = svc._sessions.get("__chat__")
-    for call in svc._push_event.call_args_list:
+    assert svc.events.push.call_count >= 2
+    session = svc.sessions._sessions.get("__chat__")
+    for call in svc.events.push.call_args_list:
         event = call[0][0]
         assert event.get("session_id") == session.session_id
 
@@ -220,7 +221,7 @@ async def test_default_pipeline_no_context(svc, mock_loop_result):
 
 @pytest.mark.asyncio
 async def test_session_persisted(svc, mock_loop_result):
-    """_save_session is called via on_turn_complete callback."""
+    """persist_session is called via on_turn_complete callback."""
     with (
         patch("yak_browser_use.engine._harness.conversation_loop.run_conversation_loop") as mock_loop,
         patch("yak_browser_use.engine._harness.tools.get_all_tools", return_value=[]),
@@ -238,4 +239,4 @@ async def test_session_persisted(svc, mock_loop_result):
 
         await svc.process_chat_message("hello", cdp_helpers=MagicMock())
 
-    svc._save_session.assert_called()
+    svc.sessions.persist_session.assert_called()
