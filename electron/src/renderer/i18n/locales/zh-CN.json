@@ -26,7 +26,9 @@
     "ok": "确定",
     "cancel": "取消",
     "connectionFailed": "连接失败，请确保 Chrome 以 --remote-debugging-port=9222 参数运行",
-    "restartFailed": "重启失败"
+    "restartFailed": "重启失败",
+    "profile": "配置文件：",
+    "startConnect": "启动并连接"
   },
   "statusBar": {
     "ready": "就绪",

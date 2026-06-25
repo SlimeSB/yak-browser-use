@@ -22,7 +22,7 @@ export default function ParamsTab({
         <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)' }}>⚙ {t('paramsTab.title')}</span>
         <div style={{ flex: 1 }} />
         <input className="input" style={{ width: 160 }} placeholder={t('paramsTab.key')} value={credKey} onChange={e => onCredKeyChange(e.target.value)} />
-        <input className="input" style={{ width: 200 }} placeholder={t('paramsTab.value')} value={credValue} onChange={e => onCredValueChange(e.target.value)} />
+        <input className="input" style={{ width: 200 }} type="password" placeholder={t('paramsTab.value')} value={credValue} onChange={e => onCredValueChange(e.target.value)} />
         <button className="btn btn-primary btn-sm" onClick={onCredSet}>{t('paramsTab.add')}</button>
       </div>
       <div className="cred-content">

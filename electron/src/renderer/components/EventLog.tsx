@@ -7,13 +7,22 @@ interface EventLogProps {
   maxHeight?: number;
 }
 
-const DATA_BLACKLIST = new Set(['_ts', 'session_id', 'timestamp']);
+const DATA_BLACKLIST = new Set(['_ts', 'session_id', 'timestamp', 'api_key', 'apiKey', 'password', 'secret', 'token', 'auth']);
 
-function cleanData(data: Record<string, unknown>): Record<string, unknown> {
-  if (!data || typeof data !== 'object') return {};
-  return Object.fromEntries(
-    Object.entries(data).filter(([k]) => !DATA_BLACKLIST.has(k))
-  );
+function cleanData(data: unknown): unknown {
+  if (Array.isArray(data)) return data.map(cleanData);
+  if (data && typeof data === 'object') {
+    const cleaned: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(data as Record<string, unknown>)) {
+      if (DATA_BLACKLIST.has(k)) {
+        cleaned[k] = '[redacted]';
+      } else {
+        cleaned[k] = cleanData(v);
+      }
+    }
+    return cleaned;
+  }
+  return data;
 }
 
 function getLineColor(ev: EventData): string {

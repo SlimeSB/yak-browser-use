@@ -50,7 +50,14 @@ export default function PipelinesTab({
                 onSelectPreset(p.name);
                 api.getPipeline(p.name).then(resp => {
                   if (resp.content) {
-                    navigator.clipboard.writeText(resp.content);
+                    try { navigator.clipboard.writeText(resp.content); } catch {
+                      const ta = document.createElement('textarea');
+                      ta.value = resp.content;
+                      ta.style.position = 'fixed'; ta.style.opacity = '0';
+                      document.body.appendChild(ta); ta.select();
+                      document.execCommand('copy');
+                      document.body.removeChild(ta);
+                    }
                   }
                 }).catch((e) => { console.error('getPipeline failed:', e); });
               }}>📋 {t('pipelineManager.copy')}</button>

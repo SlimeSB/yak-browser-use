@@ -65,7 +65,8 @@ export default function SettingsTab({
   const handleTest = async () => {
     setTesting(true);
     setTestResult(null);
-    const r = await api.testProvider(providerConfig as unknown as Record<string, string>);
+    const { model, api_key, api_base } = providerConfig;
+    const r = await api.testProvider({ model, api_key, api_base });
     setTestResult(r.ok ? { ok: true, msg: t('settingsTab.testPassed') } : { ok: false, msg: r.error || 'Failed' });
     setTesting(false);
   };

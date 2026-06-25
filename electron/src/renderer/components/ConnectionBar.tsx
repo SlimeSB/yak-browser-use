@@ -79,7 +79,7 @@ export default function ConnectionBar({
           ) : (
             <div className="conn-segment">
               <div className="profile-select">
-                <span className="conn-status-text">Profile:</span>
+                <span className="conn-status-text">{t('connection.profile')}</span>
                 <select value={selectedProfile} onChange={e => onProfileChange(e.target.value)}>
                   {profiles.map(p => (
                     <option key={p} value={p}>{p}</option>
@@ -103,7 +103,7 @@ export default function ConnectionBar({
                 )}
               </div>
               <button className="btn btn-primary btn-sm" onClick={() => onConnect('isolated', selectedProfile)}>
-                Start & Connect
+                {t('connection.startConnect')}
               </button>
             </div>
           )}

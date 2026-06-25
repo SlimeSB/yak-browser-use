@@ -14,7 +14,7 @@ import ParamsTab from './components/tabs/ParamsTab';
 import SettingsTab from './components/tabs/SettingsTab';
 
 function interpolateTemplate(template: string, ctx: Record<string, string>): string {
-  return template.replace(/{{(\w+)}}/g, (_match, key: string) => ctx[key] ?? `{{${key}}}`);
+  return template.replace(/{{([\w.]+)}}/g, (_match, key: string) => ctx[key] ?? `{{${key}}}`);
 }
 
 export default function App() {
@@ -84,28 +84,7 @@ export default function App() {
   const [currentSessionId, setCurrentSessionId] = useState<string>('');
   const [loadingSession, setLoadingSession] = useState(false);
 
-  useEffect(() => {
-    const states = streamStatesRef.current;
-    for (let ti = chatMessages.length - 1; ti >= 0; ti--) {
-      const st = states[ti];
-      if (!st || st.complete) continue;
-      if (chatMessages[ti].role === 'assistant') {
-        const hasContent = st.accumulating.length > 0;
-        const hasReasoning = st.reasoningParts.length > 0;
-        if (hasContent || hasReasoning) {
-          setChatMessages(prev => {
-            const next = [...prev];
-            if (ti < next.length) {
-              next[ti] = { ...next[ti], content: st.accumulating || next[ti].content };
-              if (hasReasoning) next[ti] = { ...next[ti], reasoning: st.reasoningParts.join('') };
-            }
-            return next;
-          });
-        }
-        delete states[ti];
-      }
-    }
-  }, [chatMessages]);
+
 
   const loadSessions = useCallback(async (pipelineName: string) => {
     try {
@@ -267,8 +246,8 @@ export default function App() {
             } else if (et === 'chat.text_chunk') {
               const ti = event.turn_index as number;
               const content = event.content as string || '';
-              const st = streamStatesRef.current[ti];
-              if (!st) { streamStatesRef.current[ti] = { accumulating: content, reasoningParts: [], complete: false }; return; }
+              const st = streamStatesRef.current[ti] || { accumulating: '', reasoningParts: [], complete: false };
+              streamStatesRef.current[ti] = st;
               st.accumulating += content;
               setChatMessages(prev => {
                 const next = [...prev];
@@ -280,8 +259,8 @@ export default function App() {
             } else if (et === 'chat.think_chunk') {
               const ti = event.turn_index as number;
               const content = event.content as string || '';
-              const st = streamStatesRef.current[ti];
-              if (!st) { streamStatesRef.current[ti] = { accumulating: '', reasoningParts: [content], complete: false }; return; }
+              const st = streamStatesRef.current[ti] || { accumulating: '', reasoningParts: [], complete: false };
+              streamStatesRef.current[ti] = st;
               st.reasoningParts.push(content);
               setChatMessages(prev => {
                 const next = [...prev];
@@ -303,9 +282,7 @@ export default function App() {
               });
             } else if (et === 'chat.stream_end') {
               const ti = event.turn_index as number;
-              if (streamStatesRef.current[ti]) {
-                streamStatesRef.current[ti].complete = true;
-              }
+              delete streamStatesRef.current[ti];
             } else if (et === 'pipeline.edit') {
               const editId = event.edit_id as string;
               if (editId && !processedEditIdsRef.current.has(editId)) {

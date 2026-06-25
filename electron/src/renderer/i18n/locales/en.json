@@ -26,7 +26,9 @@
     "ok": "OK",
     "cancel": "Cancel",
     "connectionFailed": "Connection failed. Make sure Chrome is running with --remote-debugging-port=9222",
-    "restartFailed": "Restart failed"
+    "restartFailed": "Restart failed",
+    "profile": "Profile:",
+    "startConnect": "Start & Connect"
   },
   "statusBar": {
     "ready": "Ready",
