@@ -35,8 +35,8 @@ step_type 判断规则：
 5. browser 和 tool 类型如有明确输入参数或输出数据，填写 input/output
 
 eval_agent 使用指导：
-- 当 browser_eval 单次 JS 执行无法完成时（如需要迭代试错、批量提取表格数据、验证码识别），应使用 eval_agent 工具
-- eval_agent 会启动子 Agent，子 Agent 可执行多次 browser_eval + browser_snapshot 迭代
+- 当 eval_js 单次 JS 执行无法完成时（如需要迭代试错、批量提取表格数据、验证码识别），应使用 eval_agent 工具
+- eval_agent 会启动子 Agent，子 Agent 可执行多次 eval_js + browser_snapshot 迭代
 - 调用格式：eval_agent(purpose="任务描述", snapshot="当前页面快照")
 - 在 pipeline 中输出为 tool 类型步骤，tool_name 为 "eval_agent"：
   ```json

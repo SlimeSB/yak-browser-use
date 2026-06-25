@@ -417,7 +417,7 @@ def build_llm_view(state: CollectState) -> tuple[list[dict], list[dict], dict[st
             "total": state.stats_map[ckey]["total_descendants"],
             "sampled": len(picked),
             "_sampled_refs": set(picked),
-            "expand_hint": f"[expand_branch(key='{ckey}') to browse all {state.stats_map[ckey]['total_descendants']} items]",
+            "expand_hint": f"[snapshot(expand_key='{ckey}') to browse all {state.stats_map[ckey]['total_descendants']} items]",
             "summary": _folded_summary_from_container(state, ckey),
         })
 
@@ -1625,7 +1625,7 @@ class PlaywrightBridge:
             "title": await self._page.title(),
             "folded_note": (
                 "Folded containers hold dense interactive regions (product feeds, nav menus, lists). "
-                "Use expand_branch(key='c_N', limit=30, offset=0) to browse inside. "
+                "Use snapshot(expand_key='c_N') to browse inside. "
                 "Each container sampled a few representative items — the rest are hidden to save context."
             ),
         }

@@ -37,7 +37,7 @@ async def record_step(
         pipeline_name: Name of the pipeline preset.
         step_name: Unique step name (e.g. 'step_1').
         description: Human-readable description.
-        op_type: Operation type (goto, click, fill, scroll, snapshot, source, eval, goal_run).
+        op_type: Operation type (goto, click, fill, scroll, snapshot, source, goal_run).
             When omitted, creates an outline placeholder step with only name + description.
         op_args: Arguments passed to the operation.
         explanation: Why this step is needed.

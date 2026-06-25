@@ -21,6 +21,8 @@ class ScratchpadRecord:
     title: str = ""
     elements: list[dict] = field(default_factory=list)
     element_map: dict[str, str] = field(default_factory=dict)
+    # NOTE: elements / element_map 当前无消费方（lookup_selector 已改为每次 CDP 刷新），
+    # 保留以备后续可能需要本地缓存加速的场景。
     raw_html: str = ""
     summary: str = ""
 

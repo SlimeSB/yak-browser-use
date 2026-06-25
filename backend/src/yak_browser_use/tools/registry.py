@@ -130,10 +130,10 @@ def _build_registry_impl() -> None:
     # ── browser_* tools ──────────────────────────────────────────────
 
     _BROWSER_OPS = [
-        "goto", "click", "fill", "snapshot", "scroll", "source", "eval",
-        "get_element_by_number", "hover", "unhover", "focus", "select",
+        "goto", "click", "fill", "snapshot", "scroll", "source",
+        "lookup_selector", "hover", "unhover", "focus", "select",
         "clear", "keyboard", "press_key", "type_text", "navigate", "wait",
-        "tab", "copy", "paste", "expand_branch",
+        "tab", "copy", "paste",
     ]
 
     _BROWSER_SCHEMAS: dict[str, dict] = {
@@ -184,7 +184,7 @@ def _build_registry_impl() -> None:
                            "a11y 采用 CDP Accessibility.getFullAXTree 获取结构化元素列表，\n"
                            "每个元素带 ref/role/name/nth/selector，可间接用于 click/fill/hover 等操作。\n"
                            "progressive 采用 CDP DOM 深度扫描 + 密度自适应折叠，\n"
-                           "最多 200 元素，密集容器折叠后可用 expand_branch 展开浏览。\n"
+                           "最多 200 元素，密集容器折叠后可用 expand_key 参数展开浏览。\n"
                            "适合订单列表、搜索结果等复杂长页面。\n"
                            "full 截图+HTML 全量转储作为最后兜底可用。",
             "parameters": {
@@ -206,19 +206,11 @@ def _build_registry_impl() -> None:
                         "type": "boolean",
                         "description": "仅 interactive 模式有效。为 true 时只返回当前屏幕可见区域内的元素。",
                     },
+                    "expand_key": {
+                        "type": "string",
+                        "description": "仅 progressive 模式有效。指定要展开的折叠容器 key（如 'c_0'），展开后合并到 snapshot 返回中。替代原 expand_branch 独立 op。",
+                    },
                 },
-            },
-        },
-        "expand_branch": {
-            "description": "Expand a folded container from a progressive snapshot. Each folded container only shows a few representative items; use this to browse deeper. Returns paginated elements (limit=30 per page, use offset for next page).",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "key": {"type": "string", "description": "Container key from folded_containers list, e.g. 'c_117'"},
-                    "limit": {"type": "integer", "description": "Max items to return (default 30)."},
-                    "offset": {"type": "integer", "description": "Pagination offset for subsequent pages."},
-                },
-                "required": ["key"],
             },
         },
         "scroll": {
@@ -241,16 +233,8 @@ def _build_registry_impl() -> None:
                 },
             },
         },
-        "eval": {
-            "description": "Execute arbitrary JavaScript code on the current page and return the result.",
-            "parameters": {
-                "type": "object",
-                "properties": {"code": {"type": "string", "description": "JavaScript code to execute."}},
-                "required": ["code"],
-            },
-        },
-        "get_element_by_number": {
-            "description": "Get detailed information about an interactive element by its prog_label (hierarchical path like '0-2-175') or ref number. The badge on the page shows the prog_label; use it to look up element details (selector, tag, text) before clicking or filling.",
+        "lookup_selector": {
+            "description": "查找页面上指定元素的 CSS selector。每次调用刷新页面缓存确保最新。",
             "parameters": {
                 "type": "object",
                 "properties": {"ref": {"type": "string", "description": "Element prog_label (e.g. '0-2-175' shown on badge) or numeric ref."}},
@@ -418,6 +402,31 @@ def _build_registry_impl() -> None:
             return handler
 
         registry.register(f"browser_{op_type}", schema, _make_browser_handler(op_type))
+
+    # ── eval_js (standalone tool, not a browser_* op) ────────────────
+
+    async def _eval_js_handler(args: dict, ctx: ToolContext) -> dict:
+        if ctx.cdp_helpers is None:
+            return {"ok": False, "error": "浏览器不可用 — 请确保 CDP 连接已建立"}
+        bridge = ctx.cdp_helpers.bridge if hasattr(ctx.cdp_helpers, "bridge") else ctx.cdp_helpers
+        code = args.get("code", "")
+        try:
+            result = await bridge.evaluate(code)
+            return {"ok": True, "result": result}
+        except Exception as e:
+            return {"ok": False, "error": str(e)}
+
+    registry.register("eval_js", {
+        "description": "在浏览器当前页面执行任意 JavaScript 代码并返回结果。支持 source_key 参数将结果写入 shared_store，便于通过 {key} 被其他 tool 引用。",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "code": {"type": "string", "description": "要执行的 JavaScript 代码。"},
+                "source_key": {"type": "string", "description": "可选，指定结果存入 shared_store 的 key。设置后结果可通过 {key} 被其他 tool 引用，避免大数据绕经 LLM 上下文。"},
+            },
+            "required": ["code"],
+        },
+    }, _eval_js_handler)
 
     # ── pipeline_* tools ─────────────────────────────────────────────
 
@@ -688,7 +697,7 @@ def _build_registry_impl() -> None:
                 "pipeline_name": {"type": "string", "description": "Name of the pipeline preset to record into."},
                 "step_name": {"type": "string", "description": "Unique name for this step, e.g. 'step_1', 'step_2'."},
                 "description": {"type": "string", "description": "Human-readable description of what this step does."},
-                "op_type": {"type": "string", "description": "The browser operation type: goto, click, fill, scroll, snapshot, source, eval. Omit to create an outline placeholder step."},
+                "op_type": {"type": "string", "description": "The browser operation type: goto, click, fill, scroll, snapshot, source. Omit to create an outline placeholder step."},
                 "op_args": {"type": "object", "description": "The exact arguments passed to the browser operation, e.g. {\"url\": \"https://baidu.com\"}."},
                 "explanation": {"type": "string", "description": "Brief explanation of why this step is needed in the pipeline."},
             },
@@ -699,7 +708,7 @@ def _build_registry_impl() -> None:
     # ── eval_agent ───────────────────────────────────────────────────
 
     registry.register("eval_agent", {
-        "description": "启动子 Agent 处理复杂 DOM 操作或验证码识别。会额外消耗 LLM token，仅在 browser_eval 无法直接完成时使用。子 Agent 可执行多次 browser_eval + browser_snapshot 迭代试错。",
+        "description": "启动子 Agent 处理复杂 DOM 操作或验证码识别。会额外消耗 LLM token，仅在 eval_js 无法直接完成时使用。子 Agent 可执行多次 eval_js + browser_snapshot 迭代试错。",
         "parameters": {
             "type": "object",
             "properties": {

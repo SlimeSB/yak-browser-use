@@ -1,5 +1,5 @@
 // Built-in JS utility functions for eval agent
-// These are available for reference in browser_eval code — include the function body in your JS.
+// These are available for reference in eval_js code — include the function body in your JS.
 
 /**
  * Check if an element matching the CSS selector is visible.

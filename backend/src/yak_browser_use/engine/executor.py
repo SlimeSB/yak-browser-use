@@ -176,6 +176,11 @@ async def execute_browser_op(
                     result["result"] = snapshot
                 elif mode == "progressive":
                     snapshot = await bridge._progressive_snapshot(query=query)
+                    expand_key = params.get("expand_key", "")
+                    if expand_key and hasattr(bridge, "expand_branch"):
+                        expanded = await bridge.expand_branch(key=expand_key)
+                        if isinstance(expanded, dict) and "elements" in expanded:
+                            snapshot["_expanded"] = expanded
                     result["result"] = snapshot
                 else:
                     snapshot = await bridge.capture_snapshot()
@@ -207,26 +212,12 @@ async def execute_browser_op(
                 result["html"] = html
                 result["result"] = {"length": len(html)}
 
-            elif op_type == "eval":
-                code_str = params.get("code", params.get("js", ""))
-                eval_result = await bridge.evaluate(code_str)
-                result["result"] = eval_result
-
-            elif op_type == "expand_branch":
-                if hasattr(bridge, "expand_branch"):
-                    branch_result = await bridge.expand_branch(
-                        params.get("key", ""),
-                        limit=params.get("limit", 30),
-                        offset=params.get("offset", 0),
-                    )
-                    result["result"] = branch_result
-                else:
-                    result["result"] = {"error": "expand_branch not available on this bridge"}
-
-            elif op_type == "get_element_by_number":
+            elif op_type == "lookup_selector":
                 ref = params.get("ref", "")
                 if not ref:
-                    raise ValueError("get_element_by_number missing ref")
+                    raise ValueError("lookup_selector missing ref")
+                if hasattr(bridge, "ensure_highlights"):
+                    await bridge.ensure_highlights()
                 if hasattr(bridge, "get_element_by_index"):
                     el_info = bridge.get_element_by_index(ref)
                     result["result"] = el_info
@@ -642,10 +633,10 @@ async def execute_browser_step(
 
         op_record: dict = {"type": op_type, "ok": True, "duration_ms": 0}
 
-        if op_type in ("goto", "click", "fill", "snapshot", "scroll", "source", "eval",
-                        "hover", "unhover", "focus", "select", "clear", "keyboard",
+        if op_type in ("goto", "click", "fill", "snapshot", "scroll", "source",
+                        "lookup_selector", "hover", "unhover", "focus", "select", "clear", "keyboard",
                         "press_key", "type_text",
-                        "navigate", "wait", "tab", "copy", "paste", "expand_branch"):
+                        "navigate", "wait", "tab", "copy", "paste"):
             if op_type == "goto":
                 core_params = {"url": value}
                 op_record["url"] = value
@@ -659,15 +650,16 @@ async def execute_browser_step(
                 op_record["selector"] = op.get("selector", "")
                 op_record["text"] = text
             elif op_type == "snapshot":
-                core_params = {"mode": op.get("mode", "progressive")}
+                core_params = {"mode": op.get("mode", "progressive"),
+                                "expand_key": op.get("expand_key", "")}
             elif op_type == "scroll":
                 core_params = {"direction": op.get("direction", "down"),
                                 "amount": op.get("amount", 300)}
             elif op_type == "source":
                 core_params = {}
-            elif op_type == "eval":
-                core_params = {"code": op.get("code", op.get("js", value))}
-                op_record["code"] = core_params["code"][:200]
+            elif op_type == "lookup_selector":
+                core_params = {"ref": op.get("ref", value)}
+                op_record["ref"] = core_params["ref"]
             elif op_type == "hover":
                 core_params = {"selector": value or op.get("selector", "")}
             elif op_type == "unhover":
@@ -704,12 +696,6 @@ async def execute_browser_step(
                     core_params = {"mode": "time", "duration": int(float(value) * 1000)}
                 else:
                     core_params = {k: v for k, v in op.items() if k != "type"}
-            elif op_type == "expand_branch":
-                core_params = {
-                    "key": op.get("key", ""),
-                    "limit": op.get("limit", 30),
-                    "offset": op.get("offset", 0),
-                }
             else:
                 core_params = {k: v for k, v in op.items() if k != "type"}
 

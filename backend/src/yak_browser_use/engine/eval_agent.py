@@ -1,7 +1,7 @@
 """EvalAgent — subagent for complex DOM operations and captcha solving.
 
 Launched by the main LLM via the eval_agent tool. Runs its own
-conversation loop with a restricted tool set (browser_eval, browser_snapshot,
+conversation loop with a restricted tool set (eval_js, browser_snapshot,
 browser_click, browser_fill, browser_wait, browser_source, browser_scroll).
 """
 
@@ -53,14 +53,13 @@ class EvalAgent:
         from yak_browser_use.tools.registry import registry
 
         allowed = {
-            "browser_eval",
+            "eval_js",
             "browser_snapshot",
             "browser_click",
             "browser_fill",
             "browser_wait",
             "browser_source",
             "browser_scroll",
-            "browser_expand_branch",
             "captcha",
         }
         return registry.filter(allowed)

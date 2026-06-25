@@ -17,7 +17,6 @@ UNDO_MAP: dict[str, str | None] = {
     "wait": None,
     "snapshot": None,
     "get_html": None,
-    "eval": None,
     "wait_for_network": None,
 }
 

@@ -204,11 +204,6 @@ async def _execute_single_tool_call(
     while True:
         try:
             # ── Scratchpad caching (before dispatch) ─────────────────
-            if fn_name == "browser_get_element_by_number":
-                cached_result = _try_scratchpad_element_lookup(fn_args)
-                if cached_result is not None:
-                    return cached_result
-
             if fn_name == "browser_source" and fn_args.get("cached"):
                 cached_result = _try_scratchpad_source_read()
                 if cached_result is not None:
@@ -695,67 +690,6 @@ def _apply_heavy_data_filter(
                 result_payload["note"] = "无缓存，已从 CDP 获取"
             result_dict["result"] = result_payload
         return
-
-
-def _normalize_ref(ref: str) -> str:
-    """Normalize an element reference to @e_XXXXX format."""
-    ref = ref.strip()
-    if ref.startswith("@"):
-        if ref.lower().startswith("@e") and not ref.startswith("@e_") and ref[2:].isdigit():
-            return "@e_" + ref[2:]
-        return ref
-    if ref.startswith("e_"):
-        return f"@{ref}"
-    if ref.startswith("e") and ref[1:].isdigit():
-        return "@e_" + ref[1:]
-    return f"@e_{ref}"
-
-
-def _try_scratchpad_element_lookup(fn_args: dict) -> dict | None:
-    from yak_browser_use.engine.scratchpad import get as get_scratchpad
-    """Try to resolve browser_get_element_by_number from scratchpad cache.
-
-    Returns a result dict if found, None to fall through to CDP.
-    """
-    raw_ref = fn_args.get("ref", "")
-    if not raw_ref:
-        return None
-
-    sp = get_scratchpad()
-    normalized = _normalize_ref(raw_ref)
-
-    if not sp.element_map:
-        return None
-
-    selector = sp.element_map.get(normalized)
-    if selector is None:
-        return None
-
-    el_info = None
-    for el in sp.elements:
-        if el.get("ref") == normalized:
-            el_info = el
-            break
-
-    if el_info is None:
-        return {
-            "ok": True,
-            "result": {
-                "ref": normalized,
-                "selector": selector,
-            },
-        }
-
-    return {
-        "ok": True,
-        "result": {
-            "ref": normalized,
-            "tag": el_info.get("tag", ""),
-            "type": el_info.get("type", ""),
-            "text": el_info.get("text", ""),
-            "selector": selector,
-        },
-    }
 
 
 def _try_scratchpad_source_read() -> dict | None:

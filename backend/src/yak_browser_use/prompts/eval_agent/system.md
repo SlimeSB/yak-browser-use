@@ -7,14 +7,14 @@
 {snapshot}
 
 ## 可用 JS 函数库
-以下 JS 函数供你在 browser_eval 代码中参考使用（需要将函数体包含在你的 JS 中）：
+以下 JS 函数供你在 eval_js 代码中参考使用（需要将函数体包含在你的 JS 中）：
 ```js
 {js_lib}
 ```
 
 ## 工作流程
 1. 先用 browser_snapshot 观察页面结构
-2. 编写 JS 代码通过 browser_eval 执行
+2. 编写 JS 代码通过 eval_js 执行
 3. 根据 eval 结果判断是否完成任务
 4. 如果未完成，调整 JS 代码再次 eval
 5. 最多尝试 {max_attempts} 次

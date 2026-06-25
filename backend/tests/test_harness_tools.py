@@ -70,7 +70,8 @@ def test_get_all_tools_with_goal():
     assert "pipeline_remove_step" in names
     assert "pipeline_create" in names
     assert "record_step" in names
-    assert "browser_get_element_by_number" in names
+    assert "browser_lookup_selector" in names
+    assert "eval_js" in names
     assert "edit_pipeline" not in names
     assert "todo" in names
 
@@ -98,9 +99,7 @@ def test_get_browser_tools():
     assert "browser_snapshot" in names
     assert "browser_scroll" in names
     assert "browser_source" in names
-    assert "browser_eval" in names
-    assert "browser_expand_branch" in names
-    assert "browser_get_element_by_number" in names
+    assert "browser_lookup_selector" in names
 
 
 def test_todo_tool_definition():
