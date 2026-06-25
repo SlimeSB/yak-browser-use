@@ -27,7 +27,7 @@
 
 ## Impact
 
-- **代码**：`tools/registry.py` 减 2 op 加 1 handler；`engine/executor.py` 删 2 分支改 1 分支；`cdp/playwright_bridge.py` 不需要改（`expand_key` 逻辑在 executor 层处理）
+- **代码**：`tools/registry.py` 减 2 op 加 1 handler；`engine/executor.py` 删 2 分支改 1 分支；`engine/eval_agent.py` 更新 tool 名；`engine/_harness/tool_executor.py` 删 scratchpad 快捷路径；`cdp/playwright_bridge.py` 更新 LLM 提示文本；`engine/_lifecycle/compensation.py` 清理死条目
 - **API**：LLM 可见的 tool 从 `browser_eval` + `browser_expand_branch` + `browser_get_element_by_number` 变为 `eval_js` + `browser_lookup_selector`，snapshot 多一个可选参数
 - **Preset 兼容性**：**BREAKING** — 旧 pipeline YAML 中 `{type: eval, ...}` 和 `{type: expand_branch, ...}` 会报 `Unknown op type` 错误。当前无存量 pipeline 使用这两个 op，风险可接受
 - **Prompts**：system.md / tool_strategy.md / planner-expand.md / record_step.md 更新

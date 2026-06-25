@@ -19,7 +19,7 @@ browser_eval ──→ LLM 上下文，不进 shared_store ❌
 - 更新 prompts 中所有过时引用
 
 **非目标：**
-- 不改 `cdp/playwright_bridge.py`（`expand_key` 逻辑在 executor 层处理）
+- 不改 `cdp/playwright_bridge.py` 的 bridge 方法（`expand_branch` 保留给 snapshot 内部调用）
 - 不改 `eval_agent` 子 agent 机制（仅替换其 tool 名）
 - 不改 `ToolContext.eval()` 内部方法（仅测试用）
 - 不改其他 browser ops（评价过，都是纯副作用或已有 bypass）
@@ -27,9 +27,14 @@ browser_eval ──→ LLM 上下文，不进 shared_store ❌
 
 ## 关键决策
 
-### 1. eval_js 不暴露 js_file / output_file 等参数
+### 1. eval_js 暴露 code + source_key 两个参数
 
-`eval-op-to-tool.md` 旧设计方案列出了 8 个参数，但 `js_file`、`params`、`poll_seconds`、`output_file`、`silent`、`timeout` 这 6 个从未有实际使用场景。仅暴露必需的 `code` 参数，保持和原 `browser_eval(code)` 一致的使用习惯。结果通过 `source_key` 走 shared_store 实现数据互通。
+`eval-op-to-tool.md` 旧设计方案列出了 8 个参数，但 `js_file`、`params`、`poll_seconds`、`output_file`、`silent`、`timeout` 这 6 个从未有实际使用场景。暴露 `code`（必填）和 `source_key`（可选）两个参数：
+
+- `code` — 要执行的 JS 代码，和原 `browser_eval(code)` 一致
+- `source_key` — 可选，指定结果写入 shared_store 的 key。设置后结果可通过 `{key}` 被其他 tool 引用，实现数据互通
+
+`source_key` 的写入逻辑由 `tool_executor.py` 的 dispatch 层统一处理（L246-248），handler 无需感知。
 
 ### 2. expand_branch 合并进 snapshot 而非独立 tool
 
@@ -48,6 +53,8 @@ lookup_selector(ref)
 
 代价 ~200-500ms 重扫，但对一次点击操作来说可忽略（点击本身也要 ~100ms）。
 
+**注意：** `tool_executor.py:207` 有一个预分发优化，在 `fn_name == "browser_get_element_by_number"` 时直接从 scratchpad 缓存返回，绕过了 op handler。改名后这个检查必须删除，否则 `ensure_highlights()` 永远不会被调用。
+
 ## 风险 / 权衡
 
 | 风险 | 缓解 |
@@ -59,11 +66,16 @@ lookup_selector(ref)
 
 ## 迁移计划
 
-1. `tools/registry.py` — 注册 `eval_js` handler + schema，从 `_BROWSER_OPS` 移除 `eval` 和 `expand_branch`
+1. `tools/registry.py` — 注册 `eval_js` handler + schema（含 `source_key` 参数），从 `_BROWSER_OPS` 移除 `eval` 和 `expand_branch`，清理 `_BROWSER_SCHEMAS` 死条目，snapshot schema 加 `expand_key`
 2. `engine/executor.py` — `execute_browser_op()` 删 eval/expand_branch 分支，snapshot 加 expand_key
 3. `engine/executor.py` — `execute_browser_step()` 同步删除 + 改名 + 刷新逻辑
-4. `prompts/` — 更新所有引用
-5. 验证：`pytest` + manual `eval_js("document.title")` 确认结果可被 `{source_key}` 引用
+4. `engine/eval_agent.py` — `get_restricted_tools()` 中 `browser_eval` → `eval_js`，删除 `browser_expand_branch`，更新 docstring
+5. `engine/_harness/tool_executor.py` — 删除 `browser_get_element_by_number` 的 scratchpad 快捷路径及 `_try_scratchpad_element_lookup`/`_normalize_ref` 函数
+6. `cdp/playwright_bridge.py` — 更新 LLM 提示文本中的 `expand_branch(key=...)` → `snapshot(expand_key=...)`
+7. `engine/_lifecycle/compensation.py` — 删除 `UNDO_MAP` 中的 `"eval"` 条目
+8. `prompts/` — 更新所有引用
+9. `backend/tests/test_harness_tools.py` — 更新断言
+10. 验证：`pytest` + manual `eval_js("document.title")` 确认结果可被 `{source_key}` 引用
 
 回滚方案：恢复 `_BROWSER_OPS` + 两个执行器分支 + prompts，git revert 即可。
 
