@@ -12,7 +12,6 @@ from __future__ import annotations
 import pytest
 
 from yak_browser_use.engine.scratchpad import (
-    ScratchpadRecord,
     _scratchpads,
     clear,
     clear_all,
@@ -22,8 +21,6 @@ from yak_browser_use.engine.scratchpad import (
 )
 from yak_browser_use.engine._harness.tool_executor import (
     _apply_heavy_data_filter,
-    _try_scratchpad_element_lookup,
-    _try_scratchpad_source_read,
 )
 from yak_browser_use.engine.executor import run_check
 from yak_browser_use.compiler.schema import StepYaml, PipelineYaml
@@ -134,16 +131,6 @@ class TestSnapshotInteractiveLifecycle:
         assert "X" in result_text
         assert "1个可交互元素" in result_text
         assert "@e1" in result_text  # element refs now included in summary
-
-    def test_subsequent_element_lookup_hits_scratchpad(self):
-        elements = [{"ref": "@e_1", "tag": "a", "text": "Link", "selector": "a.link"}]
-        store_scratchpad({"elements": elements, "url": "https://x.com", "title": "X"})
-
-        result = _try_scratchpad_element_lookup({"ref": "@e1"})
-        assert result is not None
-        assert result["result"]["tag"] == "a"
-        assert result["result"]["selector"] == "a.link"
-
 
 class TestSnapshotFullLifecycle:
     def setup_method(self):
@@ -267,24 +254,6 @@ class TestBrowserSourceLifecycle:
         assert result_dict["result"]["cached"] is False
         assert "无缓存" in result_dict["result"]["note"]
 
-    def test_source_then_snapshot_preserves_element_map(self):
-        store_scratchpad({
-            "elements": [{"ref": "@e_1", "selector": "button#go"}],
-            "url": "https://x.com",
-            "title": "X",
-        })
-        store_raw_html("<html>big</html>")
-
-        sp = get_scratchpad()
-        assert sp.element_map == {"@e_1": "button#go"}
-        assert sp.raw_html == "<html>big</html>"
-        assert sp.url == "https://x.com"
-
-        result = _try_scratchpad_element_lookup({"ref": "@e1"})
-        assert result is not None
-        assert result["result"]["selector"] == "button#go"
-
-
 # ── run_check integration ──
 
 class TestRunCheckIntegration:
@@ -358,64 +327,6 @@ class TestRunCheckIntegration:
         result = await run_check({"url_contains": None}, bridge)
         assert result["ok"] is False
         assert "无效参数" in result["result"]
-
-
-# ── Element lookup dual-path ──
-
-class TestElementLookupDualPath:
-    def setup_method(self):
-        clear_all()
-
-    def test_scratchpad_path_receives_full_element_info(self):
-        elements = [
-            {"ref": "@e_3", "tag": "input", "type": "text", "text": "",
-             "selector": "input[name='q']"},
-        ]
-        store_scratchpad({"elements": elements, "url": "https://x.com", "title": "X"})
-
-        result = _try_scratchpad_element_lookup({"ref": "@e3"})
-        assert result["result"]["tag"] == "input"
-        assert result["result"]["type"] == "text"
-        assert result["result"]["selector"] == "input[name='q']"
-        assert result["result"]["ref"] == "@e_3"
-
-    def test_scratchpad_path_with_partial_elements_returns_selector_only(self):
-        store_scratchpad({
-            "elements": [],
-            "url": "https://x.com",
-            "title": "X",
-        })
-        get_scratchpad().element_map = {"@e_7": "div.content"}
-        get_scratchpad().elements = []
-
-        result = _try_scratchpad_element_lookup({"ref": "@e7"})
-        assert result is not None
-        assert result["result"]["ref"] == "@e_7"
-        assert result["result"]["selector"] == "div.content"
-        assert "tag" not in result["result"]
-
-    def test_miss_falls_through_none(self):
-        result = _try_scratchpad_element_lookup({"ref": "@e99"})
-        assert result is None
-
-    def test_different_session_isolation(self):
-        store_scratchpad({
-            "elements": [{"ref": "@e1", "selector": "button.a"}],
-            "url": "https://a.com",
-            "title": "A",
-        }, session_id="session-a")
-        store_scratchpad({
-            "elements": [{"ref": "@e1", "selector": "button.b"}],
-            "url": "https://b.com",
-            "title": "B",
-        }, session_id="session-b")
-
-        sp_a = get_scratchpad("session-a")
-        sp_b = get_scratchpad("session-b")
-        assert sp_a.element_map["@e1"] == "button.a"
-        assert sp_b.element_map["@e1"] == "button.b"
-        assert sp_a.url == "https://a.com"
-        assert sp_b.url == "https://b.com"
 
 
 # ── Compiler check field round-trip ──
