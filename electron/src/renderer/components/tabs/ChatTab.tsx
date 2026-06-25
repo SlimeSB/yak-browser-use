@@ -396,7 +396,7 @@ export default function ChatTab({
             })}
             {sending && (
               <div className="chat-msg assistant">
-                <span className="chat-typing">...</span>
+                <span className="chat-typing" />
               </div>
             )}
           </div>
