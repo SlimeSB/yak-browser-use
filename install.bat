@@ -45,7 +45,7 @@ echo.
 echo ============================================
 echo   Setup complete!
 echo.
-echo  Run CLI: cd backend ^&^& uv run python __main__.py --help
+echo  Run CLI: cd backend ^&^& uv run python -m yak_browser_use --help
 echo  Run Electron: cd electron ^&^& npm run electron:dev
 echo  Or double-click run.bat
 echo ============================================

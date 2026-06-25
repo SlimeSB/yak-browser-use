@@ -74,7 +74,7 @@ export class PythonBackend {
 
     this.process = spawn(
       'uv',
-      ['run', 'python', '__main__.py', 'serve', '--port', '0'],
+      ['run', 'python', '-m', 'yak_browser_use', 'serve', '--port', '0'],
       {
         cwd: serverDir,
         stdio: ['pipe', 'pipe', 'pipe'],
