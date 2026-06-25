@@ -1010,7 +1010,16 @@ def register_all_routes(app: FastAPI) -> None:
 
     @app.get("/api/session/{pipeline_name}/list")
     async def session_list(pipeline_name: str) -> JSONResponse:
-        """List all sessions for a pipeline."""
+        """List all sessions for a pipeline.
+
+        Persists the current in-memory session first so the index reflects
+        the latest message_count and updated_at before reading from disk.
+        """
+        service = await _get_service()
+        mem = service.get_session(pipeline_name)
+        if mem is not None:
+            service.sessions.persist_session(mem, context="list")
+
         from yak_browser_use.workspace.session_store import SessionStore
         store = SessionStore(pipeline_name)
         store.ensure_session_dir()
@@ -1028,7 +1037,22 @@ def register_all_routes(app: FastAPI) -> None:
 
     @app.get("/api/session/{pipeline_name}/{session_id}")
     async def session_get(pipeline_name: str, session_id: str) -> JSONResponse:
-        """Get full session data (including messages) by ID."""
+        """Get full session data (including messages) by ID.
+
+        Checks in-memory session first (most up-to-date), falls back to disk.
+        """
+        service = await _get_service()
+        mem = service.get_session(pipeline_name)
+        if mem is not None and mem.session_id == session_id:
+            return JSONResponse({"session": {
+                "session_id": mem.session_id,
+                "pipeline_name": mem.pipeline_name,
+                "status": mem.status,
+                "created_at": mem.created_at,
+                "messages": mem.messages,
+                "budget_snapshot": mem.budget_snapshot,
+            }})
+
         from yak_browser_use.workspace.session_store import SessionStore
         store = SessionStore(pipeline_name)
         data = store.load_session(session_id)
@@ -1051,9 +1075,9 @@ def register_all_routes(app: FastAPI) -> None:
     async def delete_preset(name: str) -> JSONResponse:
         """Delete a pipeline workspace."""
         import shutil
+        from yak_browser_use.workspace.manager import WORKSPACES_ROOT
         safe_name = Path(name).name
-        base = project_root()
-        workspace_dir = base / "userdata" / "workspaces" / safe_name
+        workspace_dir = WORKSPACES_ROOT / safe_name
         if workspace_dir.exists() and workspace_dir.is_dir():
             shutil.rmtree(str(workspace_dir))
             return JSONResponse({"ok": True})
@@ -1066,8 +1090,8 @@ def register_all_routes(app: FastAPI) -> None:
     @app.get("/api/pipelines")
     async def api_list_pipelines() -> JSONResponse:
         """List all pipelines from workspaces/."""
-        base = project_root()
-        workspaces_dir = base / "userdata" / "workspaces"
+        from yak_browser_use.workspace.manager import WORKSPACES_ROOT
+        workspaces_dir = WORKSPACES_ROOT
         pipelines: list[dict] = []
         if workspaces_dir.exists():
             for d in sorted(workspaces_dir.iterdir()):
@@ -1103,9 +1127,9 @@ def register_all_routes(app: FastAPI) -> None:
     @app.get("/api/pipelines/{name}")
     async def api_get_pipeline(name: str) -> JSONResponse:
         """Get a specific pipeline's content from workspaces/."""
+        from yak_browser_use.workspace.manager import WORKSPACES_ROOT
         safe_name = Path(name).name
-        base = project_root()
-        pipe_path = base / "userdata" / "workspaces" / safe_name / "pipeline.yaml"
+        pipe_path = WORKSPACES_ROOT / safe_name / "pipeline.yaml"
         if not pipe_path.exists():
             raise APIError("pipeline not found", status_code=404)
         content = pipe_path.read_text(encoding="utf-8")
@@ -1125,13 +1149,41 @@ def register_all_routes(app: FastAPI) -> None:
             pass
         return JSONResponse({"name": name, "content": content, "meta": meta})
 
+    @app.put("/api/pipelines/{name}")
+    async def api_save_pipeline(name: str, request: dict) -> JSONResponse:
+        """Save/update a pipeline's YAML content.
+
+        Request body: ``{"content": "..."}``
+        Validates that the content is parseable YAML before saving.
+        """
+        content = request.get("content", "")
+        if not content or not content.strip():
+            raise APIError("'content' is required and must not be empty")
+
+        import yaml
+        try:
+            parsed = yaml.safe_load(content)
+            if not isinstance(parsed, dict):
+                raise APIError("Pipeline YAML must be a mapping (dict) at top level")
+        except yaml.YAMLError as e:
+            raise APIError(f"Invalid YAML: {e}")
+
+        from yak_browser_use.workspace.manager import WORKSPACES_ROOT
+        safe_name = Path(name).name
+        workspace_dir = WORKSPACES_ROOT / safe_name
+        workspace_dir.mkdir(parents=True, exist_ok=True)
+        pipe_path = workspace_dir / "pipeline.yaml"
+        pipe_path.write_text(content, encoding="utf-8")
+        logger.info("Pipeline saved: %s", pipe_path)
+        return JSONResponse({"ok": True, "name": name})
+
     @app.delete("/api/pipelines/{name}")
     async def api_delete_pipeline(name: str) -> JSONResponse:
         """Delete a pipeline workspace."""
         import shutil
+        from yak_browser_use.workspace.manager import WORKSPACES_ROOT
         safe_name = Path(name).name
-        base = project_root()
-        workspace_dir = base / "userdata" / "workspaces" / safe_name
+        workspace_dir = WORKSPACES_ROOT / safe_name
         if workspace_dir.exists() and workspace_dir.is_dir():
             shutil.rmtree(str(workspace_dir))
             return JSONResponse({"ok": True, "name": name})

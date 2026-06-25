@@ -28,6 +28,7 @@ interface ChatTabProps {
   onConfirmEdit?: (editId: string) => Promise<string | null>;
   onRevertEdit?: (editId: string) => Promise<string | null>;
   onDeletePipeline?: (name: string) => void;
+  onSavePipeline?: () => Promise<void>;
   reversed?: boolean;
   theme?: string;
   sessions?: SessionMeta[];
@@ -43,7 +44,7 @@ export default function ChatTab({
   pipelines, activePreset, onPresetChange,
   pipelineEditor, onPipelineEditorChange, onRefreshPipeline,
   pendingEdit, onConfirmEdit, onRevertEdit,
-  onDeletePipeline,
+  onDeletePipeline, onSavePipeline,
   reversed, theme,
   sessions, currentSessionId, loadingSession, onNewSession, onSelectSession, onArchiveSession,
 }: ChatTabProps) {
@@ -180,6 +181,17 @@ export default function ChatTab({
 
   const editorPanel = (
     <div className="chat-pipeline-editor">
+      <div className="chat-editor-toolbar">
+        {onSavePipeline && (
+          <button
+            className="btn btn-small btn-primary"
+            onClick={onSavePipeline}
+            title={t('chat.savePipeline', 'Save pipeline')}
+          >
+            {t('chat.save', 'Save')}
+          </button>
+        )}
+      </div>
       {pendingEdit && (
         <>
           <div className="chat-diff-bar">

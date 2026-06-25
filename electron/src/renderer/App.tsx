@@ -614,6 +614,21 @@ export default function App() {
     }
   }, [activePreset, handleRefreshPipelines]);
 
+  const handleSavePipeline = useCallback(async () => {
+    if (!activePreset || !pipelineEditor.trim()) return;
+    try {
+      const r = await api.savePipeline(activePreset, pipelineEditor);
+      if (r.ok) {
+        setPipelineCache(prev => ({ ...prev, [activePreset]: pipelineEditor }));
+        handleRefreshPipelines();
+      } else {
+        window.alert(r.error || 'Save failed');
+      }
+    } catch (e) {
+      window.alert(String(e));
+    }
+  }, [activePreset, pipelineEditor, handleRefreshPipelines]);
+
   const preset = pipelines.find(p => p.name === activePreset);
   const stages = preset?.stages ?? [];
 
@@ -729,6 +744,7 @@ export default function App() {
           onConfirmEdit={handleChatConfirm}
           onRevertEdit={handleChatRevert}
           onDeletePipeline={handleDeletePipeline}
+          onSavePipeline={handleSavePipeline}
           reversed={chatLayoutReversed}
           theme={theme}
           sessions={sessions}

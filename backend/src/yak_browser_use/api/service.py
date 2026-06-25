@@ -133,6 +133,7 @@ class Service:
             })
 
             session.messages.append({"role": "user", "content": message})
+            self.sessions.persist_session(session, context="user_msg")
 
             system_prompt = build_system_prompt()
 

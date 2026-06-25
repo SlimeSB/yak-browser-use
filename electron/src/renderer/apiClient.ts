@@ -42,6 +42,14 @@ export async function deletePipeline(name: string): Promise<{ ok: boolean; name:
   return apiFetch(`/api/pipelines/${encodeURIComponent(name)}`, { method: 'DELETE' });
 }
 
+export async function savePipeline(name: string, content: string): Promise<{ ok: boolean; name: string; error?: string }> {
+  return apiFetch(`/api/pipelines/${encodeURIComponent(name)}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ content }),
+  });
+}
+
 export async function listIsolatedProfiles(): Promise<{ profiles: string[] }> {
   const result = await safeFetch('/api/chrome/isolated-profiles');
   if (!result.ok) return { profiles: ['Default Temp'] };
