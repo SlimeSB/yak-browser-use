@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  release:
+  release-pypi:
     runs-on: ubuntu-latest
 
     steps:
@@ -47,3 +47,30 @@ jobs:
         env:
           UV_PUBLISH_TOKEN: ${{ secrets.PYPI_TOKEN }}
         run: uv publish
+
+  release-electron:
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: electron/package-lock.json
+
+      - name: Build Electron app
+        working-directory: electron
+        run: |
+          npm ci
+          npm run electron:build
+
+      - name: Upload to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: electron/release/*.exe
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
