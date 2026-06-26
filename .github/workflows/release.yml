@@ -74,6 +74,9 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
 
       - name: Install Node.js
         uses: actions/setup-node@v4
@@ -105,13 +108,56 @@ jobs:
           npm ci
           npm run electron:build
 
+      - name: Generate changelog
+        run: |
+          prev=$(git tag --sort=-version:refname | grep -v 'dev' | head -n 2 | tail -n 1 || true)
+          out="changelog.md"
+          if [ -z "$prev" ]; then
+            echo "Initial release" > "$out"
+            exit 0
+          fi
+          features=""; fixes=""; refactors=""; ci=""; builds=""; docs=""; tests=""; chores=""; other=""
+          while IFS= read -r line; do
+            case "$line" in
+              feat:*) features+="- ${line#feat: }"$'\n' ;;
+              feat\(*\):*) features+="- ${line#*: }"$'\n' ;;
+              fix:*) fixes+="- ${line#fix: }"$'\n' ;;
+              fix\(*\):*) fixes+="- ${line#*: }"$'\n' ;;
+              refactor:*) refactors+="- ${line#refactor: }"$'\n' ;;
+              refactor\(*\):*) refactors+="- ${line#*: }"$'\n' ;;
+              ci:*) ci+="- ${line#ci: }"$'\n' ;;
+              ci\(*\):*) ci+="- ${line#*: }"$'\n' ;;
+              build:*) builds+="- ${line#build: }"$'\n' ;;
+              build\(*\):*) builds+="- ${line#*: }"$'\n' ;;
+              docs:*) docs+="- ${line#docs: }"$'\n' ;;
+              docs\(*\):*) docs+="- ${line#*: }"$'\n' ;;
+              test:*) tests+="- ${line#test: }"$'\n' ;;
+              test\(*\):*) tests+="- ${line#*: }"$'\n' ;;
+              chore:*) chores+="- ${line#chore: }"$'\n' ;;
+              chore\(*\):*) chores+="- ${line#*: }"$'\n' ;;
+              *) other+="- $line"$'\n' ;;
+            esac
+          done < <(git log "$prev"..HEAD --pretty=format:'%s' --no-merges)
+          > "$out"
+          [ -n "$features" ] && { echo "### 🚀 Features"; echo "$features"; } >> "$out"
+          [ -n "$fixes" ] && { echo "### 🐛 Bug Fixes"; echo "$fixes"; } >> "$out"
+          [ -n "$refactors" ] && { echo "### 🔧 Refactors"; echo "$refactors"; } >> "$out"
+          [ -n "$ci" ] && { echo "### ⚙️ CI"; echo "$ci"; } >> "$out"
+          [ -n "$builds" ] && { echo "### 🏗️ Build"; echo "$builds"; } >> "$out"
+          [ -n "$docs" ] && { echo "### 📖 Documentation"; echo "$docs"; } >> "$out"
+          [ -n "$tests" ] && { echo "### 🧪 Tests"; echo "$tests"; } >> "$out"
+          [ -n "$chores" ] && { echo "### 🧹 Chores"; echo "$chores"; } >> "$out"
+          [ -n "$other" ] && { echo "### 🔹 Other"; echo "$other"; } >> "$out"
+        shell: bash
+        working-directory: electron/release
+
       - name: Upload to GitHub Release (stable)
         if: ${{ !contains(github.ref_name, 'dev') }}
         uses: softprops/action-gh-release@v3
         with:
           name: ${{ steps.clean-version.outputs.clean }}
+          body_path: electron/release/changelog.md
           files: electron/release/*.exe
-          generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
