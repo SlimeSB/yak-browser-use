@@ -449,6 +449,43 @@ class TestPipelineStoreCrud:
         store.remove_step(pipeline, "step_1")
         assert "step_1" not in pipeline.steps[0].depends_on
 
+    # ── deep-path updates ──
+
+    def test_update_step_deep_path_browser_ops(self):
+        pipeline = PipelineStore.from_yaml(SAMPLE_YAML_TEXT)
+        store = PipelineStore()
+        store.update_step(pipeline, "step_2", {"browser_ops[0].value": "patched"})
+        assert pipeline.steps[1].browser_ops[0]["value"] == "patched"
+        assert pipeline.steps[1].browser_ops[0]["type"] == "fill"
+
+    def test_update_step_deep_path_with_hyphen(self):
+        pipeline = PipelineStore.from_yaml(SAMPLE_YAML_TEXT)
+        store = PipelineStore()
+        store.update_step(pipeline, "step_1", {"browser_ops[0].value": "https://patched.com"})
+        assert pipeline.steps[0].browser_ops[0]["value"] == "https://patched.com"
+
+    def test_update_step_deep_path_index_out_of_range(self):
+        pipeline = PipelineStore.from_yaml(SAMPLE_YAML_TEXT)
+        store = PipelineStore()
+        with pytest.raises(ValueError, match="out of range"):
+            store.update_step(pipeline, "step_1", {"browser_ops[99].value": "x"})
+
+    def test_update_step_deep_path_not_a_list(self):
+        pipeline = PipelineStore.from_yaml(SAMPLE_YAML_TEXT)
+        store = PipelineStore()
+        with pytest.raises(ValueError, match="not a list"):
+            store.update_step(pipeline, "step_1", {"description[0].x": "y"})
+
+    def test_update_step_deep_path_mixed_with_normal(self):
+        pipeline = PipelineStore.from_yaml(SAMPLE_YAML_TEXT)
+        store = PipelineStore()
+        store.update_step(pipeline, "step_2", {
+            "browser_ops[0].value": "deep_val",
+            "description": "new description",
+        })
+        assert pipeline.steps[1].browser_ops[0]["value"] == "deep_val"
+        assert pipeline.steps[1].description == "new description"
+
 
 # ═══════════════════════════════════════════════════════════════════
 # 8. PipelineStore.save round-trip via file

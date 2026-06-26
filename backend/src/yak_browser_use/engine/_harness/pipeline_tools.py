@@ -29,9 +29,7 @@ _WORKSPACES_DIR = WORKSPACES_ROOT
 def _get_store() -> PipelineStore:
     return PipelineStore(workspaces_root=_WORKSPACES_DIR)
 
-_VALID_UPDATE_KEYS = frozenset({
-    "browser_ops", "tool_name", "goal_description", "description", "depends_on", "params",
-})
+_VALID_UPDATE_KEYS = None  # None = no restriction (deep-path keys allowed)
 
 
 def _resolve_pipeline_path(pipeline_name: str) -> Path:
@@ -63,12 +61,34 @@ async def _write_via_edit_pipeline(
     return result
 
 
-async def pipeline_load(pipeline_name: str, **kwargs) -> dict:
-    if not pipeline_name:
-        return {"ok": False, "error": "pipeline_name is required"}
+from yak_browser_use.compiler.step_type import infer_step_type as _step_type
+
+
+async def pipeline_view(name: str | None = None, **kwargs) -> dict:
+    """View pipeline(s). Without name: list all presets. With name: load full details."""
+    if name is None:
+        if not _WORKSPACES_DIR.exists():
+            return {"ok": True, "presets": []}
+        presets = []
+        for d in sorted(_WORKSPACES_DIR.iterdir()):
+            if not d.is_dir() or d.name.startswith("."):
+                continue
+            if not (d / "pipeline.yaml").exists():
+                continue
+            try:
+                meta = _get_store().load_meta(d.name)
+            except Exception:
+                logger.warning("pipeline_view: failed to parse %s", d / "pipeline.yaml", exc_info=True)
+                meta = PipelineMeta(name=d.name, description="(parse error)", step_count=0)
+            presets.append({
+                "name": meta.name,
+                "description": meta.description,
+                "step_count": meta.step_count,
+            })
+        return {"ok": True, "presets": presets}
 
     try:
-        validated = _get_store().load(pipeline_name)
+        validated = _get_store().load(name)
     except FileNotFoundError as e:
         return {"ok": False, "error": str(e)}
     except Exception as e:
@@ -84,8 +104,10 @@ async def pipeline_load(pipeline_name: str, **kwargs) -> dict:
         }
         if s.tool_name:
             step_info["tool_name"] = s.tool_name
+        if s.goal_description:
+            step_info["goal_description"] = s.goal_description
         if s.browser_ops is not None:
-            step_info["browser_op_count"] = len(s.browser_ops)
+            step_info["browser_ops"] = PipelineStore.ops_to_yaml(s.browser_ops)
         steps.append(step_info)
 
     return {
@@ -98,33 +120,6 @@ async def pipeline_load(pipeline_name: str, **kwargs) -> dict:
     }
 
 
-from yak_browser_use.compiler.step_type import infer_step_type as _step_type
-
-
-async def pipeline_list(**kwargs) -> dict:
-    if not _WORKSPACES_DIR.exists():
-        return {"ok": True, "presets": []}
-
-    presets = []
-    for d in sorted(_WORKSPACES_DIR.iterdir()):
-        if not d.is_dir() or d.name.startswith("."):
-            continue
-        if not (d / "pipeline.yaml").exists():
-            continue
-        try:
-            meta = _get_store().load_meta(d.name)
-        except Exception:
-            logger.warning("pipeline_list: failed to parse %s", d / "pipeline.yaml", exc_info=True)
-            meta = PipelineMeta(name=d.name, description="(parse error)", step_count=0)
-        presets.append({
-            "name": meta.name,
-            "description": meta.description,
-            "step_count": meta.step_count,
-        })
-
-    return {"ok": True, "presets": presets}
-
-
 async def pipeline_update_step(
     pipeline_name: str,
     step_name: str,
@@ -134,14 +129,6 @@ async def pipeline_update_step(
 ) -> dict:
     if not updates:
         return {"ok": False, "error": "updates must not be empty"}
-
-    unknown_keys = set(updates) - _VALID_UPDATE_KEYS
-    if unknown_keys:
-        return {
-            "ok": False,
-            "error": f"Unknown update keys: {', '.join(sorted(unknown_keys))}. "
-                     f"Allowed keys: {', '.join(sorted(_VALID_UPDATE_KEYS))}",
-        }
 
     try:
         validated = _load_pipeline_yaml(pipeline_name)
@@ -170,6 +157,8 @@ async def pipeline_add_step(
     after: str | None = None,
     heading: bool = False,
     explanation: str = "",
+    op_type: str | None = None,
+    op_args: dict | None = None,
     **kwargs,
 ) -> dict:
     try:
@@ -181,7 +170,20 @@ async def pipeline_add_step(
         "name": step_name,
         "description": description,
     }
-    if not heading:
+    if op_type is not None:
+        if op_type == "goal_run":
+            if op_args:
+                step_dict["goal_description"] = op_args.get("description", description)
+            else:
+                step_dict["goal_description"] = description
+        else:
+            browser_op: dict
+            if op_args and "value" in op_args and len(op_args) == 1:
+                browser_op = {op_type: op_args["value"]}
+            else:
+                browser_op = {op_type: op_args or {}}
+            step_dict["browser_ops"] = [browser_op]
+    elif not heading:
         if browser_ops is not None:
             step_dict["browser_ops"] = browser_ops
         if tool_name is not None:
@@ -325,10 +327,9 @@ async def pipeline_compile(
             tr = tool_results.get(tc_id, {}) if tc_id else {}
             result_text = str(tr.get("content", ""))[:200]
 
-            if tool_name in ("edit_pipeline", "todo", "pipeline_compile", "pipeline_load",
-                             "pipeline_list", "pipeline_create", "pipeline_update_step",
-                             "pipeline_add_step", "pipeline_remove_step", "pipeline_finish",
-                             "record_step"):
+            if tool_name in ("edit_pipeline", "todo", "pipeline_compile", "pipeline_view",
+                             "pipeline_create", "pipeline_update_step",
+                             "pipeline_add_step", "pipeline_remove_step", "pipeline_finish"):
                 continue
 
             if tool_name.startswith("browser_"):

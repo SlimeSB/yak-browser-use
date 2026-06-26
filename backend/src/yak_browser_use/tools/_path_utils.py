@@ -8,10 +8,10 @@ from yak_browser_use.workspace.manager import WORKSPACES_ROOT
 def validate_path(path: str, pipeline: str | None = None) -> Path:
     """Validate and resolve a file path, rejecting traversal and absolute paths.
 
-    When *path* starts with ``downloads/`` and *pipeline* is provided, the
-    path is resolved relative to ``WORKSPACES_ROOT / pipeline / downloads/``.
+    When *pipeline* is provided, the path is resolved relative to
+    ``WORKSPACES_ROOT / pipeline / path``.
 
-    Returns the resolved Path relative to the current working directory.
+    Returns the resolved Path.
     """
     if not path or not path.strip():
         raise ValueError(f"路径不能为空")
@@ -23,7 +23,7 @@ def validate_path(path: str, pipeline: str | None = None) -> Path:
     if ".." in parts:
         raise ValueError(f"路径穿越被拒绝: {path}")
 
-    if path.startswith("downloads/") and pipeline:
+    if pipeline:
         return (WORKSPACES_ROOT / pipeline / path).resolve()
 
     return p.resolve()

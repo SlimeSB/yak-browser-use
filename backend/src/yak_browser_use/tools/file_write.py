@@ -14,6 +14,7 @@ async def file_write(
     path: str,
     content: str,
     encoding: str = "utf-8",
+    pipeline: str | None = None,
 ) -> dict[str, Any]:
     """Write text content to a file.
 
@@ -21,6 +22,7 @@ async def file_write(
         path: File path to write.
         content: Text content to write.
         encoding: File encoding (default: utf-8).
+        pipeline: Pipeline name for workspace path resolution.
 
     Returns:
         {"ok": True, "result": "<message>"} or {"ok": False, "error": "<message>"}
@@ -29,7 +31,7 @@ async def file_write(
         return {"ok": False, "error": f"内容过大（{len(content)} 字符），最大允许 {_MAX_CONTENT_SIZE} 字符"}
 
     try:
-        p = validate_path(path)
+        p = validate_path(path, pipeline=pipeline)
         p.parent.mkdir(parents=True, exist_ok=True)
         p.write_text(content, encoding=encoding)
         return {"ok": True, "result": f"已写入 {len(content)} 字符到 {path}"}

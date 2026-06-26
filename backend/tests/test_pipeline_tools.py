@@ -7,8 +7,7 @@ import pytest
 import yaml
 
 from yak_browser_use.engine._harness.pipeline_tools import (
-    pipeline_load,
-    pipeline_list,
+    pipeline_view,
     pipeline_update_step,
     pipeline_add_step,
     pipeline_remove_step,
@@ -81,64 +80,19 @@ def _mock_write_via_edit():
     )
 
 
-# ── pipeline_load ──────────────────────────────────────────────
+# ── pipeline_view (no name → list) ─────────────────────────────
 
 @pytest.mark.asyncio
-async def test_pipeline_load_exists(sample_pipeline_file):
-    data = await pipeline_load(pipeline_name="test_pipeline")
-    assert data["ok"] is True
-    assert data["name"] == "test_pipeline"
-    assert data["description"] == "A test pipeline"
-    assert data["step_count"] == 4
-    assert data["required_params"] == ["keyword"]
-    assert len(data["steps"]) == 4
-    assert data["steps"][0]["name"] == "step_1"
-    assert data["steps"][0]["type"] == "browser"
-    assert data["steps"][0]["browser_op_count"] == 1
-    assert data["steps"][2]["type"] == "tool"
-    assert data["steps"][2]["tool_name"] == "my_tool"
-    assert data["steps"][3]["type"] == "goal"
-
-
-@pytest.mark.asyncio
-async def test_pipeline_load_not_found(temp_presets_dir):
-    result = await pipeline_load(pipeline_name="nonexistent")
-    data = result
-    assert data["ok"] is False
-    assert "not found" in data["error"]
-
-
-@pytest.mark.asyncio
-async def test_pipeline_load_empty_name():
-    result = await pipeline_load(pipeline_name="")
-    data = result
-    assert data["ok"] is False
-    assert "required" in data["error"]
-
-
-@pytest.mark.asyncio
-async def test_pipeline_load_corrupted(temp_presets_dir):
-    path = temp_presets_dir / "corrupt" / "pipeline.yaml"
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(": invalid yaml: :", encoding="utf-8")
-    result = await pipeline_load(pipeline_name="corrupt")
-    data = result
-    assert data["ok"] is False
-
-
-# ── pipeline_list ──────────────────────────────────────────────
-
-@pytest.mark.asyncio
-async def test_pipeline_list_empty(temp_presets_dir):
-    result = await pipeline_list()
+async def test_pipeline_view_list_empty(temp_presets_dir):
+    result = await pipeline_view()
     data = result
     assert data["ok"] is True
     assert data["presets"] == []
 
 
 @pytest.mark.asyncio
-async def test_pipeline_list_with_files(sample_pipeline_file):
-    result = await pipeline_list()
+async def test_pipeline_view_list_with_files(sample_pipeline_file):
+    result = await pipeline_view()
     data = result
     assert data["ok"] is True
     assert len(data["presets"]) == 1
@@ -148,17 +102,67 @@ async def test_pipeline_list_with_files(sample_pipeline_file):
 
 
 @pytest.mark.asyncio
-async def test_pipeline_list_partial_corrupt(temp_presets_dir, sample_pipeline_file):
+async def test_pipeline_view_list_partial_corrupt(temp_presets_dir, sample_pipeline_file):
     corrupt = temp_presets_dir / "corrupt" / "pipeline.yaml"
     corrupt.parent.mkdir(parents=True, exist_ok=True)
     corrupt.write_text(": bad yaml", encoding="utf-8")
-    result = await pipeline_list()
+    result = await pipeline_view()
     data = result
     assert data["ok"] is True
     assert len(data["presets"]) == 2
     corrupt_entry = next(p for p in data["presets"] if p["name"] == "corrupt")
     assert corrupt_entry["description"] == "(parse error)"
     assert corrupt_entry["step_count"] == 0
+
+
+# ── pipeline_view (with name → load details) ─────────────────────
+
+@pytest.mark.asyncio
+async def test_pipeline_view_load_exists(sample_pipeline_file):
+    data = await pipeline_view(name="test_pipeline")
+    assert data["ok"] is True
+    assert data["name"] == "test_pipeline"
+    assert data["description"] == "A test pipeline"
+    assert data["step_count"] == 4
+    assert data["required_params"] == ["keyword"]
+    assert len(data["steps"]) == 4
+    assert data["steps"][0]["name"] == "step_1"
+    assert data["steps"][0]["type"] == "browser"
+    assert "browser_ops" in data["steps"][0]
+    assert data["steps"][2]["type"] == "tool"
+    assert data["steps"][2]["tool_name"] == "my_tool"
+    assert data["steps"][3]["type"] == "goal"
+    assert data["steps"][3]["goal_description"] == "Analyze the results"
+    assert "browser_ops" not in data["steps"][3]
+    assert "tool_name" not in data["steps"][3]
+
+
+@pytest.mark.asyncio
+async def test_pipeline_view_returns_browser_ops_in_yaml_format(sample_pipeline_file):
+    data = await pipeline_view(name="test_pipeline")
+    assert data["ok"] is True
+    step1_ops = data["steps"][0]["browser_ops"]
+    assert step1_ops == [{"goto": "https://example.com"}]
+    step2_ops = data["steps"][1]["browser_ops"]
+    assert step2_ops == [{"fill": {"selector": "#q", "value": "test"}}]
+
+
+@pytest.mark.asyncio
+async def test_pipeline_view_load_not_found(temp_presets_dir):
+    result = await pipeline_view(name="nonexistent")
+    data = result
+    assert data["ok"] is False
+    assert "not found" in data["error"]
+
+
+@pytest.mark.asyncio
+async def test_pipeline_view_load_corrupted(temp_presets_dir):
+    path = temp_presets_dir / "corrupt" / "pipeline.yaml"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(": invalid yaml: :", encoding="utf-8")
+    result = await pipeline_view(name="corrupt")
+    data = result
+    assert data["ok"] is False
 
 
 # ── pipeline_update_step ───────────────────────────────────────
@@ -272,6 +276,25 @@ async def test_pipeline_update_step_not_found(sample_pipeline_file):
 
 
 @pytest.mark.asyncio
+async def test_pipeline_update_step_deep_path_via_handler(sample_pipeline_file):
+    with _mock_write_via_edit():
+        result = await pipeline_update_step(
+            pipeline_name="test_pipeline",
+            step_name="step_2",
+            updates={
+                "browser_ops[0].value": "deep_value",
+                "description": "also_updated",
+            },
+            explanation="deep path test",
+        )
+    assert result["ok"] is True
+
+    validated = _load_pipeline_yaml("test_pipeline")
+    assert validated.steps[1].browser_ops[0]["value"] == "deep_value"
+    assert validated.steps[1].description == "also_updated"
+
+
+@pytest.mark.asyncio
 async def test_pipeline_update_step_pipeline_not_found(temp_presets_dir):
     result = await pipeline_update_step(
         pipeline_name="nonexistent",
@@ -293,20 +316,35 @@ async def test_pipeline_update_step_type_conflict(sample_pipeline_file):
     )
     data = result
     assert data["ok"] is False
-    assert "mutually exclusive" in data["error"].lower() or "validation" in data["error"].lower()
+    assert "validation" in data["error"].lower() or "mutually" in data["error"].lower()
 
 
 @pytest.mark.asyncio
-async def test_pipeline_update_step_unknown_keys(sample_pipeline_file):
+async def test_pipeline_update_step_deep_path(sample_pipeline_file):
+    with _mock_write_via_edit():
+        result = await pipeline_update_step(
+            pipeline_name="test_pipeline",
+            step_name="step_1",
+            updates={"browser_ops[0].value": "https://new-url.com"},
+            explanation="test",
+        )
+    data = result
+    assert data["ok"] is True
+
+    validated = _load_pipeline_yaml("test_pipeline")
+    assert validated.steps[0].browser_ops[0]["value"] == "https://new-url.com"
+
+
+@pytest.mark.asyncio
+async def test_pipeline_update_step_deep_path_out_of_range(sample_pipeline_file):
     result = await pipeline_update_step(
         pipeline_name="test_pipeline",
         step_name="step_1",
-        updates={"description": "x", "unknown_field": "bad"},
+        updates={"browser_ops[9].value": "x"},
     )
     data = result
     assert data["ok"] is False
-    assert "Unknown update keys" in data["error"]
-    assert "unknown_field" in data["error"]
+    assert "out of range" in data["error"].lower()
 
 
 # ── pipeline_add_step ──────────────────────────────────────────
@@ -416,6 +454,43 @@ async def test_pipeline_add_step_duplicate_name(sample_pipeline_file):
     data = result
     assert data["ok"] is False
     assert "already exists" in data["error"]
+
+
+@pytest.mark.asyncio
+async def test_pipeline_add_step_with_op_type(sample_pipeline_file):
+    with _mock_write_via_edit():
+        result = await pipeline_add_step(
+            pipeline_name="test_pipeline",
+            step_name="step_5",
+            description="Op type step",
+            op_type="goto",
+            op_args={"url": "https://example.com"},
+            explanation="test",
+        )
+    data = result
+    assert data["ok"] is True
+
+    validated = _load_pipeline_yaml("test_pipeline")
+    assert validated.steps[-1].browser_ops == [{"type": "goto", "url": "https://example.com"}]
+
+
+@pytest.mark.asyncio
+async def test_pipeline_add_step_with_op_type_goal_run(sample_pipeline_file):
+    with _mock_write_via_edit():
+        result = await pipeline_add_step(
+            pipeline_name="test_pipeline",
+            step_name="step_5",
+            description="Goal run step",
+            op_type="goal_run",
+            op_args={"description": "Analyze page"},
+            explanation="test",
+        )
+    data = result
+    assert data["ok"] is True
+
+    validated = _load_pipeline_yaml("test_pipeline")
+    assert validated.steps[-1].goal_description == "Analyze page"
+    assert validated.steps[-1].browser_ops is None
 
 
 # ── pipeline_remove_step ───────────────────────────────────────

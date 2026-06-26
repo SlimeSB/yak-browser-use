@@ -13,6 +13,7 @@ Format boundary:
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -216,8 +217,14 @@ class PipelineStore:
 
     # ── 2.12 update_step ──
 
+    _DEEP_PATH_RE = re.compile(r"([\w-]+)\[(\d+)\]\.(.+)")
+
     def update_step(self, doc: PipelineYaml, name: str, updates: dict) -> PipelineYaml:
-        """Update a step's fields. `updates["browser_ops"]` accepts YAML format, auto-converted."""
+        """Update a step's fields. `updates["browser_ops"]` accepts YAML format, auto-converted.
+        
+        Supports deep-path keys like ``"browser_ops[2].text"`` for field-level updates.
+        When value is a list or dict, it replaces the target entirely.
+        """
         target_idx = None
         for i, s in enumerate(doc.steps):
             if s.name == name:
@@ -228,24 +235,45 @@ class PipelineStore:
 
         step_dict = doc.steps[target_idx].model_dump()
 
-        if "browser_ops" in updates:
-            ops = updates["browser_ops"]
-            step_dict["browser_ops"] = self._from_yaml_ops(ops) if isinstance(ops, list) else ops
-        if "tool_name" in updates:
-            step_dict["tool_name"] = updates["tool_name"]
-        if "goal_description" in updates:
-            step_dict["goal_description"] = updates["goal_description"]
-        if "params" in updates:
-            step_dict["params"] = updates["params"]
-        if "description" in updates:
-            step_dict["description"] = updates["description"]
-        if "depends_on" in updates:
-            step_dict["depends_on"] = updates["depends_on"]
+        deep_keys: dict[str, tuple[str, int, str]] = {}
+        normal_keys: dict[str, object] = {}
 
-        type_fields = [k for k in ("browser_ops", "tool_name", "goal_description") if k in updates]
+        for key, val in updates.items():
+            m = self._DEEP_PATH_RE.match(key)
+            if m:
+                deep_keys[key] = (m.group(1), int(m.group(2)), m.group(3))
+            else:
+                normal_keys[key] = val
+
+        for list_key, index, field in deep_keys.values():
+            target_list = step_dict.get(list_key)
+            if not isinstance(target_list, list):
+                raise ValueError(f"'{list_key}' is not a list, cannot apply deep path")
+            if index < 0 or index >= len(target_list):
+                raise ValueError(f"Index {index} out of range for '{list_key}' (size {len(target_list)})")
+            if isinstance(target_list[index], dict):
+                target_list[index][field] = updates.get(f"{list_key}[{index}].{field}")
+            else:
+                raise ValueError(f"Element at '{list_key}[{index}]' is not a dict")
+
+        if "browser_ops" in normal_keys:
+            ops = normal_keys["browser_ops"]
+            step_dict["browser_ops"] = self._from_yaml_ops(ops) if isinstance(ops, list) else ops
+        if "tool_name" in normal_keys:
+            step_dict["tool_name"] = normal_keys["tool_name"]
+        if "goal_description" in normal_keys:
+            step_dict["goal_description"] = normal_keys["goal_description"]
+        if "params" in normal_keys:
+            step_dict["params"] = normal_keys["params"]
+        if "description" in normal_keys:
+            step_dict["description"] = normal_keys["description"]
+        if "depends_on" in normal_keys:
+            step_dict["depends_on"] = normal_keys["depends_on"]
+
+        type_fields = [k for k in ("browser_ops", "tool_name", "goal_description") if k in normal_keys]
         if len(type_fields) == 1:
             for other in ("browser_ops", "tool_name", "goal_description"):
-                if other not in updates:
+                if other not in normal_keys:
                     step_dict[other] = None
 
         new_step = StepYaml.model_validate(step_dict)

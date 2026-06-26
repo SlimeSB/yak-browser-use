@@ -21,8 +21,7 @@ def _get_pipeline_dispatch() -> dict:
     global _pipeline_dispatch
     if _pipeline_dispatch is None:
         from yak_browser_use.engine._harness.pipeline_tools import (
-            pipeline_load,
-            pipeline_list,
+            pipeline_view,
             pipeline_update_step,
             pipeline_add_step,
             pipeline_remove_step,
@@ -30,8 +29,7 @@ def _get_pipeline_dispatch() -> dict:
             pipeline_compile,
         )
         _pipeline_dispatch = {
-            "pipeline_load": pipeline_load,
-            "pipeline_list": pipeline_list,
+            "pipeline_view": pipeline_view,
             "pipeline_update_step": pipeline_update_step,
             "pipeline_add_step": pipeline_add_step,
             "pipeline_remove_step": pipeline_remove_step,
@@ -403,7 +401,7 @@ def _build_registry_impl() -> None:
 
         registry.register(f"browser_{op_type}", schema, _make_browser_handler(op_type))
 
-    # ── eval_js (standalone tool, not a browser_* op) ────────────────
+    # ── browser_eval_js (formerly eval_js) ──────────────────────────
 
     async def _eval_js_handler(args: dict, ctx: ToolContext) -> dict:
         if ctx.cdp_helpers is None:
@@ -416,13 +414,13 @@ def _build_registry_impl() -> None:
         except Exception as e:
             return {"ok": False, "error": str(e)}
 
-    registry.register("eval_js", {
-        "description": "在浏览器当前页面执行任意 JavaScript 代码并返回结果。支持 source_key 参数将结果写入 shared_store，便于通过 {key} 被其他 tool 引用。",
+    registry.register("browser_eval_js", {
+        "description": "[需 CDP] 在浏览器当前页面执行任意 JavaScript 代码并返回结果。支持 source_key 参数将结果写入 shared_store。",
         "parameters": {
             "type": "object",
             "properties": {
                 "code": {"type": "string", "description": "要执行的 JavaScript 代码。"},
-                "source_key": {"type": "string", "description": "可选，指定结果存入 shared_store 的 key。设置后结果可通过 {key} 被其他 tool 引用，避免大数据绕经 LLM 上下文。"},
+                "source_key": {"type": "string", "description": "可选，指定结果存入 shared_store 的 key。"},
             },
             "required": ["code"],
         },
@@ -431,17 +429,12 @@ def _build_registry_impl() -> None:
     # ── pipeline_* tools ─────────────────────────────────────────────
 
     _PIPELINE_SCHEMAS = {
-        "pipeline_load": {
-            "description": "Load a pipeline preset and return a structured summary (step list, types, dependencies, required_params). Does NOT return the full YAML content — use this to understand the pipeline structure before making changes.",
+        "pipeline_view": {
+            "description": "View pipeline(s). Without `name`: list all available presets (name, description, step count). With `name`: load a pipeline preset and return step details including full browser_ops list.",
             "parameters": {
                 "type": "object",
-                "properties": {"pipeline_name": {"type": "string", "description": "Name of the pipeline preset to load."}},
-                "required": ["pipeline_name"],
+                "properties": {"name": {"type": "string", "description": "Optional pipeline name. Omit to list all presets."}},
             },
-        },
-        "pipeline_list": {
-            "description": "List all available pipeline presets. Returns name, description, and step count for each preset.",
-            "parameters": {"type": "object", "properties": {}},
         },
         "pipeline_update_step": {
             "description": "Incrementally update a single step in a pipeline. Only the fields provided in `updates` are modified; all other fields stay unchanged. When changing browser_ops, tool_name, or goal_description, mutually exclusive fields are automatically cleared.",
@@ -624,10 +617,28 @@ def _build_registry_impl() -> None:
         },
     }, _format_convert_handler)
 
-    # ── wait_for_download ─────────────────────────────────────────────
+    # ── read_data ─────────────────────────────────────────────────────
 
-    registry.register("wait_for_download", {
-        "description": "等待浏览器下载的文件就绪。触发下载操作（点击导出按钮等）后先调用此工具，确认文件稳定后再用 file_read 读取。",
+    registry.register("read_data", {
+        "description": "读取文件内容，支持渐进式披露（limit/offset 控制行数）。唯一可返回文件全文的工具。二进制文件可通过 convert_to 参数自动转换格式后再读取。",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "path": {"type": "string", "description": "文件路径"},
+                "limit": {"type": "integer", "description": "最大返回行数（默认 20，必须大于 0）"},
+                "offset": {"type": "integer", "description": "起始行号（0-based，默认 0）"},
+                "encoding": {"type": "string", "description": "文件编码，为空时自动检测"},
+                "convert_to": {"type": "string", "description": "目标格式（csv/json），二进制文件先转换再读取"},
+                "source_key": {"type": "string", "description": "可选，指定结果存入 shared_store 的 key"},
+            },
+            "required": ["path"],
+        },
+    }, _read_data_handler)
+
+    # ── browser_wait_for_download (formerly wait_for_download) ───────
+
+    registry.register("browser_wait_for_download", {
+        "description": "[需 CDP] 等待浏览器下载的文件就绪。触发下载操作后先调用此工具，确认文件稳定后再用 read_data 读取。",
         "parameters": {
             "type": "object",
             "properties": {
@@ -699,39 +710,9 @@ def _build_registry_impl() -> None:
 
         registry.register(name, schema, _make_skill_handler(name))
 
-    # ── record_step ──────────────────────────────────────────────────
+    # ── record_step (removed — merged into pipeline_add_step) ────────
 
-    registry.register("record_step", {
-        "description": "Record a browser operation as a step in the pipeline.yaml. Call this AFTER each browser_* operation completes successfully. This appends the step to the pipeline so it can be replayed later. When op_type is omitted, creates an outline placeholder step with only name + description — fill it later by calling record_step again with the same step_name and op_type.",
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "pipeline_name": {"type": "string", "description": "Name of the pipeline preset to record into."},
-                "step_name": {"type": "string", "description": "Unique name for this step, e.g. 'step_1', 'step_2'."},
-                "description": {"type": "string", "description": "Human-readable description of what this step does."},
-                "op_type": {"type": "string", "description": "The browser operation type: goto, click, fill, scroll, snapshot, source. Omit to create an outline placeholder step."},
-                "op_args": {"type": "object", "description": "The exact arguments passed to the browser operation, e.g. {\"url\": \"https://baidu.com\"}."},
-                "explanation": {"type": "string", "description": "Brief explanation of why this step is needed in the pipeline."},
-            },
-            "required": ["pipeline_name", "step_name", "description"],
-        },
-    }, _record_step_handler)
-
-    # ── eval_agent ───────────────────────────────────────────────────
-
-    registry.register("eval_agent", {
-        "description": "启动子 Agent 处理复杂 DOM 操作或验证码识别。会额外消耗 LLM token，仅在 eval_js 无法直接完成时使用。子 Agent 可执行多次 eval_js + browser_snapshot 迭代试错。",
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "purpose": {"type": "string", "description": "eval agent 的任务目标描述"},
-                "snapshot": {"type": "string", "description": "当前页面的 simplified snapshot 文本"},
-                "max_attempts": {"type": "integer", "description": "最大 eval 尝试次数（默认 3）"},
-                "source_key": {"type": "string", "description": "可选，指定结果存入 shared_store 的 key。设置后子 Agent 的结果可通过其他 tool 的 {key} 引用，避免大数据绕经 LLM 上下文。"},
-            },
-            "required": ["purpose", "snapshot"],
-        },
-    }, _eval_agent_handler)
+    # ── eval_agent (removed — main agent uses browser_eval_js + browser_snapshot) ─
 
     # ── captcha ───────────────────────────────────────────────────────
 
@@ -821,7 +802,7 @@ async def _goal_run_handler(args: dict, ctx: ToolContext) -> dict:
         "result": (
             f"目标已设定: {description}\n\n"
             f"请用 todo 工具将目标拆解为 3-6 个步骤逐项执行。"
-            f"每步完成后调 record_step。不确定时直接问我。"
+            f"每步完成后调 pipeline_add_step。不确定时直接问我。"
         ),
     }
 
@@ -838,18 +819,75 @@ async def _todo_handler(args: dict, ctx: ToolContext) -> dict:
 
 
 async def _file_read_handler(args: dict, ctx: ToolContext) -> dict:
-    from yak_browser_use.tools.file_read import file_read
-    return await file_read(pipeline=ctx.pipeline_name or None, **args)
+    from yak_browser_use.tools._path_utils import validate_path
+    from yak_browser_use.tools.file_read import _BINARY_EXTENSIONS
+    path = args.get("path", "")
+    if not path:
+        return {"ok": False, "error": "path is required"}
+    try:
+        p = validate_path(path, pipeline=ctx.pipeline_name or None)
+    except ValueError as e:
+        return {"ok": False, "error": str(e)}
+    if not p.exists():
+        return {"ok": False, "error": f"文件不存在 — {path}"}
+    if not p.is_file():
+        return {"ok": False, "error": f"路径不是文件 — {path}"}
+    encoding = args.get("encoding", "")
+    is_binary = p.suffix.lower() in _BINARY_EXTENSIONS
+    return {"ok": True, "path": path, "size": p.stat().st_size, "encoding": encoding or "auto", "binary": is_binary}
 
 
 async def _file_write_handler(args: dict, ctx: ToolContext) -> dict:
+    from yak_browser_use.tools._path_utils import validate_path
+    from yak_browser_use.workspace.manager import WORKSPACES_ROOT
+    path = args.get("path", "")
+    content = args.get("content", "")
+    if not path:
+        return {"ok": False, "error": "path is required"}
+    try:
+        p = validate_path(path, pipeline=ctx.pipeline_name or None)
+    except ValueError as e:
+        return {"ok": False, "error": str(e)}
+    if ctx.pipeline_name:
+        pipeline_root = (WORKSPACES_ROOT / ctx.pipeline_name).resolve()
+        if p.parent == pipeline_root or p == pipeline_root:
+            return {"ok": False, "error": f"不允许写入 workspace 根目录: {path}，请使用子目录（如 downloads/）"}
     from yak_browser_use.tools.file_write import file_write
-    return await file_write(**args)
+    result = await file_write(path=path, content=content, encoding=args.get("encoding", "utf-8"), pipeline=ctx.pipeline_name or None)
+    if result.get("ok"):
+        return {"ok": True, "path": path, "size": len(content)}
+    return result
 
 
 async def _format_convert_handler(args: dict, ctx: ToolContext) -> dict:
-    from yak_browser_use.tools.format_convert import format_convert
-    return await format_convert(pipeline=ctx.pipeline_name or None, **args)
+    source = args.get("source", "")
+    target = args.get("target", "")
+    source_fmt = args.get("source_fmt", "")
+    target_fmt = args.get("target_fmt", "")
+    if not source or not target:
+        return {"ok": False, "error": "source and target are required"}
+    from yak_browser_use.tools.format_convert import _sniff_format
+    sf = source_fmt or _sniff_format(source)
+    tf = target_fmt or _sniff_format(target)
+    return {"ok": True, "result": f"格式信息: {source} ({sf}) → {target} ({tf})", "source": source, "target": target, "source_fmt": sf, "target_fmt": tf}
+
+
+async def _read_data_handler(args: dict, ctx: ToolContext) -> dict:
+    from yak_browser_use.tools._path_utils import validate_path
+    from yak_browser_use.workspace.manager import WORKSPACES_ROOT
+    from yak_browser_use.tools.read_data import read_data
+
+    path = args.get("path", "")
+    if ctx.pipeline_name and path:
+        try:
+            p = validate_path(path, pipeline=ctx.pipeline_name)
+        except ValueError as e:
+            return {"ok": False, "error": str(e)}
+        pipeline_root = (WORKSPACES_ROOT / ctx.pipeline_name).resolve()
+        if p.parent == pipeline_root or p == pipeline_root:
+            return {"ok": False, "error": f"不允许读取 workspace 根目录: {path}，文件应在子目录中"}
+
+    return await read_data(pipeline=ctx.pipeline_name or None, **args)
 
 
 async def _wait_for_download_handler(args: dict, ctx: ToolContext) -> dict:
@@ -860,25 +898,4 @@ async def _wait_for_download_handler(args: dict, ctx: ToolContext) -> dict:
     return await bridge.wait_for_download(timeout=timeout)
 
 
-async def _record_step_handler(args: dict, ctx: ToolContext) -> dict:
-    from yak_browser_use.engine.executor import execute_tool
-    return await execute_tool(
-        tool_name="record_step",
-        params=args,
-        tools_dir=ctx.tools_dir or Path("."),
-        cdp_helpers=ctx.cdp_helpers,
-    )
 
-
-async def _eval_agent_handler(args: dict, ctx: ToolContext) -> dict:
-    from yak_browser_use.engine._harness.tool_executor import _handle_eval_agent
-    return await _handle_eval_agent(
-        fn_args=args,
-        cdp_helpers=ctx.cdp_helpers,
-        llm_call=ctx.llm_call,
-        budget=ctx.budget,
-        interrupt_check=ctx.interrupt_check,
-        stream_callback=ctx.stream_callback,
-        pipeline_name=ctx.pipeline_name,
-        shared_store=ctx.shared_store,
-    )

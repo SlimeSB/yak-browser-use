@@ -25,8 +25,7 @@ from yak_browser_use.tools.registry import (
     _file_read_handler,
     _file_write_handler,
     _format_convert_handler,
-    _record_step_handler,
-    _eval_agent_handler,
+    _read_data_handler,
 )
 
 
@@ -174,14 +173,21 @@ class TestBuildRegistry:
         assert "browser_goto" in names
         assert "browser_click" in names
         assert "browser_snapshot" in names
-        assert "pipeline_list" in names
+        assert "pipeline_view" in names
+        assert "pipeline_add_step" in names
         assert "todo" in names
         assert "goal_run" in names
         assert "captcha" in names
-        assert "record_step" in names
+        assert "read_data" in names
         assert "file_read" in names
         assert "file_write" in names
         assert "format_convert" in names
+        assert "browser_eval_js" in names
+        assert "browser_wait_for_download" in names
+        assert "record_step" not in names
+        assert "eval_agent" not in names
+        assert "pipeline_load" not in names
+        assert "pipeline_list" not in names
 
     def test_browser_tools_have_proper_schema(self):
         build_registry()
@@ -198,14 +204,12 @@ class TestBuildRegistry:
 
         with pytest.raises(Exception):
             with MagicMock() as mock_imports:
-                # Simulate failure during build
                 with pytest.MonkeyPatch().context() as mp:
                     mp.setattr("yak_browser_use.tools.registry._build_registry_impl", lambda: (_ for _ in ()).throw(RuntimeError("fail")))
                     try:
                         build_registry()
                     except RuntimeError:
                         pass
-                    # After failure, should be empty
                     assert len(reg._tools) == 0
 
 
@@ -215,7 +219,7 @@ class TestBuildRegistry:
 class TestDispatchMaps:
     def test_get_pipeline_dispatch_has_expected_keys(self):
         dispatch = _get_pipeline_dispatch()
-        for key in ("pipeline_load", "pipeline_list", "pipeline_update_step",
+        for key in ("pipeline_view", "pipeline_update_step",
                     "pipeline_add_step", "pipeline_remove_step", "pipeline_create",
                     "pipeline_compile"):
             assert key in dispatch
@@ -269,7 +273,6 @@ class TestCaptchaHandler:
 
     @pytest.mark.asyncio
     async def test_direct_image_bytes(self):
-        """Direct image_bytes should delegate to captcha solver."""
         with patch("yak_browser_use.tools.captcha.captcha", new_callable=AsyncMock) as mock_captcha:
             mock_captcha.return_value = {"ok": True, "result": "abc"}
             result = await _captcha_handler(
@@ -298,58 +301,173 @@ class TestTodoHandler:
 
 class TestFileHandlers:
     @pytest.mark.asyncio
-    async def test_file_read_calls_through(self):
-        with patch("yak_browser_use.tools.file_read.file_read", new_callable=AsyncMock) as mock_read:
-            mock_read.return_value = {"ok": True, "result": "content"}
-            result = await _file_read_handler({"path": "/tmp/test.txt"}, ToolContext())
-            assert result["ok"] is True
-            mock_read.assert_called_once_with(pipeline=None, path="/tmp/test.txt")
+    async def test_file_read_returns_metadata_only(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        p = tmp_path / "test.txt"
+        p.write_text("hello world", encoding="utf-8")
+        result = await _file_read_handler({"path": "test.txt"}, ToolContext())
+        assert result["ok"] is True
+        assert "path" in result
+        assert "size" in result
+        assert "encoding" in result
+        assert result["size"] == 11
+        assert "result" not in result
 
     @pytest.mark.asyncio
-    async def test_file_write_calls_through(self):
+    async def test_file_read_missing(self):
+        result = await _file_read_handler({"path": "/nonexistent/file.txt"}, ToolContext())
+        assert result["ok"] is False
+        assert "不存在" in result["error"]
+
+    @pytest.mark.asyncio
+    async def test_file_read_no_path(self):
+        result = await _file_read_handler({}, ToolContext())
+        assert result["ok"] is False
+        assert "required" in result["error"]
+
+    @pytest.mark.asyncio
+    async def test_file_write_returns_metadata(self):
         with patch("yak_browser_use.tools.file_write.file_write", new_callable=AsyncMock) as mock_write:
-            mock_write.return_value = {"ok": True}
+            mock_write.return_value = {"ok": True, "result": "已写入 5 字符"}
             result = await _file_write_handler(
                 {"path": "/tmp/test.txt", "content": "hello"},
                 ToolContext(),
             )
             assert result["ok"] is True
-            mock_write.assert_called_once_with(path="/tmp/test.txt", content="hello")
+            assert result["path"] == "/tmp/test.txt"
+            assert result["size"] == 5
 
     @pytest.mark.asyncio
-    async def test_format_convert_calls_through(self):
-        with patch("yak_browser_use.tools.format_convert.format_convert", new_callable=AsyncMock) as mock_convert:
-            mock_convert.return_value = {"ok": True, "result": "csv data"}
-            result = await _format_convert_handler(
-                {"input": "data", "input_format": "json", "output_format": "csv"},
+    async def test_format_convert_returns_metadata(self):
+        result = await _format_convert_handler(
+            {"source": "data.csv", "target": "data.json"},
+            ToolContext(),
+        )
+        assert result["ok"] is True
+        assert result["source"] == "data.csv"
+        assert result["target"] == "data.json"
+        assert result["source_fmt"] == "csv"
+        assert result["target_fmt"] == "json"
+
+    @pytest.mark.asyncio
+    async def test_format_convert_no_paths(self):
+        result = await _format_convert_handler({}, ToolContext())
+        assert result["ok"] is False
+        assert "required" in result["error"]
+
+    # ── sandbox & pipeline context ──
+
+    @pytest.mark.asyncio
+    async def test_file_read_returns_binary_flag(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        Path("data.xlsx").write_text("fake", encoding="utf-8")
+        result = await _file_read_handler({"path": "data.xlsx"}, ToolContext())
+        assert result["ok"] is True
+        assert result["binary"] is True
+
+    @pytest.mark.asyncio
+    async def test_file_write_resolves_with_pipeline(self, tmp_path, monkeypatch):
+        from yak_browser_use.workspace import manager
+        from yak_browser_use.tools import _path_utils
+        ws_root = tmp_path / "workspaces"
+        ws_root.mkdir(parents=True, exist_ok=True)
+        monkeypatch.setattr(manager, "WORKSPACES_ROOT", ws_root)
+        monkeypatch.setattr(_path_utils, "WORKSPACES_ROOT", ws_root)
+
+        ctx = ToolContext(pipeline_name="my_pipe")
+        with patch("yak_browser_use.tools.file_write.file_write", new_callable=AsyncMock) as mock_write:
+            mock_write.return_value = {"ok": True, "result": "ok"}
+            result = await _file_write_handler(
+                {"path": "downloads/out.txt", "content": "hello"},
+                ctx,
+            )
+            assert result["ok"] is True
+            mock_write.assert_called_once()
+            call_kwargs = mock_write.call_args.kwargs
+            assert call_kwargs["pipeline"] == "my_pipe"
+
+    @pytest.mark.asyncio
+    async def test_file_write_rejects_root_directory(self, tmp_path, monkeypatch):
+        from yak_browser_use.workspace import manager
+        from yak_browser_use.tools import _path_utils
+        ws_root = tmp_path / "workspaces"
+        ws_root.mkdir(parents=True, exist_ok=True)
+        (ws_root / "my_pipe").mkdir(parents=True, exist_ok=True)
+        monkeypatch.setattr(manager, "WORKSPACES_ROOT", ws_root)
+        monkeypatch.setattr(_path_utils, "WORKSPACES_ROOT", ws_root)
+
+        ctx = ToolContext(pipeline_name="my_pipe")
+        result = await _file_write_handler(
+            {"path": "root_file.txt", "content": "x"},
+            ctx,
+        )
+        assert result["ok"] is False
+        assert "根目录" in result["error"]
+
+    @pytest.mark.asyncio
+    async def test_file_write_rejects_dot_path(self, tmp_path, monkeypatch):
+        from yak_browser_use.workspace import manager
+        from yak_browser_use.tools import _path_utils
+        ws_root = tmp_path / "workspaces"
+        ws_root.mkdir(parents=True, exist_ok=True)
+        (ws_root / "my_pipe").mkdir(parents=True, exist_ok=True)
+        monkeypatch.setattr(manager, "WORKSPACES_ROOT", ws_root)
+        monkeypatch.setattr(_path_utils, "WORKSPACES_ROOT", ws_root)
+
+        ctx = ToolContext(pipeline_name="my_pipe")
+        result = await _file_write_handler(
+            {"path": ".", "content": "x"},
+            ctx,
+        )
+        assert result["ok"] is False
+        assert "根目录" in result["error"]
+
+    @pytest.mark.asyncio
+    async def test_read_data_rejects_root_directory(self, tmp_path, monkeypatch):
+        from yak_browser_use.workspace import manager
+        from yak_browser_use.tools import _path_utils
+        ws_root = tmp_path / "workspaces"
+        ws_root.mkdir(parents=True, exist_ok=True)
+        (ws_root / "my_pipe").mkdir(parents=True, exist_ok=True)
+        monkeypatch.setattr(manager, "WORKSPACES_ROOT", ws_root)
+        monkeypatch.setattr(_path_utils, "WORKSPACES_ROOT", ws_root)
+
+        ctx = ToolContext(pipeline_name="my_pipe")
+        result = await _read_data_handler({"path": "root_file.csv"}, ctx)
+        assert result["ok"] is False
+        assert "根目录" in result["error"]
+
+    @pytest.mark.asyncio
+    async def test_read_data_allows_subdirectory(self, tmp_path, monkeypatch):
+        from yak_browser_use.workspace import manager
+        from yak_browser_use.tools import _path_utils
+        ws_root = tmp_path / "workspaces"
+        ws_root.mkdir(parents=True, exist_ok=True)
+        (ws_root / "my_pipe" / "subdir").mkdir(parents=True, exist_ok=True)
+        (ws_root / "my_pipe" / "subdir" / "data.csv").write_text("col1\nval1", encoding="utf-8")
+        monkeypatch.setattr(manager, "WORKSPACES_ROOT", ws_root)
+        monkeypatch.setattr(_path_utils, "WORKSPACES_ROOT", ws_root)
+
+        ctx = ToolContext(pipeline_name="my_pipe")
+        result = await _read_data_handler({"path": "subdir/data.csv", "limit": 5}, ctx)
+        assert result["ok"] is True, f"子目录读取被拒: {result.get('error', result)}"
+        assert "col1" in result["result"]
+
+    @pytest.mark.asyncio
+    async def test_file_write_without_pipeline(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        with patch("yak_browser_use.tools.file_write.file_write", new_callable=AsyncMock) as mock_write:
+            mock_write.return_value = {"ok": True, "result": "ok"}
+            result = await _file_write_handler(
+                {"path": "out.txt", "content": "hello"},
                 ToolContext(),
             )
             assert result["ok"] is True
 
-
-class TestRecordStepHandler:
     @pytest.mark.asyncio
-    async def test_delegates_to_executor(self):
-        with patch("yak_browser_use.engine.executor.execute_tool", new_callable=AsyncMock) as mock_exec:
-            mock_exec.return_value = {"ok": True}
-            result = await _record_step_handler(
-                {"step": "Step 1 completed"},
-                ToolContext(tools_dir=Path(".")),
-            )
-            assert result["ok"] is True
-            mock_exec.assert_called_once()
-
-
-class TestEvalAgentHandler:
-    @pytest.mark.asyncio
-    async def test_delegates_to_handle_eval_agent(self):
-        with patch("yak_browser_use.engine._harness.tool_executor._handle_eval_agent", new_callable=AsyncMock) as mock_eval:
-            mock_eval.return_value = {"ok": True, "result": "analysis"}
-            ctx = ToolContext(
-                cdp_helpers=MagicMock(),
-                llm_call=MagicMock(),
-                budget=MagicMock(),
-            )
-            result = await _eval_agent_handler({"task": "analyze page"}, ctx)
-            assert result["ok"] is True
-            mock_eval.assert_called_once()
+    async def test_file_read_returns_binary_false(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        Path("data.csv").write_text("a,b,c", encoding="utf-8")
+        result = await _file_read_handler({"path": "data.csv"}, ToolContext())
+        assert result["ok"] is True
+        assert result["binary"] is False

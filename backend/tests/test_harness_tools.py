@@ -42,13 +42,12 @@ def test_goal_run_tool():
 
 
 def test_pipeline_tools_count():
-    assert len(_pipeline_tools()) == 8
+    assert len(_pipeline_tools()) == 7
 
 
 def test_pipeline_tools_names():
     names = [t["function"]["name"] for t in _pipeline_tools()]
-    assert "pipeline_load" in names
-    assert "pipeline_list" in names
+    assert "pipeline_view" in names
     assert "pipeline_update_step" in names
     assert "pipeline_add_step" in names
     assert "pipeline_remove_step" in names
@@ -63,15 +62,13 @@ def test_get_all_tools_with_goal():
     names = [t["function"]["name"] for t in tools]
     assert "browser_goto" in names
     assert "goal_run" in names
-    assert "pipeline_load" in names
-    assert "pipeline_list" in names
+    assert "pipeline_view" in names
     assert "pipeline_update_step" in names
     assert "pipeline_add_step" in names
     assert "pipeline_remove_step" in names
     assert "pipeline_create" in names
-    assert "record_step" in names
     assert "browser_lookup_selector" in names
-    assert "eval_js" in names
+    assert "browser_eval_js" in names
     assert "edit_pipeline" not in names
     assert "todo" in names
 
@@ -84,7 +81,7 @@ def test_get_all_tools_without_goal():
     names = [t["function"]["name"] for t in tools]
     assert "goal_run" not in names
     assert "edit_pipeline" not in names
-    assert "pipeline_load" in names
+    assert "pipeline_view" in names
 
 
 def test_get_browser_tools():

@@ -8,7 +8,7 @@ Prefer these tools for most operations:
 - `browser_snapshot(mode?, query?, in_viewport?)` — 页面快照。推荐渐进式：simplified（概览）→ interactive+in_viewport+query（精准）→ interactive+query（全量搜）→ interactive（全量）
 - `browser_scroll(direction)` — scroll the page (up/down)
 - `browser_source(cached?)` — get the full page HTML source
-- `eval_js(code)` — execute JavaScript on the page
+- `browser_eval_js(code)` — execute JavaScript on the page
 - `browser_lookup_selector(ref)` — get element details by @e_XXXXX reference
 
 ### 页面内容与滚动
@@ -27,7 +27,7 @@ Prefer these tools for most operations:
 Use `goal_run(description)` to set a complex multi-step goal. After calling goal_run, use:
 - `todo` to break the goal into 3-6 concrete steps
 - `browser_*` tools to execute each step
-- `record_step` to save each successful step
+- `pipeline_add_step` to save each successful step (or pipeline_view to review)
 - `browser_snapshot(mode="simplified")` to verify page state between steps
 
 Typical scenarios:
@@ -35,23 +35,31 @@ Typical scenarios:
 - Tasks requiring page content analysis to decide next action
 - Complex data extraction across multiple pages
 
-### When to ask the user
-If the user's instruction is ambiguous or has multiple valid interpretations, ask for clarification before acting.
+### 读取文件内容：使用 read_data（渐进式披露）
+文件内容读取**唯一入口**是 `read_data`，支持渐进式披露：
+- `read_data(path)` — 读取前 20 行
+- `read_data(path, limit=50, offset=20)` — 读取第 21-70 行（逐段浏览）
+- `read_data(path, limit=0)` 非法，limit 必须 > 0
+
+二进制文件可配合 convert_to 参数先转换再读取：
+- `read_data(path="data.xlsx", convert_to="csv")`
+
+`file_read` 仍存在于工具列表中（用于 pipeline YAML 引用），但**仅返回元信息**（path/size/encoding），不返回文件内容。
 
 ### 浏览器下载文件处理
 浏览器下载的文件写入 `downloads/` 目录。触发下载后必须：
-1. 先调用 `wait_for_download(timeout)` 等待文件就绪，拿到返回的 `downloads/<filename>` 路径
-2. 再用 `file_read(path="downloads/<filename>")` 读取内容
-3. 如需要转换格式，用 `format_convert(source="downloads/<filename>", target="...")`
+1. 先调用 `browser_wait_for_download(timeout)` 等待文件就绪，拿到返回的 `downloads/<filename>` 路径
+2. 再用 `read_data(path="downloads/<filename>")` 读取内容
+3. 如需要转换格式，用 `read_data(path="downloads/<filename>", convert_to="csv")`
 
-**注意：** 不先调用 `wait_for_download` 直接 `file_read` 会导致文件不存在错误。
+**注意：** 不先调用 `browser_wait_for_download` 直接 `read_data` 会导致文件不存在错误。
 
 ### 工具间数据传递 (shared_store)
 工具支持通过 `source_key` 和 `_source_key` 在工具之间传递数据，避免大数据绕经 LLM 上下文：
 
-**Producer（写入）：** 调用 `eval_agent` 时传 `source_key` 参数，结果自动存入 shared_store：
-- `eval_agent(purpose="提取表格", snapshot="...", source_key="table_data")`
-- 子 Agent 完成后的完整结果存入 `shared_store["table_data"]`
+**Producer（写入）：** 调用 `browser_eval_js` 时传 `source_key` 参数，结果自动存入 shared_store：
+- `browser_eval_js(code="...", source_key="table_data")`
+- 执行结果存入 `shared_store["table_data"]`
 
 **Consumer（读取）：** **任意工具参数**中都可以用 `_source_key` 引用 shared_store 的数据，代替直接传值：
 - `file_write(path="output.csv", content={"_source_key": "table_data"})`
