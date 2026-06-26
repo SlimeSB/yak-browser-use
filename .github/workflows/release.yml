@@ -42,13 +42,33 @@ jobs:
         working-directory: backend
         run: uv build
 
+      - name: Check if dev tag
+        id: check-dev
+        run: |
+          $tag = "${{ github.ref_name }}"
+          if ($tag -match 'dev') {
+            echo "is_dev=true" >> $env:GITHUB_OUTPUT
+          } else {
+            echo "is_dev=false" >> $env:GITHUB_OUTPUT
+          }
+        shell: pwsh
+
+      - name: Publish to TestPyPI
+        if: steps.check-dev.outputs.is_dev == 'true'
+        working-directory: backend
+        env:
+          UV_PUBLISH_TOKEN: ${{ secrets.TEST_PYPI_TOKEN }}
+        run: uv publish --publish-url https://test.pypi.org/legacy/
+
       - name: Publish to PyPI
+        if: steps.check-dev.outputs.is_dev != 'true'
         working-directory: backend
         env:
           UV_PUBLISH_TOKEN: ${{ secrets.PYPI_TOKEN }}
         run: uv publish
 
   release-electron:
+    if: ${{ !contains(github.ref_name, 'dev') }}
     runs-on: windows-latest
 
     steps:
