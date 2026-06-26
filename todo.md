@@ -59,6 +59,15 @@ CDP 层已有基础原语（`Target.createTarget` / `Target.attachToTarget` / `_
 
 需要真实 CDP/浏览器环境，编写 chat → 浏览器操作 → 导出的端到端测试。
 
+### 7. `downloads/` 路径工具集成
+> 浏览器下载目录第一期未覆盖 — `validate_path` 已支持 `downloads/` 前缀解析，但 `file_read` / `format_convert` 等工具尚未透传 `pipeline` 参数。当前 Agent 需提供完整相对路径或 cwd 恰好为项目根目录时才能用。
+
+| 步骤 | 位置 | 说明 |
+|------|------|------|
+| `file_read` 加 `pipeline` 参数 | `tools/file_read.py` | 透传给 `validate_path` |
+| `format_convert` 加 `pipeline` 参数 | `tools/format_convert.py` | 透传给 `validate_path` |
+| `executor.py` `_resolve_path` 支持 `downloads/` | `engine/executor.py` | Preset 模式路径同步 |
+
 ---
 
 ## 前端 (TypeScript/Electron)
