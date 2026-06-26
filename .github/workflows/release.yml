@@ -83,6 +83,15 @@ jobs:
           cache: "npm"
           cache-dependency-path: electron/package-lock.json
 
+      - name: Set version from tag
+        working-directory: electron
+        run: |
+          $ver = "${{ github.ref_name }}" -replace '^v'
+          $json = Get-Content package.json -Raw
+          $json = $json -replace '"version": "[^"]*"', ('"version": "' + $ver + '"')
+          Set-Content package.json -Value $json
+        shell: pwsh
+
       - name: Build Electron app
         working-directory: electron
         run: |
