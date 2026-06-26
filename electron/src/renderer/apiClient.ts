@@ -1,7 +1,16 @@
 import type { PipelineMeta, VersionInfo, ChatMessage, PresetDefinition } from './types';
 
+async function getBaseUrl(): Promise<string> {
+  if ((window as any).electronAPI?.getPort) {
+    const port = await (window as any).electronAPI.getPort();
+    return `http://127.0.0.1:${port}`;
+  }
+  return '';
+}
+
 async function apiFetch(path: string, init?: RequestInit): Promise<any> {
-  const resp = await fetch(path, init);
+  const base = await getBaseUrl();
+  const resp = await fetch(`${base}${path}`, init);
   if (!resp.ok) {
     const text = await resp.text().catch(() => '');
     throw new Error(`HTTP ${resp.status}: ${text.slice(0, 200)}`);
@@ -11,7 +20,8 @@ async function apiFetch(path: string, init?: RequestInit): Promise<any> {
 
 async function safeFetch(path: string, init?: RequestInit): Promise<{ ok: boolean; data?: any; error?: string }> {
   try {
-    const resp = await fetch(path, init);
+    const base = await getBaseUrl();
+    const resp = await fetch(`${base}${path}`, init);
     if (!resp.ok) {
       const text = await resp.text().catch(() => '');
       return { ok: false, error: `HTTP ${resp.status}: ${text.slice(0, 200)}` };
