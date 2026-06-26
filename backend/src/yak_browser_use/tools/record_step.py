@@ -6,10 +6,13 @@ pipeline file. Pushes a pipeline.edit WebSocket event for diff review.
 
 from __future__ import annotations
 
+import time
 from pathlib import Path
 
 from yak_browser_use.workspace.manager import WORKSPACES_ROOT
 
+from yak_browser_use.compiler.pipeline_store import PipelineStore
+from yak_browser_use.compiler.schema import PipelineYaml, StepYaml
 from yak_browser_use.engine._harness.pipeline_events import push_pipeline_edit_event
 
 from yak_browser_use.utils.helpers import sanitize_pipeline_name
@@ -18,6 +21,7 @@ from yak_browser_use.utils.logging import get_logger
 logger = get_logger(__name__)
 
 _WORKSPACES_DIR = WORKSPACES_ROOT
+_STORE = PipelineStore(workspaces_root=_WORKSPACES_DIR)
 
 _pipeline_edit_id: dict[str, str] = {}
 
@@ -45,7 +49,6 @@ async def record_step(
     Returns:
         Status message.
     """
-    import yaml
 
     try:
         safe_name = sanitize_pipeline_name(pipeline_name)
@@ -58,25 +61,15 @@ async def record_step(
     # Load existing pipeline or create new
     if pipeline_path.exists():
         try:
-            data = yaml.safe_load(pipeline_path.read_text(encoding="utf-8")) or {}
+            pipeline = _STORE.load(pipeline_name)
         except Exception:
-            data = {}
+            pipeline = PipelineYaml(name=safe_name, description=f"Recorded pipeline: {safe_name}", steps=[])
     else:
-        data = {}
+        pipeline = PipelineYaml(name=safe_name, description=f"Recorded pipeline: {safe_name}", steps=[])
         logger.info("Creating new pipeline: %s", safe_name)
 
-    if not isinstance(data, dict):
-        data = {}
-
-    data.setdefault("name", safe_name)
-    data.setdefault("description", f"Recorded pipeline: {safe_name}")
-    steps = data.setdefault("steps", [])
-    if not isinstance(steps, list):
-        steps = []
-        data["steps"] = steps
-
     # Build step entry
-    step_entry: dict = {
+    step_dict: dict = {
         "name": step_name,
         "description": description,
     }
@@ -84,31 +77,32 @@ async def record_step(
     if op_type is not None:
         if op_type == "goal_run":
             if op_args:
-                step_entry["goal_description"] = op_args.get("description", description)
+                step_dict["goal_description"] = op_args.get("description", description)
             else:
-                step_entry["goal_description"] = description
+                step_dict["goal_description"] = description
         else:
             browser_op: dict
             if op_args and "value" in op_args and len(op_args) == 1:
                 browser_op = {op_type: op_args["value"]}
             else:
                 browser_op = {op_type: op_args or {}}
-            step_entry["browser_ops"] = [browser_op]
+            step_dict["browser_ops"] = [browser_op]
+
+    new_step = StepYaml.model_validate(step_dict)
 
     # Append or update step
-    existing_idx = next((i for i, s in enumerate(steps) if s.get("name") == step_name), None)
+    existing_idx = next((i for i, s in enumerate(pipeline.steps) if s.name == step_name), None)
     if existing_idx is not None:
-        steps[existing_idx] = step_entry
+        pipeline.steps[existing_idx] = new_step
     else:
-        steps.append(step_entry)
+        pipeline.steps.append(new_step)
         logger.debug("Recording step %s%s", step_name, f": {op_type}" if op_type else "")
 
     # Save checkpoint before writing
     original = pipeline_path.read_text(encoding="utf-8") if pipeline_path.exists() else ""
 
-    # Write back
-    new_content = yaml.dump(data, default_flow_style=False, allow_unicode=True, sort_keys=False)
-    pipeline_path.write_text(new_content, encoding="utf-8")
+    # Write back via PipelineStore
+    new_content = _STORE.save(pipeline_name, pipeline)
 
     # Push pipeline.edit event for review
     from yak_browser_use.api.state import engine_state

@@ -192,7 +192,7 @@ async def test_pipeline_update_step_browser_ops(sample_pipeline_file):
     assert data["ok"] is True
 
     validated = _load_pipeline_yaml("test_pipeline")
-    assert validated.steps[2].browser_ops == [{"click": "#btn"}]
+    assert validated.steps[2].browser_ops == [{"type": "click", "value": "#btn"}]
     assert validated.steps[2].tool_name is None
 
 

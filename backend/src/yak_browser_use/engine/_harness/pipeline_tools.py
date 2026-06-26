@@ -17,8 +17,7 @@ from yak_browser_use.workspace.manager import WORKSPACES_ROOT
 
 from yak_browser_use.engine._harness.pipeline_events import push_pipeline_edit_event
 
-import yaml
-
+from yak_browser_use.compiler.pipeline_store import PipelineMeta, PipelineStore
 from yak_browser_use.compiler.schema import PipelineYaml, StepYaml
 from yak_browser_use.utils.helpers import sanitize_pipeline_name
 from yak_browser_use.utils.logging import get_logger
@@ -26,6 +25,9 @@ from yak_browser_use.utils.logging import get_logger
 logger = get_logger(__name__)
 
 _WORKSPACES_DIR = WORKSPACES_ROOT
+
+def _get_store() -> PipelineStore:
+    return PipelineStore(workspaces_root=_WORKSPACES_DIR)
 
 _VALID_UPDATE_KEYS = frozenset({
     "browser_ops", "tool_name", "goal_description", "description", "depends_on", "params",
@@ -38,22 +40,11 @@ def _resolve_pipeline_path(pipeline_name: str) -> Path:
 
 
 def _load_pipeline_yaml(pipeline_name: str) -> PipelineYaml:
-    path = _resolve_pipeline_path(pipeline_name)
-    if not path.exists():
-        raise FileNotFoundError(f"Pipeline '{pipeline_name}' not found")
-    raw = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
-    if not isinstance(raw, dict):
-        raise ValueError(f"Pipeline '{pipeline_name}' is not a valid YAML mapping")
-    return PipelineYaml.model_validate(raw)
+    return _get_store().load(pipeline_name)
 
 
 def _dump_pipeline_yaml(pipeline: PipelineYaml) -> str:
-    return yaml.dump(
-        pipeline.model_dump(exclude_defaults=True),
-        default_flow_style=False,
-        allow_unicode=True,
-        sort_keys=False,
-    )
+    return PipelineStore.to_yaml(pipeline)
 
 
 async def _write_via_edit_pipeline(
@@ -77,7 +68,7 @@ async def pipeline_load(pipeline_name: str, **kwargs) -> dict:
         return {"ok": False, "error": "pipeline_name is required"}
 
     try:
-        validated = _load_pipeline_yaml(pipeline_name)
+        validated = _get_store().load(pipeline_name)
     except FileNotFoundError as e:
         return {"ok": False, "error": str(e)}
     except Exception as e:
@@ -118,25 +109,17 @@ async def pipeline_list(**kwargs) -> dict:
     for d in sorted(_WORKSPACES_DIR.iterdir()):
         if not d.is_dir() or d.name.startswith("."):
             continue
-        pipe_path = d / "pipeline.yaml"
-        if not pipe_path.exists():
+        if not (d / "pipeline.yaml").exists():
             continue
-        name = d.name
         try:
-            raw = yaml.safe_load(pipe_path.read_text(encoding="utf-8")) or {}
-            if not isinstance(raw, dict):
-                raise ValueError("not a mapping")
-            desc = raw.get("description", "")
-            steps = raw.get("steps", [])
-            step_count = len(steps) if isinstance(steps, list) else 0
+            meta = _get_store().load_meta(d.name)
         except Exception:
-            logger.warning("pipeline_list: failed to parse %s", pipe_path, exc_info=True)
-            desc = "(parse error)"
-            step_count = 0
+            logger.warning("pipeline_list: failed to parse %s", d / "pipeline.yaml", exc_info=True)
+            meta = PipelineMeta(name=d.name, description="(parse error)", step_count=0)
         presets.append({
-            "name": name,
-            "description": desc,
-            "step_count": step_count,
+            "name": meta.name,
+            "description": meta.description,
+            "step_count": meta.step_count,
         })
 
     return {"ok": True, "presets": presets}
@@ -165,52 +148,12 @@ async def pipeline_update_step(
     except (FileNotFoundError, ValueError) as e:
         return {"ok": False, "error": str(e)}
 
-    target_idx = None
-    for i, s in enumerate(validated.steps):
-        if s.name == step_name:
-            target_idx = i
-            break
-
-    if target_idx is None:
-        return {"ok": False, "error": f"Step '{step_name}' not found in pipeline '{pipeline_name}'"}
-
-    step = validated.steps[target_idx]
-    step_dict = step.model_dump()
-
-    type_fields_in_updates = [
-        k for k in ("browser_ops", "tool_name", "goal_description") if k in updates
-    ]
-
-    if "browser_ops" in updates:
-        step_dict["browser_ops"] = updates["browser_ops"]
-    if "tool_name" in updates:
-        step_dict["tool_name"] = updates["tool_name"]
-    if "goal_description" in updates:
-        step_dict["goal_description"] = updates["goal_description"]
-    if "params" in updates:
-        step_dict["params"] = updates["params"]
-
-    if len(type_fields_in_updates) == 1:
-        for other in ("browser_ops", "tool_name", "goal_description"):
-            if other not in updates:
-                step_dict[other] = None
-
-    if "description" in updates:
-        step_dict["description"] = updates["description"]
-    if "depends_on" in updates:
-        step_dict["depends_on"] = updates["depends_on"]
-
     try:
-        new_step = StepYaml.model_validate(step_dict)
+        _get_store().update_step(validated, step_name, updates)
+    except ValueError as e:
+        return {"ok": False, "error": str(e)}
     except Exception as e:
         return {"ok": False, "error": f"Validation failed: {e}"}
-
-    validated.steps[target_idx] = new_step
-
-    try:
-        PipelineYaml.model_validate(validated.model_dump())
-    except Exception as e:
-        return {"ok": False, "error": f"Pipeline validation failed: {e}"}
 
     await _write_via_edit_pipeline(pipeline_name, validated, explanation)
     return {"ok": True, "result": f"Step '{step_name}' updated in pipeline '{pipeline_name}'"}
@@ -234,13 +177,6 @@ async def pipeline_add_step(
     except (FileNotFoundError, ValueError) as e:
         return {"ok": False, "error": str(e)}
 
-    for s in validated.steps:
-        if s.name == step_name:
-            return {
-                "ok": False,
-                "error": f"Step '{step_name}' already exists in pipeline '{pipeline_name}'",
-            }
-
     step_dict: dict = {
         "name": step_name,
         "description": description,
@@ -260,20 +196,10 @@ async def pipeline_add_step(
     except Exception as e:
         return {"ok": False, "error": f"Step validation failed: {e}"}
 
-    if after is not None:
-        insert_idx = None
-        for i, s in enumerate(validated.steps):
-            if s.name == after:
-                insert_idx = i + 1
-                break
-        if insert_idx is None:
-            return {"ok": False, "error": f"Anchor step '{after}' not found in pipeline '{pipeline_name}'"}
-        validated.steps.insert(insert_idx, new_step)
-    else:
-        validated.steps.append(new_step)
-
     try:
-        PipelineYaml.model_validate(validated.model_dump())
+        _get_store().add_step(validated, new_step, after=after)
+    except ValueError as e:
+        return {"ok": False, "error": str(e)}
     except Exception as e:
         return {"ok": False, "error": f"Pipeline validation failed: {e}"}
 
@@ -292,23 +218,10 @@ async def pipeline_remove_step(
     except (FileNotFoundError, ValueError) as e:
         return {"ok": False, "error": str(e)}
 
-    target_idx = None
-    for i, s in enumerate(validated.steps):
-        if s.name == step_name:
-            target_idx = i
-            break
-
-    if target_idx is None:
-        return {"ok": False, "error": f"Step '{step_name}' not found in pipeline '{pipeline_name}'"}
-
-    validated.steps.pop(target_idx)
-
-    for s in validated.steps:
-        if step_name in s.depends_on:
-            s.depends_on = [d for d in s.depends_on if d != step_name]
-
     try:
-        PipelineYaml.model_validate(validated.model_dump())
+        _get_store().remove_step(validated, step_name)
+    except ValueError as e:
+        return {"ok": False, "error": str(e)}
     except Exception as e:
         return {"ok": False, "error": f"Pipeline validation failed: {e}"}
 
@@ -347,13 +260,10 @@ async def pipeline_create(
         return {"ok": False, "error": f"Pipeline validation failed: {e}"}
 
     path.parent.mkdir(parents=True, exist_ok=True)
-    content = _dump_pipeline_yaml(pipeline)
-
-    try:
-        with open(path, "x", encoding="utf-8") as f:
-            f.write(content)
-    except FileExistsError:
+    if path.exists():
         return {"ok": False, "error": f"Pipeline '{safe_name}' already exists"}
+
+    content = _get_store().save(pipeline_name, pipeline)
 
     from yak_browser_use.api.state import engine_state
 
@@ -423,10 +333,11 @@ async def pipeline_compile(
 
             if tool_name.startswith("browser_"):
                 op_type = tool_name.replace("browser_", "")
+                internal_ops = [{"type": op_type, "value": _first_arg(args)}]
                 steps.append({
                     "name": f"step_{step_index}",
                     "description": f"{op_type}: {_fmt_args(args)}",
-                    "browser_ops": [{op_type: _first_arg(args)}],
+                    "browser_ops": PipelineStore.ops_to_yaml(internal_ops),
                 })
             elif tool_name == "goal_run":
                 steps.append({

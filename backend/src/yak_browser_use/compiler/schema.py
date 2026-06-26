@@ -25,6 +25,17 @@ class StepYaml(BaseModel):
     check: dict | None = None
 
     @model_validator(mode="after")
+    def _normalize_browser_ops(self):
+        """Ensure browser_ops is always in internal format on the model."""
+        if self.browser_ops is not None:
+            need_convert = any(
+                "type" not in op for op in self.browser_ops if isinstance(op, dict)
+            )
+            if need_convert:
+                self.browser_ops = [_convert_browser_op(op) for op in self.browser_ops]
+        return self
+
+    @model_validator(mode="after")
     def _check_mutual_exclusion(self):
         present = [
             f
@@ -51,7 +62,7 @@ class StepYaml(BaseModel):
             is_goal = False
             resolved_goal_desc = ""
             resolved_tool = ""
-            resolved_browser_ops = [_convert_browser_op(op) for op in self.browser_ops] if self.browser_ops else []
+            resolved_browser_ops = self.browser_ops or []
         elif resolved_type == "tool":
             is_goal = False
             resolved_goal_desc = ""

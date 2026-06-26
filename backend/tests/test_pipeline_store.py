@@ -1,7 +1,6 @@
-"""Green tests: characterization tests that lock down current behavior before PipelineStore refactoring.
+"""Tests for PipelineStore — format conversion, round-trip, strip, CRUD, meta.
 
-Phase 1 — tests pass against CURRENT code. After PipelineStore is built (Phase 2),
-these same tests will be migrated to use PipelineStore APIs and must STILL pass.
+Phase 2: tests use PipelineStore APIs directly (replaced oracle from Phase 1).
 """
 
 from __future__ import annotations
@@ -12,97 +11,85 @@ from pathlib import Path
 import pytest
 import yaml
 
-from yak_browser_use.compiler.schema import (
-    PipelineYaml,
-    StepYaml,
-    _convert_browser_op,
-    ops_to_yaml,
-)
-from yak_browser_use.compiler.models import StepDef
-from yak_browser_use.engine._harness.pipeline_tools import (
-    _dump_pipeline_yaml,
-    _load_pipeline_yaml,
-)
+from yak_browser_use.compiler.pipeline_store import PipelineMeta, PipelineStore
+from yak_browser_use.compiler.schema import PipelineYaml, StepYaml
 
 
 # ═══════════════════════════════════════════════════════════════════
-# 1. 格式转换 round-trip：_convert_browser_op ↔ ops_to_yaml
+# 1. 格式转换 round-trip：_from_yaml_ops ↔ _to_yaml_ops
 # ═══════════════════════════════════════════════════════════════════
 
 class TestFormatConversionRoundTrip:
-    """Test that current conversion functions are inverses of each other."""
+    """PipelineStore format conversion methods are inverses of each other."""
 
     def test_goto_roundtrip(self):
         internal = [{"type": "goto", "value": "https://example.com"}]
-        yaml_ops = ops_to_yaml(internal)
+        yaml_ops = PipelineStore._to_yaml_ops(internal)
         assert yaml_ops == [{"goto": "https://example.com"}]
-        back = [_convert_browser_op(op) for op in yaml_ops]
+        back = PipelineStore._from_yaml_ops(yaml_ops)
         assert back == internal
 
     def test_fill_roundtrip(self):
         internal = [{"type": "fill", "selector": "#q", "value": "search term"}]
-        yaml_ops = ops_to_yaml(internal)
+        yaml_ops = PipelineStore._to_yaml_ops(internal)
         assert yaml_ops == [{"fill": {"selector": "#q", "value": "search term"}}]
-        back = [_convert_browser_op(op) for op in yaml_ops]
+        back = PipelineStore._from_yaml_ops(yaml_ops)
         assert back == internal
 
     def test_click_scalar_roundtrip(self):
         internal = [{"type": "click", "value": "#submit-btn"}]
-        yaml_ops = ops_to_yaml(internal)
+        yaml_ops = PipelineStore._to_yaml_ops(internal)
         assert yaml_ops == [{"click": "#submit-btn"}]
-        back = [_convert_browser_op(op) for op in yaml_ops]
+        back = PipelineStore._from_yaml_ops(yaml_ops)
         assert back == internal
 
     def test_click_dict_roundtrip(self):
         internal = [{"type": "click", "selector": "#a", "index": 2}]
-        yaml_ops = ops_to_yaml(internal)
+        yaml_ops = PipelineStore._to_yaml_ops(internal)
         assert yaml_ops == [{"click": {"selector": "#a", "index": 2}}]
-        back = [_convert_browser_op(op) for op in yaml_ops]
+        back = PipelineStore._from_yaml_ops(yaml_ops)
         assert back == internal
 
     def test_scroll_roundtrip(self):
         internal = [{"type": "scroll", "value": 300}]
-        yaml_ops = ops_to_yaml(internal)
+        yaml_ops = PipelineStore._to_yaml_ops(internal)
         assert yaml_ops == [{"scroll": 300}]
-        back = [_convert_browser_op(op) for op in yaml_ops]
+        back = PipelineStore._from_yaml_ops(yaml_ops)
         assert back == internal
 
     def test_js_roundtrip(self):
         internal = [{"type": "js", "value": "document.title"}]
-        yaml_ops = ops_to_yaml(internal)
+        yaml_ops = PipelineStore._to_yaml_ops(internal)
         assert yaml_ops == [{"js": "document.title"}]
-        back = [_convert_browser_op(op) for op in yaml_ops]
+        back = PipelineStore._from_yaml_ops(yaml_ops)
         assert back == internal
 
     def test_wait_for_network_roundtrip(self):
         internal = [{"type": "wait_for_network", "value": "idle"}]
-        yaml_ops = ops_to_yaml(internal)
+        yaml_ops = PipelineStore._to_yaml_ops(internal)
         assert yaml_ops == [{"wait_for_network": "idle"}]
-        back = [_convert_browser_op(op) for op in yaml_ops]
+        back = PipelineStore._from_yaml_ops(yaml_ops)
         assert back == internal
 
     def test_snapshot_roundtrip(self):
         internal = [{"type": "snapshot", "value": "interactive"}]
-        yaml_ops = ops_to_yaml(internal)
+        yaml_ops = PipelineStore._to_yaml_ops(internal)
         assert yaml_ops == [{"snapshot": "interactive"}]
-        back = [_convert_browser_op(op) for op in yaml_ops]
+        back = PipelineStore._from_yaml_ops(yaml_ops)
         assert back == internal
 
     def test_ops_to_yaml_empty_value(self):
         internal = [{"type": "click", "value": ""}]
-        yaml_ops = ops_to_yaml(internal)
-        # If value is "" and no other keys, it becomes {click: ""} (single remaining key)
+        yaml_ops = PipelineStore._to_yaml_ops(internal)
         assert yaml_ops == [{"click": ""}]
-        back = [_convert_browser_op(op) for op in yaml_ops]
+        back = PipelineStore._from_yaml_ops(yaml_ops)
         assert back == internal
 
     def test_ops_to_yaml_no_value_key(self):
         internal = [{"type": "click"}]
-        yaml_ops = ops_to_yaml(internal)
-        # No "value" key and no other keys → falls through to else: {click: op.get("value", "")}
+        yaml_ops = PipelineStore._to_yaml_ops(internal)
         assert yaml_ops == [{"click": ""}]
-        back = [_convert_browser_op(op) for op in yaml_ops]
-        # Round-trip: type=click, value="" — keys besides type/value are just "value": ""
+        back = PipelineStore._from_yaml_ops(yaml_ops)
         assert back[0]["type"] == "click"
         assert back[0]["value"] == ""
 
@@ -112,7 +99,7 @@ class TestFormatConversionRoundTrip:
 # ═══════════════════════════════════════════════════════════════════
 
 class TestBrowserOpsTypeCoverage:
-    """Cover all known browser op types through _convert_browser_op and ops_to_yaml."""
+    """Cover all known browser op types through PipelineStore format conversion."""
 
     @pytest.mark.parametrize("op_type,yaml_input,expected_internal", [
         ("goto", {"goto": "https://x.com"}, {"type": "goto", "value": "https://x.com"}),
@@ -122,38 +109,36 @@ class TestBrowserOpsTypeCoverage:
         ("js", {"js": "console.log(1)"}, {"type": "js", "value": "console.log(1)"}),
     ])
     def test_yaml_to_internal(self, op_type, yaml_input, expected_internal):
-        result = _convert_browser_op(yaml_input)
+        result = PipelineStore._from_yaml_ops([yaml_input])[0]
         assert result == expected_internal
         assert result["type"] == op_type
 
     def test_meta_key_retry_roundtrip(self):
-        """retry and optional meta keys survive round-trip."""
         yaml_input = {"goto": "https://x.com", "retry": 3, "optional": True}
-        internal = _convert_browser_op(yaml_input)
+        internal = PipelineStore._from_yaml_ops([yaml_input])[0]
         assert internal == {"type": "goto", "value": "https://x.com", "retry": 3, "optional": True}
-        yaml_back = ops_to_yaml([internal])
+        yaml_back = PipelineStore._to_yaml_ops([internal])
         assert yaml_back[0] == {"goto": "https://x.com", "retry": 3, "optional": True}
 
     def test_meta_key_only_retry_roundtrip(self):
         yaml_input = {"click": "#btn", "retry": 2}
-        internal = _convert_browser_op(yaml_input)
+        internal = PipelineStore._from_yaml_ops([yaml_input])[0]
         assert internal == {"type": "click", "value": "#btn", "retry": 2}
-        yaml_back = ops_to_yaml([internal])
+        yaml_back = PipelineStore._to_yaml_ops([internal])
         assert yaml_back[0] == {"click": "#btn", "retry": 2}
 
     def test_already_internal_format_passthrough(self):
-        """_convert_browser_op should pass through already-internal format."""
         internal = {"type": "goto", "value": "https://x.com", "retry": 1}
-        result = _convert_browser_op(internal)
+        result = PipelineStore._from_yaml_ops([internal])[0]
         assert result == internal
 
     def test_empty_op_converts_to_empty(self):
-        result = _convert_browser_op({})
-        assert result == {}
+        result = PipelineStore._from_yaml_ops([{}])
+        assert result == [{}]
 
 
 # ═══════════════════════════════════════════════════════════════════
-# 3. PipelineYaml load → model_dump → yaml_text → load round-trip
+# 3. PipelineYaml validate → to_yaml → validate round-trip
 # ═══════════════════════════════════════════════════════════════════
 
 SAMPLE_YAML_TEXT = textwrap.dedent("""\
@@ -186,39 +171,36 @@ SAMPLE_YAML_TEXT = textwrap.dedent("""\
 
 
 class TestPipelineLoadDumpRoundTrip:
-    """Test that loading YAML, dumping it, and re-loading produces equivalent data."""
+    """Test that PipelineStore.validate + to_yaml produces equivalent data."""
 
-    def test_load_from_yaml_text(self):
-        pipeline = PipelineYaml.model_validate(yaml.safe_load(SAMPLE_YAML_TEXT))
+    def test_from_yaml_converts_to_internal_format(self):
+        """PipelineStore.from_yaml should convert browser_ops to internal format."""
+        pipeline = PipelineStore.from_yaml(SAMPLE_YAML_TEXT)
         assert pipeline.name == "roundtrip_test"
         assert len(pipeline.steps) == 4
 
-        assert pipeline.steps[0].browser_ops == [{"goto": "https://example.com"}]
-        assert pipeline.steps[1].browser_ops == [{"fill": {"selector": "#q", "value": "test"}}]
+        assert pipeline.steps[0].browser_ops == [{"type": "goto", "value": "https://example.com"}]
+        assert pipeline.steps[1].browser_ops == [{"type": "fill", "selector": "#q", "value": "test"}]
         assert pipeline.steps[2].tool_name == "my_tool"
         assert pipeline.steps[3].goal_description == "Analyze results"
 
-    def test_dump_with_exclude_defaults(self):
-        """Snapshot: what _dump_pipeline_yaml removes with exclude_defaults=True."""
-        pipeline = PipelineYaml.model_validate(yaml.safe_load(SAMPLE_YAML_TEXT))
-        yaml_str = _dump_pipeline_yaml(pipeline)
+    def test_dump_strips_defaults(self):
+        """PipelineStore.to_yaml removes default values via _strip_defaults."""
+        pipeline = PipelineStore.from_yaml(SAMPLE_YAML_TEXT)
+        yaml_str = PipelineStore.to_yaml(pipeline)
 
         assert "name: roundtrip_test" in yaml_str
         assert "goto: https://example.com" in yaml_str
-        # system_prompt default "" should NOT appear
         assert "system_prompt" not in yaml_str
 
     def test_dump_reload_semantic_equivalence(self, tmp_path):
-        """Dump → write to file → reload → to_step_def produces same StepDef."""
-        pipeline = PipelineYaml.model_validate(yaml.safe_load(SAMPLE_YAML_TEXT))
-
-        yaml_str = _dump_pipeline_yaml(pipeline)
+        pipeline = PipelineStore.from_yaml(SAMPLE_YAML_TEXT)
+        yaml_str = PipelineStore.to_yaml(pipeline)
         path = tmp_path / "test_pipe" / "pipeline.yaml"
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(yaml_str, encoding="utf-8")
 
-        reloaded_raw = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
-        reloaded = PipelineYaml.model_validate(reloaded_raw)
+        reloaded = PipelineStore.validate(path.read_text(encoding="utf-8"))
 
         assert reloaded.name == pipeline.name
         assert reloaded.description == pipeline.description
@@ -230,17 +212,15 @@ class TestPipelineLoadDumpRoundTrip:
             assert orig.description == reload.description
 
     def test_dump_reload_to_step_def_equivalence(self, tmp_path):
-        """The StepDef produced before and after dump+reload should be identical."""
-        pipeline = PipelineYaml.model_validate(yaml.safe_load(SAMPLE_YAML_TEXT))
+        pipeline = PipelineStore.from_yaml(SAMPLE_YAML_TEXT)
         original_defs = [s.to_step_def() for s in pipeline.steps]
 
-        yaml_str = _dump_pipeline_yaml(pipeline)
+        yaml_str = PipelineStore.to_yaml(pipeline)
         path = tmp_path / "test_pipe" / "pipeline.yaml"
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(yaml_str, encoding="utf-8")
 
-        reloaded_raw = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
-        reloaded = PipelineYaml.model_validate(reloaded_raw)
+        reloaded = PipelineStore.validate(path.read_text(encoding="utf-8"))
         reloaded_defs = [s.to_step_def() for s in reloaded.steps]
 
         for orig_sd, reload_sd in zip(original_defs, reloaded_defs):
@@ -253,29 +233,25 @@ class TestPipelineLoadDumpRoundTrip:
 
 
 # ═══════════════════════════════════════════════════════════════════
-# 4. exclude_defaults 快照测试 — 记录当前输出行为
+# 4. _strip_defaults 快照测试 — 替代 exclude_defaults=True
 # ═══════════════════════════════════════════════════════════════════
 
-class TestExcludeDefaultsSnapshot:
-    """Document what exclude_defaults=True currently removes from output."""
+class TestStripDefaults:
+    """Document what PipelineStore._strip_defaults removes from output."""
 
     def test_default_fields_excluded(self):
-        """Top-level defaults (system_prompt, url_aliases, required_params) excluded."""
         pipeline = PipelineYaml(
             name="snap_test",
             steps=[
                 StepYaml(name="s1", browser_ops=[{"goto": "https://x.com"}]),
             ],
         )
-        yaml_str = _dump_pipeline_yaml(pipeline)
-
-        # Top-level default fields should NOT appear
-        assert "system_prompt" not in yaml_str, "default system_prompt='' should be excluded"
-        assert "url_aliases" not in yaml_str, "default url_aliases={} should be excluded"
-        assert "required_params" not in yaml_str, "default required_params=[] should be excluded"
+        yaml_str = PipelineStore.to_yaml(pipeline)
+        assert "system_prompt" not in yaml_str
+        assert "url_aliases" not in yaml_str
+        assert "required_params" not in yaml_str
 
     def test_description_empty_excluded(self):
-        """Pipeline description='' is excluded, but step description='x' must remain."""
         pipeline = PipelineYaml(
             name="snap_test",
             description="",
@@ -284,146 +260,64 @@ class TestExcludeDefaultsSnapshot:
                 StepYaml(name="s2", description="", browser_ops=[{"click": "y"}]),
             ],
         )
-        dump = pipeline.model_dump(exclude_defaults=True)
-        # Pipeline-level description="" → excluded
-        assert "description" not in dump, dump
-        # Step-level: s1 has non-default desc → present; s2 has default → excluded
-        assert dump["steps"][0]["description"] == "keep_me"
-        assert "description" not in dump["steps"][1]
+        data = pipeline.model_dump()
+        stripped = PipelineStore._strip_defaults(data)
+        assert "description" not in stripped
+        assert stripped["steps"][0]["description"] == "keep_me"
+        assert "description" not in stripped["steps"][1]
 
     def test_empty_params_excluded(self):
-        """Params={} in a step is excluded by exclude_defaults."""
-        step = StepYaml(
-            name="s1",
-            browser_ops=[{"goto": "x"}],
-            params={},
-        )
+        step = StepYaml(name="s1", browser_ops=[{"goto": "x"}], params={})
         pipeline = PipelineYaml(name="test", steps=[step])
-        dump = pipeline.model_dump(exclude_defaults=True)
-        assert "params" not in dump["steps"][0]
+        data = pipeline.model_dump()
+        stripped = PipelineStore._strip_defaults(data)
+        assert "params" not in stripped["steps"][0]
 
     def test_empty_input_schema_excluded(self):
-        step = StepYaml(
-            name="s1",
-            browser_ops=[{"goto": "x"}],
-            input_schema={},
-            output_schema={},
-        )
+        step = StepYaml(name="s1", browser_ops=[{"goto": "x"}], input_schema={}, output_schema={})
         pipeline = PipelineYaml(name="test", steps=[step])
-        dump = pipeline.model_dump(exclude_defaults=True)
-        assert "input_schema" not in dump["steps"][0]
-        assert "output_schema" not in dump["steps"][0]
+        data = pipeline.model_dump()
+        stripped = PipelineStore._strip_defaults(data)
+        assert "input_schema" not in stripped["steps"][0]
+        assert "output_schema" not in stripped["steps"][0]
 
     def test_empty_depends_on_excluded(self):
-        step = StepYaml(
-            name="s1",
-            description="no deps",
-            browser_ops=[{"goto": "x"}],
-            depends_on=[],
-        )
+        step = StepYaml(name="s1", description="no deps", browser_ops=[{"goto": "x"}], depends_on=[])
         pipeline = PipelineYaml(name="test", steps=[step])
-        yaml_str = _dump_pipeline_yaml(pipeline)
-
-        assert "depends_on" not in yaml_str, "empty list depends_on should be excluded"
+        yaml_str = PipelineStore.to_yaml(pipeline)
+        assert "depends_on" not in yaml_str
 
     def test_non_default_values_preserved(self):
         step = StepYaml(
-            name="s1",
-            description="has deps",
-            browser_ops=[{"goto": "x"}],
-            depends_on=["s0"],
-            params={"format": "csv"},
+            name="s1", description="has deps", browser_ops=[{"goto": "x"}],
+            depends_on=["s0"], params={"format": "csv"},
         )
         pipeline = PipelineYaml(name="test", steps=[step])
-        yaml_str = _dump_pipeline_yaml(pipeline)
+        yaml_str = PipelineStore.to_yaml(pipeline)
 
         assert "depends_on" in yaml_str
         assert "s0" in yaml_str
         assert "params" in yaml_str
         assert "format" in yaml_str
 
-    def test_model_dump_without_exclude_shows_all(self):
-        """model_dump() without exclude_defaults includes default values."""
-        step = StepYaml(
-            name="s1",
-            description="test",
-            browser_ops=[{"goto": "x"}],
-        )
+    def test_strip_defaults_behavior(self):
+        step = StepYaml(name="s1", description="test", browser_ops=[{"goto": "x"}])
         pipeline = PipelineYaml(name="test", steps=[step])
-        dump = pipeline.model_dump()
-        assert dump["system_prompt"] == ""
-        assert dump["url_aliases"] == {}
-        assert dump["required_params"] == []
+        data = pipeline.model_dump()
+        stripped = PipelineStore._strip_defaults(data)
+        assert "system_prompt" not in stripped
+        assert "url_aliases" not in stripped
+        assert "required_params" not in stripped
 
 
 # ═══════════════════════════════════════════════════════════════════
-# 5. to_step_def 当前行为 — 确认内部格式转换在 to_step_def 中
+# 5. PipelineStore.load 返回内部格式 browser_ops
 # ═══════════════════════════════════════════════════════════════════
 
-class TestToStepDefCurrentBehavior:
-    """Document what to_step_def currently does — format conversion lives here now."""
+class TestPipelineStoreLoad:
+    """PipelineStore.load returns internal-format browser_ops."""
 
-    def test_to_step_def_converts_goto(self):
-        step = StepYaml.model_validate({
-            "name": "open",
-            "browser_ops": [{"goto": "https://example.com"}],
-        })
-        sd = step.to_step_def()
-        assert sd.browser_ops == [{"type": "goto", "value": "https://example.com"}]
-
-    def test_to_step_def_converts_fill(self):
-        step = StepYaml.model_validate({
-            "name": "search",
-            "browser_ops": [{"fill": {"selector": "#q", "value": "hello"}}],
-        })
-        sd = step.to_step_def()
-        assert sd.browser_ops == [{"type": "fill", "selector": "#q", "value": "hello"}]
-
-    def test_to_step_def_converts_with_meta_keys(self):
-        step = StepYaml.model_validate({
-            "name": "click_retry",
-            "browser_ops": [{"click": "#btn", "retry": 3, "optional": True}],
-        })
-        sd = step.to_step_def()
-        assert sd.browser_ops == [
-            {"type": "click", "value": "#btn", "retry": 3, "optional": True}
-        ]
-
-    def test_to_step_def_type_detection(self):
-        """Step type is inferred correctly from field presence."""
-        browser_step = StepYaml.model_validate({
-            "name": "s1",
-            "browser_ops": [{"goto": "x"}],
-        })
-        tool_step = StepYaml.model_validate({
-            "name": "s2",
-            "tool_name": "extract",
-        })
-        goal_step = StepYaml.model_validate({
-            "name": "s3",
-            "goal_description": "do it",
-        })
-
-        assert browser_step.to_step_def().step_type == "browser"
-        assert tool_step.to_step_def().step_type == "tool"
-        assert goal_step.to_step_def().step_type == "goal"
-
-    def test_to_step_def_no_type_fields_defaults_goal(self):
-        step = StepYaml.model_validate({"name": "bare"})
-        sd = step.to_step_def()
-        assert sd.step_type == "goal"
-        assert sd.is_goal is True
-
-
-# ═══════════════════════════════════════════════════════════════════
-# 6. _load_pipeline_yaml 与 browser_ops 原始格式
-# ═══════════════════════════════════════════════════════════════════
-
-class TestLoadPipelineYamlBrowserOps:
-    """_load_pipeline_yaml returns YAML-format browser_ops — NOT internal format."""
-
-    def test_browser_ops_is_yaml_format_after_load(self, tmp_path):
-        """After loading, StepYaml.browser_ops is still in YAML single-key format."""
+    def test_browser_ops_is_internal_format_after_load(self, tmp_path):
         dir_path = tmp_path / "test_pipe"
         dir_path.mkdir(parents=True, exist_ok=True)
         yaml_text = textwrap.dedent("""\
@@ -439,43 +333,149 @@ class TestLoadPipelineYamlBrowserOps:
         pipe_path = dir_path / "pipeline.yaml"
         pipe_path.write_text(yaml_text, encoding="utf-8")
 
-        import yak_browser_use.engine._harness.pipeline_tools as pt
-        with pytest.MonkeyPatch().context() as mp:
-            mp.setattr(pt, "_WORKSPACES_DIR", tmp_path)
-            validated = _load_pipeline_yaml("test_pipe")
+        store = PipelineStore(workspaces_root=tmp_path)
+        validated = store.load("test_pipe")
 
         step = validated.steps[0]
         assert step.browser_ops == [
-            {"goto": "https://x.com"},
-            {"fill": {"selector": "#q", "value": "text"}},
+            {"type": "goto", "value": "https://x.com"},
+            {"type": "fill", "selector": "#q", "value": "text"},
         ]
-        # CONFIRM: this is YAML format, not internal format
-        assert "type" not in step.browser_ops[0]
-        assert "goto" in step.browser_ops[0]
+        assert "type" in step.browser_ops[0]
+        assert "goto" not in step.browser_ops[0]
+
+    def test_load_raises_on_missing(self):
+        store = PipelineStore()
+        with pytest.raises(FileNotFoundError):
+            store.load("nonexistent_pipeline")
 
 
 # ═══════════════════════════════════════════════════════════════════
-# 7. PipelineYaml.model_validate 字段默认值
+# 6. PipelineStore.load_meta
 # ═══════════════════════════════════════════════════════════════════
 
-class TestModelValidateDefaults:
-    """Pydantic fills default values after validation."""
+class TestPipelineStoreLoadMeta:
+    """PipelineStore.load_meta returns lightweight PipelineMeta."""
 
-    def test_minimal_validate_fills_defaults(self):
-        pipeline = PipelineYaml.model_validate({
-            "name": "min",
-            "steps": [{"name": "s1"}],
-        })
-        assert pipeline.description == ""
-        assert pipeline.required_params == []
-        assert pipeline.system_prompt == ""
-        assert pipeline.url_aliases == {}
+    def test_load_meta_basic(self, tmp_path):
+        dir_path = tmp_path / "test_meta"
+        dir_path.mkdir(parents=True, exist_ok=True)
+        yaml_text = textwrap.dedent("""\
+            name: test_meta
+            description: A test
+            steps:
+            - name: s1
+              browser_ops:
+              - goto: x
+            - name: s2
+              browser_ops:
+              - click: y
+        """)
+        pipe_path = dir_path / "pipeline.yaml"
+        pipe_path.write_text(yaml_text, encoding="utf-8")
 
-    def test_step_minimal_fills_defaults(self):
-        step = StepYaml.model_validate({"name": "s1"})
-        assert step.description == ""
-        assert step.depends_on == []
-        assert step.browser_ops is None
-        assert step.tool_name is None
-        assert step.goal_description is None
-        assert step.params == {}
+        store = PipelineStore(workspaces_root=tmp_path)
+        meta = store.load_meta("test_meta")
+        assert meta.name == "test_meta"
+        assert meta.description == "A test"
+        assert meta.step_count == 2
+
+    def test_load_meta_handles_parse_error(self, tmp_path):
+        dir_path = tmp_path / "bad_meta"
+        dir_path.mkdir(parents=True, exist_ok=True)
+        pipe_path = dir_path / "pipeline.yaml"
+        pipe_path.write_text("{{invalid yaml", encoding="utf-8")
+
+        store = PipelineStore(workspaces_root=tmp_path)
+        meta = store.load_meta("bad_meta")
+        assert meta.description == "(parse error)"
+        assert meta.step_count == 0
+
+
+# ═══════════════════════════════════════════════════════════════════
+# 7. PipelineStore CRUD: update_step, add_step, remove_step
+# ═══════════════════════════════════════════════════════════════════
+
+class TestPipelineStoreCrud:
+    """PipelineStore add/update/remove step operations."""
+
+    def test_update_step_browser_ops(self):
+        pipeline = PipelineStore.from_yaml(SAMPLE_YAML_TEXT)
+        store = PipelineStore()
+        store.update_step(pipeline, "step_1", {"browser_ops": [{"click": "#btn"}]})
+        assert pipeline.steps[0].browser_ops == [{"type": "click", "value": "#btn"}]
+
+    def test_update_step_description_and_depends(self):
+        pipeline = PipelineStore.from_yaml(SAMPLE_YAML_TEXT)
+        store = PipelineStore()
+        store.update_step(pipeline, "step_1", {"description": "updated", "depends_on": ["step_0"]})
+        assert pipeline.steps[0].description == "updated"
+        assert pipeline.steps[0].depends_on == ["step_0"]
+
+    def test_add_step(self):
+        pipeline = PipelineStore.from_yaml(SAMPLE_YAML_TEXT)
+        store = PipelineStore()
+        new_step = StepYaml(name="new_step", browser_ops=[{"goto": "https://new.com"}])
+        store.add_step(pipeline, new_step)
+        assert len(pipeline.steps) == 5
+        assert pipeline.steps[4].name == "new_step"
+        assert pipeline.steps[4].browser_ops == [{"type": "goto", "value": "https://new.com"}]
+
+    def test_add_step_after(self):
+        pipeline = PipelineStore.from_yaml(SAMPLE_YAML_TEXT)
+        store = PipelineStore()
+        new_step = StepYaml(name="after_step", browser_ops=[{"scroll": 100}])
+        store.add_step(pipeline, new_step, after="step_1")
+        assert len(pipeline.steps) == 5
+        assert pipeline.steps[1].name == "after_step"
+
+    def test_add_step_duplicate_raises(self):
+        pipeline = PipelineStore.from_yaml(SAMPLE_YAML_TEXT)
+        store = PipelineStore()
+        dup = StepYaml(name="step_1", browser_ops=[{"goto": "x"}])
+        with pytest.raises(ValueError, match="already exists"):
+            store.add_step(pipeline, dup)
+
+    def test_remove_step(self):
+        pipeline = PipelineStore.from_yaml(SAMPLE_YAML_TEXT)
+        store = PipelineStore()
+        store.remove_step(pipeline, "step_1")
+        assert len(pipeline.steps) == 3
+        assert pipeline.steps[0].name == "step_2"
+
+    def test_remove_step_cleans_depends_on(self):
+        pipeline = PipelineStore.from_yaml(SAMPLE_YAML_TEXT)
+        store = PipelineStore()
+        store.remove_step(pipeline, "step_1")
+        assert "step_1" not in pipeline.steps[0].depends_on
+
+
+# ═══════════════════════════════════════════════════════════════════
+# 8. PipelineStore.save round-trip via file
+# ═══════════════════════════════════════════════════════════════════
+
+class TestPipelineStoreSave:
+    """PipelineStore.save writes to disk and can be read back."""
+
+    def test_save_and_reload(self, tmp_path):
+        pipeline = PipelineStore.from_yaml(SAMPLE_YAML_TEXT)
+        store = PipelineStore(workspaces_root=tmp_path)
+        store.save("save_test", pipeline)
+
+        reloaded = store.load("save_test")
+        assert reloaded.name == pipeline.name
+        assert len(reloaded.steps) == len(pipeline.steps)
+        assert reloaded.steps[0].browser_ops == pipeline.steps[0].browser_ops
+
+
+# ═══════════════════════════════════════════════════════════════════
+# 9. PipelineStore.ops_to_yaml 公开工具
+# ═══════════════════════════════════════════════════════════════════
+
+class TestOpsToYamlPublic:
+    """PipelineStore.ops_to_yaml is a public utility."""
+
+    def test_ops_to_yaml(self):
+        internal = [{"type": "goto", "value": "https://x.com"}]
+        yaml_ops = PipelineStore.ops_to_yaml(internal)
+        assert yaml_ops == [{"goto": "https://x.com"}]

@@ -267,8 +267,7 @@ def model_actions_to_ops(model_actions) -> list[dict]:
 
 # ── Write-back to pipeline.yaml ──
 
-import yaml as _yaml
-from yak_browser_use.compiler.schema import ops_to_yaml as _ops_to_yaml
+from yak_browser_use.compiler.pipeline_store import PipelineStore
 
 
 def write_pipeline_learned(
@@ -278,7 +277,8 @@ def write_pipeline_learned(
 ) -> str:
     """Write newly learned browser_ops back into a pipeline.yaml step.
 
-    Parses the YAML, finds the step by name, adds/replaces browser_ops,
+    Parses the YAML via PipelineStore, finds the step by name, sets
+    browser_ops (already internal format — no conversion needed on load),
     and returns the updated YAML text.
 
     Args:
@@ -289,20 +289,19 @@ def write_pipeline_learned(
     Returns:
         Updated pipeline.yaml text.
     """
-    data = _yaml.safe_load(yaml_text)
-    if not isinstance(data, dict) or "steps" not in data:
+    try:
+        pipeline = PipelineStore.from_yaml(yaml_text)
+    except Exception:
         logger.warning("write_pipeline_learned: invalid YAML structure, returning original")
         return yaml_text
 
-    for step in data["steps"]:
-        if not isinstance(step, dict):
-            continue
-        if step.get("name") == step_name:
-            step["browser_ops"] = _ops_to_yaml(new_browser_ops)
+    for step in pipeline.steps:
+        if step.name == step_name:
+            step.browser_ops = new_browser_ops
             logger.debug("write_pipeline_learned: updated step '%s'", step_name)
             break
     else:
         logger.warning("write_pipeline_learned: step '%s' not found, returning original", step_name)
         return yaml_text
 
-    return _yaml.dump(data, default_flow_style=False, allow_unicode=True, sort_keys=False)
+    return PipelineStore.to_yaml(pipeline)
