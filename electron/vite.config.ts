@@ -10,6 +10,8 @@ export default defineConfig({
     react(),
     monacoEditorPlugin({
       languageWorkers: ['editorWorkerService'],
+      customDistPath: (_root, _outDir, base) =>
+        path.resolve(__dirname, 'dist/renderer', base || '', 'monacoeditorwork'),
     }),
     electron([
       {
