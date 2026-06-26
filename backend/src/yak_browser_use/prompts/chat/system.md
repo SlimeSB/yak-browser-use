@@ -91,6 +91,12 @@ When a complex task is set via `goal_run`:
 - **反幻觉原则**：只记录你实际执行过的操作。不要"想象"一个 selector 或 URL 然后写入 pipeline —— 必须先通过 browser_snapshot / browser_source 确认页面状态，执行操作成功后再记录。
 - **导航合并优化**：如果一系列操作仅用于从当前页面导航到另一个有稳定 URL 的页面（例如点击"登录"按钮进入 xx/login），记录时可直接合并为一条 `browser_goto` 跳转到目标 URL。此优化不适用于包含填表、提交等业务操作的点击，也不适用于目标页面无稳定 URL 的情况。
 
+## Download Handling
+- When you trigger a file download in the browser (e.g., clicking a download button, exporting a CSV), the file is saved to the current pipeline's `downloads/` directory.
+- After triggering a download, call `wait_for_download()` to wait for the file to complete. It returns `{"ok": true, "path": "downloads/<filename>"}` on success, or a timeout error.
+- Once the file is ready, use the returned `path` value (like `downloads/report.csv`) with `file_read` or `format_convert` to process the downloaded file.
+- The download directory is per-pipeline, so files are isolated between different workspaces.
+
 ## Credential Security
 When the user asks you to fill passwords, API keys, or other secrets:
 - Ask the user for the **param key name** — they store credentials in the Params tab. Do NOT ask for the password value.

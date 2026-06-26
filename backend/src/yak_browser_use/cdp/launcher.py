@@ -11,12 +11,14 @@ import asyncio
 import locale
 import os
 import platform
+import shutil
 import socket
 import subprocess
 import tempfile
 from pathlib import Path
 from typing import Any
 
+from yak_browser_use.utils._path import temp_root
 from yak_browser_use.utils.logging import get_logger
 
 logger = get_logger(__name__)
@@ -26,6 +28,7 @@ _user_chrome_process: Any = None
 _playwright_instance: Any = None
 _playwright_browser: Any = None
 _launched_pids: set[int] = set()
+_temp_user_data_dir: str | None = None  # set when profile_name not given; cleaned on shutdown
 
 # Base directory for isolated profiles
 _ISO_PROFILES_DIR = Path.home() / ".yak-browser-use" / "profiles"
@@ -185,7 +188,7 @@ async def launch_isolated_chrome(
 
     Returns the ``webSocketDebuggerUrl``.
     """
-    global _playwright_instance, _playwright_browser, _user_chrome_process
+    global _playwright_instance, _playwright_browser, _user_chrome_process, _temp_user_data_dir
 
     logger.info("Launching isolated browser, profile=%s", profile_name or "temp")
 
@@ -207,7 +210,10 @@ async def launch_isolated_chrome(
         user_data_dir = str(get_isolated_profile_dir(profile_name))
         os.makedirs(user_data_dir, exist_ok=True)
     else:
-        user_data_dir = tempfile.mkdtemp(prefix="ybu_chrome_")
+        ts = str(int(__import__("time").time()))
+        user_data_dir = str(temp_root() / f"ybu_chrome_{ts}")
+        os.makedirs(user_data_dir, exist_ok=True)
+        _temp_user_data_dir = user_data_dir
 
     # Terminate any previously launched process before overwriting
     if _user_chrome_process is not None:
@@ -449,7 +455,7 @@ async def restart_user_chrome() -> str:
 
 async def cleanup_isolated() -> None:
     """Clean up all browser processes started by this module."""
-    global _playwright_instance, _playwright_browser, _user_chrome_process
+    global _playwright_instance, _playwright_browser, _user_chrome_process, _temp_user_data_dir
 
     if _user_chrome_process is not None:
         logger.info("Terminating user Chrome process")
@@ -473,6 +479,13 @@ async def cleanup_isolated() -> None:
         except Exception:
             logger.debug("cleanup_isolated: failed to stop Playwright instance", exc_info=True)
         _playwright_instance = None
+
+    if _temp_user_data_dir:
+        temp_path = Path(_temp_user_data_dir)
+        if temp_path.exists():
+            logger.info("Removing temp user data dir: %s", _temp_user_data_dir)
+            shutil.rmtree(temp_path, ignore_errors=True)
+        _temp_user_data_dir = None
 
     _launched_pids.clear()
 

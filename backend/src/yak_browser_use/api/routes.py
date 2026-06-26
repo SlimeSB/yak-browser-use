@@ -288,6 +288,7 @@ def register_all_routes(app: FastAPI) -> None:
         profile_name = request.get("profile_name")
         ws_url = request.get("ws_url")
         highlight_mode = request.get("highlight_mode", "a11y")
+        pipeline_name = request.get("pipeline_name")
         logger.info("Chrome connect requested: mode=%s profile=%s highlight=%s", mode, profile_name or "none", highlight_mode)
 
         if engine_state.running_pipeline is not None:
@@ -303,7 +304,11 @@ def register_all_routes(app: FastAPI) -> None:
                 from yak_browser_use.cdp.discover import discover_ws_url
                 ws_url = await discover_ws_url(profile_name=profile_name)
 
-            actual_ws = await engine_state.connect_chrome(ws_url)
+            if pipeline_name is None:
+                service = await _get_service()
+                pipeline_name = service.sessions.active_pipeline
+
+            actual_ws = await engine_state.connect_chrome(ws_url, pipeline_name=pipeline_name)
 
             # 监控 ybu 自己启动的浏览器进程（isolated mode），Edge 关窗口后进程可能
             # 留在后台，但只要进程最终退出就能触发断开
@@ -411,9 +416,12 @@ def register_all_routes(app: FastAPI) -> None:
             if not ws_url:
                 raise RuntimeError("Cannot restart Chrome")
 
+            service = await _get_service()
+            pipeline_name = service.sessions.active_pipeline
+
             await engine_state.disconnect_chrome()
 
-            actual_ws = await engine_state.connect_chrome(ws_url)
+            actual_ws = await engine_state.connect_chrome(ws_url, pipeline_name=pipeline_name)
 
             await _inject_initial_highlights()
 
@@ -1006,6 +1014,13 @@ def register_all_routes(app: FastAPI) -> None:
         service = await _get_service()
         pipeline_name = request.get("pipeline_name", "")
         sessions = service.switch_session(pipeline_name)
+
+        if engine_state.bridge is not None:
+            try:
+                await engine_state.bridge.set_download_pipeline(pipeline_name)
+            except Exception:
+                logger.debug("session_switch: set_download_pipeline failed", exc_info=True)
+
         return JSONResponse({"sessions": sessions})
 
     @app.get("/api/session/{pipeline_name}/list")

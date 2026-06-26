@@ -303,7 +303,7 @@ class TestFileHandlers:
             mock_read.return_value = {"ok": True, "result": "content"}
             result = await _file_read_handler({"path": "/tmp/test.txt"}, ToolContext())
             assert result["ok"] is True
-            mock_read.assert_called_once_with(path="/tmp/test.txt")
+            mock_read.assert_called_once_with(pipeline=None, path="/tmp/test.txt")
 
     @pytest.mark.asyncio
     async def test_file_write_calls_through(self):

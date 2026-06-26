@@ -41,13 +41,15 @@ class _EngineState:
 
     # ── Chrome connection  ──────────────────────────────────────────
 
-    async def connect_chrome(self, ws_url: str | None = None) -> str:
+    async def connect_chrome(self, ws_url: str | None = None, pipeline_name: str = "__chat__") -> str:
         """Connect to Chrome via PlaywrightBridge (CDP).
 
         Parameters
         ----------
         ws_url:
             Optional explicit WebSocket URL. If omitted, auto-discovers.
+        pipeline_name:
+            Pipeline name for per-pipeline download isolation.
 
         Returns
         -------
@@ -66,7 +68,7 @@ class _EngineState:
             if ws_url is None:
                 raise RuntimeError("Cannot discover Chrome debug URL — is Chrome running with --remote-debugging-port?")
 
-            bridge = PlaywrightBridge(ws_url)
+            bridge = PlaywrightBridge(ws_url, pipeline_name=pipeline_name)
             bridge._on_disconnect_cb = self._on_bridge_disconnected
             await bridge.start()
             bridge.start_health_check()

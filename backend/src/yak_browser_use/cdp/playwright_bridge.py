@@ -20,9 +20,12 @@ import base64
 import json as _json
 import logging
 import uuid
+from pathlib import Path
 from typing import Any, Callable
 
 from playwright.async_api import async_playwright, Browser, BrowserContext, Page
+
+from yak_browser_use.workspace.manager import WORKSPACES_ROOT
 
 logger = logging.getLogger(__name__)
 
@@ -681,8 +684,9 @@ class PlaywrightBridge:
     - Clipboard → ``page.evaluate()``
     """
 
-    def __init__(self, cdp_url: str = "http://127.0.0.1:9222") -> None:
+    def __init__(self, cdp_url: str = "http://127.0.0.1:9222", pipeline_name: str = "__chat__") -> None:
         self._cdp_url = cdp_url
+        self._pipeline_name = pipeline_name
         self._playwright: Any = None
         self._browser: Browser | None = None
         self._context: BrowserContext | None = None
@@ -702,6 +706,7 @@ class PlaywrightBridge:
         self._health_check_task: asyncio.Task | None = None
         self._process_watch_task: asyncio.Task | None = None
         self._disconnected: bool = False
+        self._seen_pages: set[Page] = set()
 
     # ------------------------------------------------------------------
     # Lifecycle
@@ -745,6 +750,13 @@ class PlaywrightBridge:
         for p in self._context.pages:
             if p is not self._page:
                 await self.ensure_highlights(p)
+        # 为所有已有页面设置 CDP download behavior
+        for p in self._context.pages:
+            ok = await self._set_page_download_behavior(p)
+            self._seen_pages.add(p)
+            if not ok:
+                self._bind_download_fallback(p)
+
         # 自动扫描当前页面，让开局就有高亮（不依赖 chat tool call）
         await self._auto_scan()
         self._start_highlight_guard()
@@ -755,6 +767,7 @@ class PlaywrightBridge:
         logger.info("PlaywrightBridge stopping")
         self._stop_event.set()
         self._disconnected = True
+        self._seen_pages.clear()
         self._stop_health_check()
         if self._process_watch_task is not None:
             self._process_watch_task.cancel()
@@ -804,6 +817,13 @@ class PlaywrightBridge:
                 await page.evaluate(_HIGHLIGHT_BOOTSTRAP)
         except Exception:
             logger.debug("_on_new_page highlight injection failed", exc_info=True)
+
+        # 设置 CDP download behavior
+        ok = await self._set_page_download_behavior(page)
+        self._seen_pages.add(page)
+        if not ok:
+            self._bind_download_fallback(page)
+
         # 新标签页自动设为活动页并扫描（让用户点链接后马上看到高亮）
         self._page = page
         await self._auto_scan()
@@ -812,6 +832,7 @@ class PlaywrightBridge:
         """当页面被关闭时自动切换到其他可用页面。"""
         # 清理 per-page cache
         self._per_page_elements.pop(id(page), None)
+        self._seen_pages.discard(page)
         if self._page is not page:
             return
         logger.info("current page closed, switching to another tab")
@@ -849,6 +870,7 @@ class PlaywrightBridge:
         self._page = None
         self._context = None
         self._browser = None
+        self._seen_pages.clear()
         await self._fire_disconnect_cb()
 
     async def _fire_disconnect_cb(self) -> None:
@@ -859,6 +881,107 @@ class PlaywrightBridge:
                 await cb()
             except Exception:
                 logger.exception("_fire_disconnect_cb: callback failed")
+
+    # ------------------------------------------------------------------
+    # Download directory management
+    # ------------------------------------------------------------------
+
+    async def _set_page_download_behavior(self, page: Page) -> bool:
+        """Set CDP ``Page.setDownloadBehavior`` on *page*.
+
+        Returns True on success, False if CDP command failed (caller
+        should fall back to ``page.on("download")`` + ``save_as()``).
+        """
+        path = self._resolve_download_path()
+        try:
+            cdp_session = await self._context.new_cdp_session(page)
+            await cdp_session.send("Page.setDownloadBehavior", {
+                "behavior": "allow",
+                "downloadPath": str(path),
+            })
+            return True
+        except Exception:
+            logger.warning("CDP setDownloadBehavior failed for page, will fall back to download event", exc_info=True)
+            return False
+
+    def _resolve_download_path(self, pipeline_name: str | None = None) -> Path:
+        """Resolve the download directory for *pipeline_name* (or current).
+
+        Creates the directory if it does not exist.
+        """
+        name = pipeline_name or self._pipeline_name
+        path = WORKSPACES_ROOT / name / "downloads"
+        path.mkdir(parents=True, exist_ok=True)
+        return path
+
+    async def set_download_pipeline(self, pipeline_name: str) -> None:
+        """Switch download directory at runtime for all known pages."""
+        self._pipeline_name = pipeline_name
+        for page in list(self._seen_pages):
+            try:
+                await self._set_page_download_behavior(page)
+            except Exception:
+                logger.debug("set_download_pipeline: failed for page %s", page, exc_info=True)
+
+    def _bind_download_fallback(self, page: Page) -> None:
+        """Fallback: listen for Playwright ``download`` event when CDP fails.
+
+        Saves the downloaded file to the pipeline download directory via
+        ``download.save_as()``.
+        """
+        async def _on_download(download):
+            path = self._resolve_download_path()
+            dest = path / download.suggested_filename
+            try:
+                await download.save_as(dest)
+                logger.info("download fallback: saved %s", dest)
+            except Exception:
+                logger.exception("download fallback: save_as failed for %s", dest)
+
+        page.on("download", _on_download)
+
+    async def wait_for_download(
+        self, timeout: int = 60, pipeline_name: str | None = None
+    ) -> dict:
+        """Poll for a newly completed download file.
+
+        Polls *download_dir* every 500 ms for a new file, then waits
+        1 s and verifies the file size is stable (> 100 bytes).
+
+        Returns ``{"ok": true, "path": "downloads/<filename>"}`` or
+        ``{"ok": false, "error": "timeout"}``.
+
+        Known limitation: does not support concurrent downloads.
+        """
+        target_dir = self._resolve_download_path(pipeline_name)
+        known = set(target_dir.iterdir()) if target_dir.exists() else set()
+
+        deadline = asyncio.get_event_loop().time() + timeout
+        while asyncio.get_event_loop().time() < deadline:
+            await asyncio.sleep(0.5)
+            if not target_dir.exists():
+                continue
+            current = set(target_dir.iterdir())
+            new_files = current - known
+            if not new_files:
+                continue
+
+            candidate = new_files.pop()
+            try:
+                first_stat = candidate.stat()
+                if first_stat.st_size <= 100:
+                    known = current
+                    continue
+                await asyncio.sleep(1.0)
+                second_stat = candidate.stat()
+                if second_stat.st_size == first_stat.st_size:
+                    return {"ok": True, "path": f"downloads/{candidate.name}"}
+                known = current
+            except (OSError, FileNotFoundError):
+                known = current
+                continue
+
+        return {"ok": False, "error": "timeout"}
 
     # ------------------------------------------------------------------
     # Health check — periodic CDP heartbeat

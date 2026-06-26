@@ -21,6 +21,7 @@ async def file_read(
     head: int = 20,
     max_chars: int = 3000,
     encoding: str = "",
+    pipeline: str | None = None,
 ) -> dict[str, Any]:
     """Read a text file and return its content.
 
@@ -29,12 +30,13 @@ async def file_read(
         head: Return first N lines (0 = all lines).
         max_chars: Maximum characters to return.
         encoding: File encoding. Empty = auto-detect (UTF-8 → GBK fallback).
+        pipeline: Pipeline name for downloads/ prefix resolution.
 
     Returns:
         {"ok": True, "result": "<content>"} or {"ok": False, "error": "<message>"}
     """
     try:
-        p = validate_path(path)
+        p = validate_path(path, pipeline=pipeline)
     except ValueError as e:
         return {"ok": False, "error": str(e)}
 

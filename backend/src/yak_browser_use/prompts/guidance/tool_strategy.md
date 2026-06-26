@@ -38,6 +38,14 @@ Typical scenarios:
 ### When to ask the user
 If the user's instruction is ambiguous or has multiple valid interpretations, ask for clarification before acting.
 
+### 浏览器下载文件处理
+浏览器下载的文件写入 `downloads/` 目录。触发下载后必须：
+1. 先调用 `wait_for_download(timeout)` 等待文件就绪，拿到返回的 `downloads/<filename>` 路径
+2. 再用 `file_read(path="downloads/<filename>")` 读取内容
+3. 如需要转换格式，用 `format_convert(source="downloads/<filename>", target="...")`
+
+**注意：** 不先调用 `wait_for_download` 直接 `file_read` 会导致文件不存在错误。
+
 ### 工具间数据传递 (shared_store)
 工具支持通过 `source_key` 和 `_source_key` 在工具之间传递数据，避免大数据绕经 LLM 上下文：
 

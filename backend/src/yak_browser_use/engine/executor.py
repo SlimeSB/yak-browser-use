@@ -962,6 +962,10 @@ def _resolve_path(ref: str, run_dir: Path) -> Path:
         # Resolve relative to workspace root (run_dir/../../data/)
         return run_dir.parents[2] / ref
 
+    # downloads/ prefix → workspace download dir
+    if ref.startswith("downloads/"):
+        return run_dir.parents[2] / ref
+
     # step_key.file_name → run_dir/step_key/file_name
     parts = ref.split(".", 1)
     step_key = parts[0]

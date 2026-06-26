@@ -8,6 +8,7 @@ import tempfile
 from pathlib import Path
 
 from yak_browser_use.tools._path_utils import validate_path
+from yak_browser_use.utils._path import temp_root
 from yak_browser_use.utils.logging import get_logger
 
 logger = get_logger(__name__)
@@ -27,6 +28,7 @@ async def format_convert(
     target: str,
     source_fmt: str = "",
     target_fmt: str = "",
+    pipeline: str | None = None,
 ) -> dict:
     """Convert a file between xlsx/csv/json formats.
 
@@ -35,6 +37,7 @@ async def format_convert(
         target: Target file path.
         source_fmt: Source format (xlsx/csv/json). Empty = sniff from extension.
         target_fmt: Target format (xlsx/csv/json). Empty = sniff from extension.
+        pipeline: Pipeline name for downloads/ prefix resolution.
 
     Returns:
         {"ok": True, "result": "已转换: <target>", "target": "..."} or {"ok": False, "error": "..."}
@@ -50,8 +53,8 @@ async def format_convert(
         return {"ok": False, "error": f"源格式和目标格式相同: {src_fmt}"}
 
     try:
-        src_path = validate_path(source)
-        tgt_path = validate_path(target)
+        src_path = validate_path(source, pipeline=pipeline)
+        tgt_path = validate_path(target, pipeline=pipeline)
 
         if not src_path.exists():
             return {"ok": False, "error": f"源文件不存在: {source}"}
@@ -175,7 +178,9 @@ async def _json_to_csv_delegate(src: Path, tgt: Path) -> None:
 
 
 async def _xlsx_to_json_two_step(src: Path, tgt: Path) -> None:
-    fd, tmp_name = tempfile.mkstemp(suffix=".csv", prefix=f"_fc_{src.stem}_")
+    tmp_root = temp_root()
+    tmp_root.mkdir(parents=True, exist_ok=True)
+    fd, tmp_name = tempfile.mkstemp(suffix=".csv", prefix=f"_fc_{src.stem}_", dir=str(tmp_root))
     os.close(fd)
     tmp_csv = Path(tmp_name)
     try:
@@ -187,7 +192,9 @@ async def _xlsx_to_json_two_step(src: Path, tgt: Path) -> None:
 
 
 async def _json_to_xlsx_two_step(src: Path, tgt: Path) -> None:
-    fd, tmp_name = tempfile.mkstemp(suffix=".csv", prefix=f"_fc_{src.stem}_")
+    tmp_root = temp_root()
+    tmp_root.mkdir(parents=True, exist_ok=True)
+    fd, tmp_name = tempfile.mkstemp(suffix=".csv", prefix=f"_fc_{src.stem}_", dir=str(tmp_root))
     os.close(fd)
     tmp_csv = Path(tmp_name)
     try:

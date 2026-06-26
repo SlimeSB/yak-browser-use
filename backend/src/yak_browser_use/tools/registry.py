@@ -624,6 +624,18 @@ def _build_registry_impl() -> None:
         },
     }, _format_convert_handler)
 
+    # ── wait_for_download ─────────────────────────────────────────────
+
+    registry.register("wait_for_download", {
+        "description": "等待浏览器下载的文件就绪。触发下载操作（点击导出按钮等）后先调用此工具，确认文件稳定后再用 file_read 读取。",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "timeout": {"type": "integer", "description": "最长等待秒数（默认 60）"},
+            },
+        },
+    }, _wait_for_download_handler)
+
     # ── skill_* tools ────────────────────────────────────────────────
 
     _SKILL_SCHEMAS = {
@@ -827,7 +839,7 @@ async def _todo_handler(args: dict, ctx: ToolContext) -> dict:
 
 async def _file_read_handler(args: dict, ctx: ToolContext) -> dict:
     from yak_browser_use.tools.file_read import file_read
-    return await file_read(**args)
+    return await file_read(pipeline=ctx.pipeline_name or None, **args)
 
 
 async def _file_write_handler(args: dict, ctx: ToolContext) -> dict:
@@ -837,7 +849,15 @@ async def _file_write_handler(args: dict, ctx: ToolContext) -> dict:
 
 async def _format_convert_handler(args: dict, ctx: ToolContext) -> dict:
     from yak_browser_use.tools.format_convert import format_convert
-    return await format_convert(**args)
+    return await format_convert(pipeline=ctx.pipeline_name or None, **args)
+
+
+async def _wait_for_download_handler(args: dict, ctx: ToolContext) -> dict:
+    if ctx.cdp_helpers is None:
+        return {"ok": False, "error": "浏览器不可用 — 请确保 CDP 连接已建立"}
+    bridge = ctx.cdp_helpers.bridge if hasattr(ctx.cdp_helpers, "bridge") else ctx.cdp_helpers
+    timeout = args.get("timeout", 60)
+    return await bridge.wait_for_download(timeout=timeout)
 
 
 async def _record_step_handler(args: dict, ctx: ToolContext) -> dict:
