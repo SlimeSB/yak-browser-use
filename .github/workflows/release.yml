@@ -68,7 +68,6 @@ jobs:
         run: uv publish
 
   release-electron:
-    if: ${{ !contains(github.ref_name, 'dev') }}
     runs-on: windows-latest
     permissions:
       contents: write
@@ -83,12 +82,20 @@ jobs:
           cache: "npm"
           cache-dependency-path: electron/package-lock.json
 
+      - name: Extract clean version
+        id: clean-version
+        run: |
+          $tag = "${{ github.ref_name }}" -replace '^v'
+          $parts = $tag.Split('.')
+          $clean = "$($parts[0]).$($parts[1]).$($parts[2])"
+          echo "clean=$clean" >> $env:GITHUB_OUTPUT
+        shell: pwsh
+
       - name: Set version from tag
         working-directory: electron
         run: |
-          $ver = "${{ github.ref_name }}" -replace '^v'
           $json = Get-Content package.json -Raw
-          $json = $json -replace '"version": "[^"]*"', ('"version": "' + $ver + '"')
+          $json = $json -replace '"version": "[^"]*"', ('"version": "' + "${{ steps.clean-version.outputs.clean }}" + '"')
           Set-Content package.json -Value $json
         shell: pwsh
 
@@ -98,10 +105,25 @@ jobs:
           npm ci
           npm run electron:build
 
-      - name: Upload to GitHub Release
+      - name: Upload to GitHub Release (stable)
+        if: ${{ !contains(github.ref_name, 'dev') }}
         uses: softprops/action-gh-release@v3
         with:
+          name: ${{ steps.clean-version.outputs.clean }}
           files: electron/release/*.exe
           generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload to GitHub Release (dev — rolling)
+        if: ${{ contains(github.ref_name, 'dev') }}
+        uses: softprops/action-gh-release@v3
+        with:
+          name: Dev Build
+          tag_name: dev
+          files: electron/release/*.exe
+          prerelease: true
+          make_latest: false
+          allowUpdates: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
