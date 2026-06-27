@@ -315,7 +315,7 @@ class TestFileHandlers:
 
     @pytest.mark.asyncio
     async def test_file_read_missing(self):
-        result = await _file_read_handler({"path": "/nonexistent/file.txt"}, ToolContext())
+        result = await _file_read_handler({"path": "nonexistent_file_xyz.txt"}, ToolContext())
         assert result["ok"] is False
         assert "不存在" in result["error"]
 
@@ -330,11 +330,11 @@ class TestFileHandlers:
         with patch("yak_browser_use.tools.file_write.file_write", new_callable=AsyncMock) as mock_write:
             mock_write.return_value = {"ok": True, "result": "已写入 5 字符"}
             result = await _file_write_handler(
-                {"path": "/tmp/test.txt", "content": "hello"},
+                {"path": "test_output.txt", "content": "hello"},
                 ToolContext(),
             )
             assert result["ok"] is True
-            assert result["path"] == "/tmp/test.txt"
+            assert result["path"] == "test_output.txt"
             assert result["size"] == 5
 
     @pytest.mark.asyncio
