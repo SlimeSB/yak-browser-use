@@ -5,7 +5,7 @@ Prefer these tools for most operations:
 - `browser_goto(url)` — navigate to a URL
 - `browser_click(selector)` — click an element
 - `browser_fill(selector, text)` — fill an input field
-- `browser_snapshot(mode?, query?)` — 页面快照。推荐渐进式：aria（概览）→ a11y+query（精准）→ a11y+query（全量搜）→ a11y（全量）
+- `browser_snapshot(mode?, query?)` — 页面快照。推荐渐进式：aria（概览）→ a11y+query（精准）→ a11y（全量）
 - `browser_scroll(direction)` — scroll the page (up/down)
 - `browser_source(cached?)` — get the full page HTML source
 - `browser_eval_js(code)` — execute JavaScript on the page
@@ -14,7 +14,7 @@ Prefer these tools for most operations:
 ### 页面内容与滚动
 - 先用 `browser_snapshot(mode="aria")` 了解页面结构（token 最少）
 - 有目标后用 `browser_snapshot(mode="a11y", query="关键词")` 精准找
-- 视口内没找到再用 `query` 全量搜，最后才用无参数全量
+- query 没找到再扩大搜索范围，最后才用无参数全量
 - 如果要操作页面上方/下方的元素，先 `browser_scroll` 滚动到目标区域，再刷新 snapshot
 - 同一元素在多次 snapshot 中的 `@e_XXXXX` 编号是**稳定不变的**（只要 DOM 不重建）
 
@@ -55,18 +55,22 @@ Typical scenarios:
 **注意：** 不先调用 `browser_wait_for_download` 直接 `read_data` 会导致文件不存在错误。
 
 ### 工具间数据传递 (shared_store)
-工具支持通过 `source_key` 和 `_source_key` 在工具之间传递数据，避免大数据绕经 LLM 上下文：
+工具通过 shared_store 传递数据，避免大数据绕经 LLM 上下文。shared_store 是一个单次会话内的运行时键值总线，支持两种引用语法：
 
-**Producer（写入）：** 调用 `browser_eval_js` 时传 `source_key` 参数，结果自动存入 shared_store：
-- `browser_eval_js(code="...", source_key="table_data")`
-- 执行结果存入 `shared_store["table_data"]`
+**写入 (Producer)：** 在支持的工具（如 `browser_eval_js`、`read_data`）传 `source_key` 参数，结果自动存入 shared_store：
+- `browser_eval_js(code="...", source_key="extracted_data")`
+- 执行结果存入 `shared_store["extracted_data"]`
 
-**Consumer（读取）：** **任意工具参数**中都可以用 `_source_key` 引用 shared_store 的数据，代替直接传值：
-- `file_write(path="output.csv", content={"_source_key": "table_data"})`
-- `captcha(type="ocr", image_bytes={"_source_key": "captcha_img"})`
-- 所有参数位置都支持，`_source_key` 会在 dispatch 前被自动替换为实际数据
+**读取 (Consumer)：** 任意工具参数中都可以用指针语法引用 shared_store 数据，代替直接传值：
+- `{*path}` — **全值指针**（保留原类型）。整个参数必须是 `{*key}` 格式：
+  - `file_write(path="output.csv", content="{*extracted_data}")`
+  - 适合传递完整数据对象（list、dict 等），类型不变
+- `${path}` — **字符串插值**。支持全串替换和部分嵌入：
+  - `browser_goto(url="${base_url}/api/v1")`
+  - 结果始终是字符串
+  - 适合 URL 拼接、模板填充等场景
 
-**注意：**
-- `_source_key` 引用的是 shared_store 中 `{key}.data` 的值（即 producer 的原始返回数据）
-- 如果引用的 key 不存在，会替换为 `__RESOLVE_FAILED__` 占位符，可重试纠正
-- `_source_key` 替换发生在 schema 校验之前，LLM 不需要关心底层机制
+注意：
+- `{*key}` 和 `${key}` 都支持点号链取嵌套字段，如 `{*result.data}`
+- 如果引用的 key 不存在，会显示 `__RESOLVE_FAILED__:key` 占位符，可重试或纠正
+- 写入端 `source_key` 接受 `{*key}` 格式（如 `source_key="{*my_data}"`），也能精确表达指针语义

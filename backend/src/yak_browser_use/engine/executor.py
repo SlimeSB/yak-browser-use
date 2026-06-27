@@ -847,7 +847,7 @@ async def execute_tool_step(
         **params,
     }
 
-    from yak_browser_use.engine._param_resolver import resolve_params
+    from yak_browser_use.engine._param_resolver import resolve_params, strip_pointer
     from yak_browser_use.tools.registry import registry, ToolContext as RegistryToolContext
 
     resolved_params, resolve_errors = resolve_params(core_params, shared_store)
@@ -865,6 +865,10 @@ async def execute_tool_step(
         core_result = dispatch_result
 
     prepend_resolve_errors(core_result, resolve_errors)
+
+    source_key = strip_pointer(params.get("source_key", ""))
+    if source_key and shared_store is not None:
+        shared_store[source_key] = core_result
 
     result["duration_ms"] = core_result.get("duration_ms", 0)
 

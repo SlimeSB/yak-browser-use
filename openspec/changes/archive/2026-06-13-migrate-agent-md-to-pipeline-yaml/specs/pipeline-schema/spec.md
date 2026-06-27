@@ -1,7 +1,7 @@
 ## ADDED Requirements
 
 ### Requirement: PipelineYaml 顶层结构
-系统 MUST 支持 `pipeline.yaml` 的顶层字段：`name`（必填）、`description`（可选）、`required_params`（可选）、`system_prompt`（可选）、`url_aliases`（可选）、`steps`（必填，非空列表）。
+系统 MUST 支持 `pipeline.yaml` 的顶层字段：`name`（必填）、`description`（可选）、`required_params`（可选）、`system_prompt`（可选）、`url_aliases`（可选）、`constants`（可选，`dict[str, Any]`，预植入 shared_store 供 `{key}` 模板引用）、`steps`（必填，非空列表）。
 
 #### Scenario: 解析最小合法文件
 - **WHEN** 读取一个只包含 `name` 和含至少一个步骤的 `steps` 字段的 pipeline.yaml 文件

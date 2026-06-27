@@ -71,6 +71,11 @@ required_params: ["param1"]          # 可选
 system_prompt: "..."                 # 可选
 url_aliases:                         # 可选，dict[str, str]
   prod: "https://prod.example.com"
+constants:                           # 可选，dict[str, Any]，预植入 shared_store 供 {key} 模板
+  api_urls:
+    primary: "https://api.ex.com"
+    secondary: "https://api2.ex.com"
+  email: "user@example.com"
 steps:                              # 必填，非空列表
   - name: "打开首页"                 # 必填
     description: >-                  # 可选，多行用 YAML block scalar

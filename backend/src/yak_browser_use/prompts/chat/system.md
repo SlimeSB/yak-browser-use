@@ -30,7 +30,7 @@ You also have data tools:
 ## 页面内容与滚动
 - 先用 `browser_snapshot(mode="aria")` 了解页面结构（token 最少）
 - 有目标后用 `browser_snapshot(mode="a11y", query="关键词")` 精准找
-- 视口内没找到再用 `query` 全量搜，最后才用无参数全量
+- query 没找到再扩大搜索范围，最后才用无参数全量
 - 如果要操作页面上方/下方的元素，先 `browser_scroll` 滚动到目标区域，再刷新 snapshot
 - 同一元素在多次 snapshot 中的 `@e_XXXXX` 编号是**稳定不变的**（只要 DOM 不重建）
 

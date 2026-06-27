@@ -1,6 +1,6 @@
 ﻿from __future__ import annotations
 
-from typing import Union
+from typing import Any, Union
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -103,6 +103,7 @@ class PipelineYaml(BaseModel):
     required_params: list[str] = []
     system_prompt: str = ""
     url_aliases: dict[str, str] = {}
+    constants: dict[str, Any] = {}
     steps: list[StepYaml] = Field(..., min_length=1)
 
     def to_pipeline_def(self) -> PipelineDef:
@@ -117,6 +118,7 @@ class PipelineYaml(BaseModel):
                 "required_params": self.required_params,
                 "system_prompt": self.system_prompt,
                 "url_aliases": self.url_aliases,
+                "constants": self.constants,
             },
         )
 

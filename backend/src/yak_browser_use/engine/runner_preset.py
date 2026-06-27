@@ -230,6 +230,11 @@ async def run_pipeline(
 
     shared_store: dict = {}
 
+    constants = (frontmatter or {}).get("constants", {})
+    if constants:
+        shared_store.update(constants)
+        logger.debug("pipeline constants seeded: %s", list(constants.keys()))
+
     if resume_from_index > 0:
         # Rebuild shared_store from completed step.json snapshots so that
         # template references (${step_name.data.field}) in subsequent steps

@@ -194,7 +194,7 @@ async def _execute_single_tool_call(
     - Parameter template resolution via shared_store
     """
     from yak_browser_use.engine.executor import execute_tool
-    from yak_browser_use.engine._param_resolver import resolve_params
+    from yak_browser_use.engine._param_resolver import resolve_params, strip_pointer
     from yak_browser_use.tools.registry import registry, ToolContext as RegistryToolContext
 
     reconnect_attempts = 0
@@ -237,7 +237,7 @@ async def _execute_single_tool_call(
             # Use fn_args (original) not resolved_args: source_key is a routing
             # param, not a data param — template resolver won't touch it, but
             # reading from fn_args makes the intent explicit.
-            source_key = fn_args.get("source_key")
+            source_key = strip_pointer(fn_args.get("source_key", ""))
             if source_key and shared_store is not None:
                 shared_store[source_key] = result
 
