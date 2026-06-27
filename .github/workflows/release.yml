@@ -148,6 +148,7 @@ jobs:
           [ -n "$tests" ] && { echo "### 🧪 Tests"; echo "$tests"; } >> "$out"
           [ -n "$chores" ] && { echo "### 🧹 Chores"; echo "$chores"; } >> "$out"
           [ -n "$other" ] && { echo "### 🔹 Other"; echo "$other"; } >> "$out"
+          exit 0
         shell: bash
         working-directory: electron/release
 
