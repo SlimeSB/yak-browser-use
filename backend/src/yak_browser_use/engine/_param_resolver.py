@@ -10,7 +10,7 @@ Syntax reference
 Three syntaxes exist for different use cases; they are NOT interchangeable.
 
 ``{*path}`` — whole-string pointer (shared_store data lookup)
-    Regex: ``{\*([\\w.]+)}``, fullmatch only.
+    Regex: ``{\\*([\\w.]+)}``, fullmatch only.
     The ENTIRE string must be ``{*key}`` — partial matches are ignored so
     that JSON literal braces (e.g. ``{"a": 1}``) never trigger resolution.
     The ``*`` prefix marks this as an explicit shared_store pointer.
