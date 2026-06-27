@@ -57,17 +57,19 @@ Built on [Playwright](https://playwright.dev/) `connect_over_cdp()` and an OpenA
 | 3 | **Progressive snapshot's adaptive density disclosure** — Not truncation. The walker reads the document depth-first, measures container density per depth, folds anything above threshold, and presents a flattened view with `expand_branch` handles the LLM can pull on demand. | Other frameworks truncate at N elements and lose the rest. Progressive's fold-and-expand lets the LLM see the page shape and dig into relevant sections without wasting tokens on boilerplate. |
 | 4 | **Pipeline as byproduct** — Ybu doesn't require pre-defined pipelines. Chat first, record later. `pipeline.yaml` is a recording artifact from chat sessions, not a design starting point. Useful flows get saved and replayed. | Lowers the adoption bar: you don't plan automation flows, you just chat and the Agent writes them for you. Pipeline design emerges from real interaction instead of upfront spec. |
 | 5 | **Shared Store dual-syntax template resolution** — `{path}` (whole-value reference, preserves type) and `${path}` (inline string interpolation, `$` prefix disambiguates from JSON braces). Designed as two separate needs, not accidental inconsistency. | Pass entire data structures between tools (`{step_3}`), or interpolate values inside URLs and templates (`https://${host}/api`). Each syntax has clear semantics and failure modes. |
-| 6 | **Scratchpad for heavy data** — HTML dumps, screenshot base64, element lists go to in-memory scratchpad. LLM sees summaries and fetches detail on demand via `browser_source(cached=true)` or `browser_get_element_by_number(@e5)`. | Keeps the LLM context window clean without discarding data. The Agent decides what detail it needs rather than guessing up-front. |
-| 7 | **Eval Agent + Shared Store data bridge** — The eval subagent inherits the main conversation's `shared_store`. Tools write results via `source_key`, and eval reads them through `{path}` / `${path}` template resolution. Eval can verify tool outputs inline, and tool flows can trigger eval as a verification step. | Eval is not a separate post-hoc system — it lives in the same data flow as tools. The shared store bridges tool production and eval consumption, enabling real-time verification loops. |
+| 6 | **Scratchpad for heavy data** — HTML dumps, screenshot base64, element lists go to in-memory scratchpad. LLM sees summaries and fetches detail on demand via `browser_source(cached=true)` or `browser_lookup_selector(@e5)`. | Keeps the LLM context window clean without discarding data. The Agent decides what detail it needs rather than guessing up-front. |
+| 7 | **read_data — unified progressive data reading** — `read_data` is the **sole entry point** for file content. Supports progressive disclosure (offset/limit), format conversion (`convert_to="csv"`), and binary file handling. `file_read` now returns metadata only. | Previously file reading was scattered across `file_read`, `file_read_head`, and eval agent. Single tool for all data reading — consistent, predictable, with built-in format conversion. |
 | 8 | **Three-step pipeline with programmatic checks** — Pipeline steps are `goal → ops → check`, where `check` supports `url_contains`, `element_exists`, `text_contains`, `element_visible` — deterministic programmatic verification, not LLM opinion. | Most pipeline frameworks leave verification to the LLM. Ybu's programmatic checks are fast, deterministic, and independent of LLM cost/latency — a trivial check doesn't need a model call. |
 | 9 | **Structured error recovery ecosystem** — `error_classifier` (categorizes failures) → `retry_utils` (configurable backoff) → `turn_context` (per-turn retry counters), guided by `error_recovery` system prompt. All wired together, not ad-hoc try/except. | Real browser automation fails constantly (network timeout, element not found, CDP disconnect). A structured recovery pipeline means the Agent survives real-world chaos without dumping errors on the user. |
 | 10 | **Guardian approval gate + circuit breaker + compensation rollback** — Three-layer safety lifecycle. Guardian gates sensitive operations for human approval, circuit breaker prevents cascading failures, compensation undoes changes on rollback. | Browser automation can break things. The safety lifecycle means destructive operations require approval, repeated failures don't cascade, and rollback is possible — not just "oops." |
 | 11 | **Chat + Browser Sync & Streaming LLM** — User types commands → Agent operates browser → reasoning, text deltas, and tool calls stream back via WebSocket in real-time | No config files, no scripts. Just natural language driving the browser. See the Agent think as it works, not just the final result. |
-| 12 | **Rich Browser Toolkit** — 22 browser atomics (goto, click, fill, snapshot, scroll, eval, hover, tab…) covering daily automation | Broad enough for real-world tasks, granular enough for precise control. |
+| 12 | **Rich Browser Toolkit** — 23 browser atomics (goto, click, fill, snapshot, scroll, eval, hover, tab, wait_for_download…) covering daily automation | Broad enough for real-world tasks, granular enough for precise control. |
 | 13 | **Custom Tool Scripts** — Hot-load Python scripts via ToolRegistry; built-in captcha, file I/O, format conversion | Extend the agent without modifying core code. Drop in a script, it just works. |
 | 14 | **Electron Desktop + Web UI** — React + Vite + Monaco Editor frontend with diff editor; FastAPI backend serving REST endpoints, WebSocket event streams, and static frontend. Run as Electron desktop app or `uvx yak-browser-use` for instant browser-based UI. | An IDE-like environment for building pipelines, with an API that integrates into any frontend or CI pipeline. One-command web launch removes the Electron dependency for quick demos. |
 | 15 | **Connection Health & Session Persistence** — CDP heartbeat + process watcher + auto-disconnect handling; per-pipeline session directories with full conversation history | Keeps long-running automation alive through network blips and browser restarts. Never lose context — pick up where you left off. |
-| 16 | **Flexible Providers** — DeepSeek / OpenAI / any OpenAI-compatible provider via flat JSON config | Use the model you want, not the one we chose for you. |
+| 16 | **Per-pipeline download isolation** — Each pipeline gets its own `downloads/` directory. `browser_wait_for_download()` waits for files to complete, and `read_data` processes them with format conversion support. | Download isolation prevents file collisions between workspaces. The Agent can trigger, wait, read, and convert download results in a single deterministic flow. |
+| 17 | **Flexible Providers** — DeepSeek / OpenAI / any OpenAI-compatible provider via flat JSON config | Use the model you want, not the one we chose for you. |
+| 18 | **Pipeline tool unification** — `pipeline_view` replaces `pipeline_load`/`pipeline_list` with combined list+detail view. `pipeline_add_step` replaces `record_step` for step recording. No more scattered pipeline APIs. | Fewer tools to learn, consistent naming, and a single place to inspect and manage pipeline state. |
 
 ---
 
@@ -180,15 +182,15 @@ POST /api/chat { message: "Open Baidu and search for coffee" }
             │     ├→ browser_goto  → ops.py → PlaywrightBridge.goto()
             │     ├→ browser_click → ops.py → PlaywrightBridge.click()
             │     ├→ browser_snapshot → progressive/a11y/raw snapshot
-            │     └→ record_step   → append to pipeline.yaml
-            └→ LLM returns text → end turn
+             │     └→ pipeline_add_step → append to pipeline.yaml
+             └→ LLM returns text → end turn
 ```
 
 **Key Points:**
 - User watches the browser and types commands; Agent operates autonomously
 - Streaming LLM response (reasoning + text) pushed in real-time
 - WebSocket event stream: turn_start / tool_start / text_chunk
-- Agent auto-records operation steps to pipeline.yaml
+- Agent auto-records operation steps to pipeline.yaml via `pipeline_add_step`
 - Tool-to-tool data passing via shared_store (`${}` templates / `_source_key`)
 
 #### Preset Mode (Pipeline Replay)
@@ -237,7 +239,7 @@ POST /api/run { pipeline: "..." }
 | │   │       │   ├── executor.py     # Pipeline wrappers
 | │   │       │   ├── ops.py          # Browser op dispatcher
 | │   │       │   ├── scratchpad.py / step_machine.py
-| │   │       │   ├── eval_agent.py / delivery.py / events.py
+| │   │       │   ├── delivery.py / events.py
 | │   │       │   ├── _param_resolver.py
 | │   │       │   │
 | │   │       │   ├── _harness/       # Conversation loop ★
@@ -263,13 +265,14 @@ POST /api/run { pipeline: "..." }
 | │   │       │   ├── graph.py / resolver.py / prepare.py
 | │   │       │   ├── diff.py / generator.py / step_type.py
 | │   │       │
-| │   │       ├── tools/              # Tool registry (43 tools)
+| │   │       ├── tools/              # Tool registry (43+ tools)
 | │   │       │   ├── registry.py     # Central dispatch
 | │   │       │   ├── adapters.py / captcha.py
 | │   │       │   ├── file_read.py / file_write.py / format_convert.py
+│   │       │   ├── read_data.py    # Unified content reading (progressive disclosure)
 | │   │       │   ├── extract.py / data.py
 | │   │       │   ├── todo.py / todo_store.py
-| │   │       │   ├── record_step.py / edit_pipeline.py
+| │   │       │   ├── edit_pipeline.py
 | │   │       │   └── _path_utils.py
 | │   │       │
 | │   │       ├── llm/                # LLM client

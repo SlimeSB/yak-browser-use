@@ -45,12 +45,12 @@ class ToolCDPHelpers(CircuitBreakerMixin):
     async def wait(self, seconds: float = 1.0) -> None:
         await asyncio.sleep(seconds)
 
-    async def snapshot(self, mode: str = "a11y", query: str = "", in_viewport: bool = False) -> dict:
+    async def snapshot(self, mode: str = "a11y", query: str = "") -> dict:
         self._check_failures()
         try:
             if mode == "a11y" or mode == "interactive":
                 try:
-                    result = await self._bridge.a11y_snapshot()
+                    result = await self._bridge.a11y_snapshot(query=query)
                 except A11yNotAvailable:
                     logger.warning(
                         "a11y snapshot not available in this environment, "

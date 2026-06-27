@@ -198,11 +198,7 @@ def _build_registry_impl() -> None:
                     },
                     "query": {
                         "type": "string",
-                        "description": "仅 progressive/interactive 模式有效。不以 #/. 开头时按文本/tag/type/role 模糊匹配；以 # 或 . 开头时按 CSS selector 精确匹配。",
-                    },
-                    "in_viewport": {
-                        "type": "boolean",
-                        "description": "仅 interactive 模式有效。为 true 时只返回当前屏幕可见区域内的元素。",
+                        "description": "a11y/progressive 模式有效。不以 #/. 开头时按文本/tag/type/role 模糊匹配；以 # 或 . 开头时按 CSS selector 精确匹配。",
                     },
                     "expand_key": {
                         "type": "string",

@@ -1553,12 +1553,15 @@ class PlaywrightBridge:
         data = await self._page.screenshot(type="png", full_page=False)
         return base64.b64encode(data).decode("utf-8")
 
-    async def a11y_snapshot(self) -> dict:
+    async def a11y_snapshot(self, query: str = "") -> dict:
         """Snapshot via CDP ``Accessibility.getFullAXTree`` with DOM stamping.
 
         Returns ``{elements: [{ref, role, name, nth}], mode: "a11y"}``.
         Coordinates are never stored — the JS renderer computes them live
         from ``[data-ybu-ref]`` elements via ``getBoundingClientRect()``.
+
+        If *query* is provided, only elements whose name or role contains
+        the query string (case-insensitive) are returned.
 
         .. note::
 
@@ -1593,6 +1596,14 @@ class PlaywrightBridge:
 
         nodes = result.get("nodes", [])
         elements = _flatten_cdp_ax_nodes(nodes)
+
+        # Filter by query (case-insensitive name/role match)
+        if query:
+            q = query.lower()
+            elements = [
+                el for el in elements
+                if q in (el.get("name") or "").lower() or q in (el.get("role") or "").lower()
+            ]
 
         # I1: clear old _ref_map so stale refs don't survive
         self._ref_map.clear()

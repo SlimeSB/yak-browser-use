@@ -158,10 +158,9 @@ async def execute_browser_op(
             elif op_type == "snapshot":
                 mode = params.get("mode", "aria")
                 query = params.get("query", "")
-                in_viewport = params.get("in_viewport", False)
                 if mode == "a11y" or mode == "interactive":
                     try:
-                        snapshot = await bridge.a11y_snapshot()
+                        snapshot = await bridge.a11y_snapshot(query=query)
                     except A11yNotAvailable:
                         logger.warning(
                             "a11y snapshot not available in this browser environment, "

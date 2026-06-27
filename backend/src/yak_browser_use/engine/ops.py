@@ -123,7 +123,6 @@ class ToolContext(CircuitBreakerMixin):
         self,
         mode: str = "aria",
         query: str = "",
-        in_viewport: bool = False,
     ) -> dict:
         """Capture a page snapshot.
 
@@ -134,6 +133,7 @@ class ToolContext(CircuitBreakerMixin):
           - ``a11y`` — CDP Accessibility.getFullAXTree, 结构化元素列表.
             每个元素带 ref/role/name/nth/selector。
             LLM 可以拿着 ref 直接 click/fill/hover（如点击 @a_3）。
+            *query* 过滤：只返回 name 或 role 包含关键词的元素。
           - ``progressive`` — CDP DOM 深度扫描 + 密度自适应折叠.
             最多 200 元素，密集容器自动折叠为 folded_containers，可用 expand_branch 展开。
             适合超长列表/复杂页面。
@@ -143,7 +143,7 @@ class ToolContext(CircuitBreakerMixin):
         self._check_failures()
         try:
             if mode == "a11y" or mode == "interactive":
-                result = await self._bridge.a11y_snapshot()
+                result = await self._bridge.a11y_snapshot(query=query)
             elif mode == "aria" or mode == "simplified":
                 result = await self._bridge.aria_snapshot()
             elif mode == "progressive":

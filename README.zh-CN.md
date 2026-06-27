@@ -58,18 +58,18 @@
 | 3 | **渐进式快照的密度自适应折叠** — 不是简单的截断。遍历器深度优先读文档，每层测量容器密度，折叠超过阈值的内容，展平后通过 `expand_branch` 句柄让 LLM 按需展开。 | 其他框架截断 N 个元素后直接丢掉剩余内容。Ybu 的折叠-展开机制让 LLM 看到页面全貌，然后只深入感兴趣的区域，不浪费 token 在模板代码上。 |
 | 4 | **Pipeline 是副产品** — 不需要预先定义 Pipeline。先聊天，后录制。`pipeline.yaml` 是聊天过程的录制产物，不是设计的起点。有用的流程保留下来后续回放。 | 降低使用门槛：不需要规划自动化流程，只管跟 Agent 聊天，它替你写。Pipeline 设计从真实交互中涌现，而不是前期写死。 |
 | 5 | **共享存储的双语法模板解析** — `{path}`（全值引用，保留类型）+ `${path}`（内联字符串插值，`$` 前缀消歧义避免跟 JSON 花括号打架）。刻意设计的两个独立语法，不是无心不一致。 | 在不同工具间传递整个数据结构（`{step_3}`），或在 URL 和模板里插值（`https://${host}/api`）。每种语法有清晰的语义和失败模式。 |
-| 6 | **Scratchpad 承载重数据** — HTML 源码、截图 base64、元素列表存入内存缓存。LLM 看到摘要，通过 `browser_source(cached=true)` 或 `browser_get_element_by_number(@e5)` 按需获取细节。 | 保持 LLM 上下文窗口清洁的同时不丢弃数据。Agent 根据需要决定需要什么细节，而不是预先猜测。 |
-| 7 | **Eval Agent 与 Shared Store 数据互通** — Eval 子 Agent 继承主对话的 `shared_store`。工具通过 `source_key` 写入结果，eval 通过 `{path}` / `${path}` 模板解析读取。Eval 可以内联验证工具产出，工具流程可以触发 eval 作为验收步骤。 | Eval 不是独立的事后系统——它跟工具生活在同一数据流里。共享存储桥接了工具生产和 eval 消费，实现实时验证循环。 |
-| 8 | **三步 Pipeline + 程序化验收** — Pipeline 步骤是 `goal → ops → check`，`check` 支持 `url_contains`、`element_exists`、`text_contains`、`element_visible`——确定性程序化验证，不依赖 LLM 判断。 | 大多数 Pipeline 框架把验证交给 LLM。Ybu 的程序化 check 快速、确定、不消耗 LLM token——简单的验收不需要模型调用。 |
+| 6 | **Scratchpad 承载重数据** — HTML 源码、截图 base64、元素列表存入内存缓存。LLM 看到摘要，通过 `browser_source(cached=true)` 或 `browser_lookup_selector(@e5)` 按需获取细节。 | 保持 LLM 上下文窗口清洁的同时不丢弃数据。Agent 根据需要决定需要什么细节，而不是预先猜测。 |
+| 7 | **read_data — 统一渐进式数据读取** — `read_data` 是文件内容读取的**唯一入口**。支持渐进式披露（offset/limit）、格式转换（`convert_to="csv"`）和二进制文件处理。`file_read` 目前仅返回元信息。 | 之前文件读取分散在 `file_read`、`file_read_head` 和 eval agent 中。统一工具让数据读取一致、可预期，并内置格式转换。 |
 | 9 | **结构化错误恢复生态** — `error_classifier`（错误分类）→ `retry_utils`（可配退避）→ `turn_context`（轮次重试计数器），辅以 `error_recovery` 系统提示词引导。全链路打通，不是临时 try/except。 | 真实浏览器自动化持续失败（超时、元素找不到、CDP 断连）。结构化的恢复链路让 Agent 在真实世界的混乱中存活下来，而不是把错误砸用户脸上。 |
 | 10 | **审核门控 + 熔断器 + 补偿回滚** — 三层安全生命周期。Guardian 对敏感操作要求人工审批，熔断器防止连续失败级联扩散，补偿机制支持变更回滚。 | 浏览器自动化会搞坏东西。安全生命周期意味着破坏性操作需要审批、连续失败不会级联、回滚是可行的——不只是"哦豁"。 |
 | 11 | **Chat + 浏览器同步与流式 LLM** — 用户输入指令 → Agent 操作浏览器 → 推理过程、文本增量、工具调用结果全部通过 WebSocket 实时流式推送 | 无需配置文件、无需脚本。用自然语言就能驱动浏览器。看到 Agent 边思考边工作，而不是只看到最终结果。 |
-| 12 | **丰富浏览器工具集** — 22 个浏览器原子操作（goto、click、fill、snapshot、scroll、eval、hover、tab…）覆盖日常自动化 | 足够全面应对真实任务，又足够精细实现精确控制。 |
+| 12 | **丰富浏览器工具集** — 23 个浏览器原子操作（goto、click、fill、snapshot、scroll、eval、hover、tab…）覆盖日常自动化 | 足够全面应对真实任务，又足够精细实现精确控制。 |
 | 13 | **自定义工具脚本** — 通过 ToolRegistry 热加载 Python 脚本；内置验证码、文件 IO、格式转换 | 不修改核心代码即可扩展 Agent 能力。丢进一个脚本，它就工作。 |
 | 14 | **Electron 桌面 + Web UI** — React + Vite + Monaco 编辑器前端（支持 Diff 编辑器）；FastAPI 后端提供 REST 端点、WebSocket 事件流和静态前端。支持 Electron 桌面应用或 `uvx yak-browser-use` 一键浏览器 UI。 | 一个 IDE 级环境用于编写和调试自动化流程，内置 API 可对接任何前端或 CI pipeline。一行命令启动 Web 模式，无需 Electron 即可快速演示。 |
 | 15 | **连接健康检测与会话持久化** — CDP 心跳 + 进程监控 + 自动断线处理；每个 Pipeline 独立 session 目录保存完整对话历史 | 让长时间运行的自动化在网络抖动和浏览器重启后仍保持在线。再也不丢上下文——重启后从上一次的地方继续。 |
-| 16 | **Provider 灵活配置** — 支持 DeepSeek / OpenAI / 任意 OpenAI-compatible 提供商，平铺 JSON 配置 | 用你想用的模型，不是我们替你选的。 |
-
+| 16 | **下载目录按 Pipeline 隔离** — 每个 Pipeline 拥有独立的 `downloads/` 目录。 `browser_wait_for_download()` 等待文件下载完成， `read_data` 处理下载结果并支持格式转换。 | 下载隔离防止文件在工作空间之间冲突。 Agent 可在单一决定性流程中触发下载、等待、读取和转换结果。 |
+| 17 | **Provider 灵活配置** — 支持 DeepSeek / OpenAI / 任意 OpenAI-compatible 提供商，平铺 JSON 配置 | 用你想用的模型，不是我们替你选的。 |
+| 18 | **Pipeline 工具统一** — `pipeline_view` 替代 `pipeline_load`/`pipeline_list`，合并列表+详情查看。 `pipeline_add_step` 替代 `record_step` 用于步骤录制。 | 更少的工具需要学习，一致的命名，单一的 Pipeline 状态检视入口。 |
 ---
 
 ## 快速上手
@@ -183,7 +183,7 @@ POST /api/chat { message: "打开百度搜咖啡" }
             │     ├→ browser_goto  → ops.py → PlaywrightBridge.goto()
             │     ├→ browser_click → ops.py → PlaywrightBridge.click()
             │     ├→ browser_snapshot → progressive/a11y/raw 快照
-            │     └→ record_step   → 写入 pipeline.yaml
+            │     └→ pipeline_add_step → 写入 pipeline.yaml
             └→ LLM 返回文本 → 结束本轮
 ```
 
@@ -191,7 +191,7 @@ POST /api/chat { message: "打开百度搜咖啡" }
 - 用户看着浏览器画面发出指令，Agent 自主操作
 - 流式 LLM 响应（推理过程 + 文本增量）实时推送
 - WebSocket 事件流通知前端（turn_start / tool_start / text_chunk）
-- Agent 会自动记录操作步骤到 pipeline.yaml
+- Agent 通过 pipeline_add_step 自动记录操作步骤到 pipeline.yaml
 - 工具间通过 shared_store 数据传递（`${}` 模板 / `_source_key`）
 
 #### Preset 模式（预设回放）
@@ -240,7 +240,7 @@ POST /api/run { pipeline: "..." }
 | │   │       │   ├── executor.py     # Pipeline 包装执行器
 | │   │       │   ├── ops.py          # 浏览器操作分发
 | │   │       │   ├── scratchpad.py / step_machine.py
-| │   │       │   ├── eval_agent.py / delivery.py / events.py
+| │   │       │   ├── delivery.py / events.py
 | │   │       │   ├── _param_resolver.py
 | │   │       │   │
 | │   │       │   ├── _harness/       # Conversation loop ★
@@ -272,7 +272,7 @@ POST /api/run { pipeline: "..." }
 | │   │       │   ├── file_read.py / file_write.py / format_convert.py
 | │   │       │   ├── extract.py / data.py
 | │   │       │   ├── todo.py / todo_store.py
-| │   │       │   ├── record_step.py / edit_pipeline.py
+| │   │       │   ├── edit_pipeline.py
 | │   │       │   └── _path_utils.py
 | │   │       │
 | │   │       ├── llm/                # LLM 客户端
