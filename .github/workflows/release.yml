@@ -151,6 +151,7 @@ jobs:
             [ -n "$chores" ] && { echo "### 🧹 Chores"; echo "$chores"; } >> "$out"
             [ -n "$other" ] && { echo "### 🔹 Other"; echo "$other"; } >> "$out"
           fi
+          exit 0
 
       - name: Upload to GitHub Release (stable)
         if: ${{ !contains(github.ref_name, 'dev') }}
