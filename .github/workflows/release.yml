@@ -111,6 +111,7 @@ jobs:
       - name: Generate changelog
         shell: bash
         run: |
+          set +e
           out="changelog.md"
           prev=$(git tag --sort=-version:refname | grep -v 'dev' | grep -v 'post' | head -n 2 | tail -n 1 || true)
 
