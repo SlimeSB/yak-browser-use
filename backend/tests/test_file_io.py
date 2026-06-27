@@ -184,10 +184,10 @@ async def test_read_data_not_found():
 
 
 @pytest.mark.asyncio
-async def test_read_data_source_key(tmp_path, monkeypatch):
+async def test_read_data_basic(tmp_path, monkeypatch):
     _cd_tmp(monkeypatch, tmp_path)
     Path("test.txt").write_text("hello world", encoding="utf-8")
-    result = await read_data("test.txt", source_key="my_data")
+    result = await read_data("test.txt")
     assert result["ok"] is True
 
 

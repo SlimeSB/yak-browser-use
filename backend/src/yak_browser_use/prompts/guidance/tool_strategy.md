@@ -57,8 +57,9 @@ Typical scenarios:
 ### 工具间数据传递 (shared_store)
 工具通过 shared_store 传递数据，避免大数据绕经 LLM 上下文。shared_store 是一个单次会话内的运行时键值总线，支持两种引用语法：
 
-**写入 (Producer)：** 在支持的工具（如 `browser_eval_js`、`read_data`）传 `source_key` 参数，结果自动存入 shared_store：
-- `browser_eval_js(code="...", source_key="extracted_data")`
+**写入 (Producer)：** 所有工具都支持 `bind` 参数，结果自动存入 shared_store：
+- `browser_eval_js(code="...", bind="extracted_data")`
+- `read_data(path="data.csv", bind="table_data")`
 - 执行结果存入 `shared_store["extracted_data"]`
 
 **读取 (Consumer)：** 任意工具参数中都可以用指针语法引用 shared_store 数据，代替直接传值：
@@ -73,4 +74,4 @@ Typical scenarios:
 注意：
 - `{*key}` 和 `${key}` 都支持点号链取嵌套字段，如 `{*result.data}`
 - 如果引用的 key 不存在，会显示 `__RESOLVE_FAILED__:key` 占位符，可重试或纠正
-- 写入端 `source_key` 接受 `{*key}` 格式（如 `source_key="{*my_data}"`），也能精确表达指针语义
+- 写入端 `bind` 接受 `{*key}` 格式（如 `bind="{*my_data}"`），也能精确表达指针语义

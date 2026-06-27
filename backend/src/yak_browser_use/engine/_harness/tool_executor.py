@@ -208,6 +208,9 @@ async def _execute_single_tool_call(
                 if cached_result is not None:
                     return cached_result
 
+            # ── Strip 'bind' (framework param) before resolve ────
+            source_key = strip_pointer(fn_args.pop("bind", ""))
+
             # ── Resolve parameter templates ──────────────────────────
             resolved_args, resolve_errors = resolve_params(fn_args, shared_store)
 
@@ -233,11 +236,7 @@ async def _execute_single_tool_call(
                     cdp_helpers=cdp_helpers,
                 )
 
-            # ── Write to shared_store if source_key specified ────────
-            # Use fn_args (original) not resolved_args: source_key is a routing
-            # param, not a data param — template resolver won't touch it, but
-            # reading from fn_args makes the intent explicit.
-            source_key = strip_pointer(fn_args.get("source_key", ""))
+            # ── Write to shared_store if 'bind' specified ────────
             if source_key and shared_store is not None:
                 shared_store[source_key] = result
 

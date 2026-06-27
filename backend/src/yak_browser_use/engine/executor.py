@@ -841,14 +841,16 @@ async def execute_tool_step(
     input_files = _resolve_input_files(input_ref, run_dir)
     result["input_files"] = input_files
 
+    from yak_browser_use.engine._param_resolver import resolve_params, strip_pointer
+    from yak_browser_use.tools.registry import registry, ToolContext as RegistryToolContext
+
+    source_key = strip_pointer(params.pop("bind", ""))
+
     core_params = {
         "input_files": input_files,
         "output_dir": str(step_dir),
         **params,
     }
-
-    from yak_browser_use.engine._param_resolver import resolve_params, strip_pointer
-    from yak_browser_use.tools.registry import registry, ToolContext as RegistryToolContext
 
     resolved_params, resolve_errors = resolve_params(core_params, shared_store)
 
@@ -866,7 +868,6 @@ async def execute_tool_step(
 
     prepend_resolve_errors(core_result, resolve_errors)
 
-    source_key = strip_pointer(params.get("source_key", ""))
     if source_key and shared_store is not None:
         shared_store[source_key] = core_result
 

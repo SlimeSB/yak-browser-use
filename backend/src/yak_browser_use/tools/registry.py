@@ -411,12 +411,11 @@ def _build_registry_impl() -> None:
             return {"ok": False, "error": str(e)}
 
     registry.register("browser_eval_js", {
-        "description": "[需 CDP] 在浏览器当前页面执行任意 JavaScript 代码并返回结果。支持 source_key 参数将结果写入 shared_store。",
+        "description": "[需 CDP] 在浏览器当前页面执行任意 JavaScript 代码并返回结果。",
         "parameters": {
             "type": "object",
             "properties": {
                 "code": {"type": "string", "description": "要执行的 JavaScript 代码。"},
-                "source_key": {"type": "string", "description": "可选，指定结果存入 shared_store 的 key。"},
             },
             "required": ["code"],
         },
@@ -625,7 +624,6 @@ def _build_registry_impl() -> None:
                 "offset": {"type": "integer", "description": "起始行号（0-based，默认 0）"},
                 "encoding": {"type": "string", "description": "文件编码，为空时自动检测"},
                 "convert_to": {"type": "string", "description": "目标格式（csv/json），二进制文件先转换再读取"},
-                "source_key": {"type": "string", "description": "可选，指定结果存入 shared_store 的 key"},
             },
             "required": ["path"],
         },

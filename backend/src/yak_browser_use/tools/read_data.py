@@ -19,7 +19,6 @@ async def read_data(
     offset: int = 0,
     encoding: str = "",
     convert_to: str = "",
-    source_key: str = "",
     pipeline: str | None = None,
 ) -> dict:
     """Read data from a file with progressive disclosure.
@@ -30,7 +29,6 @@ async def read_data(
         offset: Line number to start from (0-based, default 0).
         encoding: File encoding. Empty = auto-detect.
         convert_to: Convert binary file to this format before reading.
-        source_key: Optional key to store result in shared_store.
         pipeline: Pipeline name for workspace path resolution.
 
     Returns:
