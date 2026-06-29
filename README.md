@@ -181,7 +181,7 @@ POST /api/chat { message: "Open Baidu and search for coffee" }
   └→ service.process_chat_message()
        └→ run_conversation_loop()
             ├→ Load chat/system.md + pipeline context
-            ├→ LLM call (browser_* / goal_run / todo / skill / expand_branch)
+            ├→ LLM call (browser_* / todo / skill / expand_branch)
             ├→ LLM returns tool calls → tool_executor (with shared_store)
             │     ├→ browser_goto  → ops.py → PlaywrightBridge.goto()
             │     ├→ browser_click → ops.py → PlaywrightBridge.click()
@@ -313,7 +313,7 @@ POST /api/run { pipeline: "..." }
 
 2. **File as Contract** — pipeline.yaml is a static contract, strictly validated at compile time (DAG cycle detection, file reference validation), minimizing surprises at runtime.
 
-3. **No sub-agent architecture** — The main LLM handles all tasks directly via `todo`, `goal_run`, and `browser_*` tools — no sub-agent spawning, scheduling, or context management. Complex steps are decomposed into subtasks the main LLM executes itself, keeping context in one place and avoiding the overhead of agent-to-agent handoffs. Sub-agents were prototyped and removed as YAGNI.
+3. **No sub-agent architecture** — The main LLM handles all tasks directly via `todo` and `browser_*` tools — no sub-agent spawning, scheduling, or context management. Complex steps are decomposed into subtasks the main LLM executes itself, keeping context in one place and avoiding the overhead of agent-to-agent handoffs. Sub-agents were prototyped and removed as YAGNI.
 
 ---
 

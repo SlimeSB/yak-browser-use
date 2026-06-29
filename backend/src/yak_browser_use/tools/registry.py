@@ -454,7 +454,7 @@ def _build_registry_impl() -> None:
                     "description": {"type": "string", "description": "Human-readable description of what this step does."},
                     "browser_ops": {"type": "array", "description": "List of browser operations, each as a single-key dict (e.g. [{\"goto\": \"https://example.com\"}]). Mutually exclusive with tool_name and goal_description.", "items": {"type": "object"}},
                     "tool_name": {"type": "string", "description": "Name of a custom tool to invoke. Mutually exclusive with browser_ops and goal_description."},
-                    "goal_description": {"type": "string", "description": "Description for a goal_run step. Mutually exclusive with browser_ops and tool_name."},
+                    "goal_description": {"type": "string", "description": "High-level goal description for this step. Mutually exclusive with browser_ops and tool_name."},
                     "depends_on": {"type": "array", "description": "List of step names this step depends on.", "items": {"type": "string"}},
                     "check": {"type": "object", "description": "Programmatic check conditions for this step. Use {} to skip verification. Supported keys: url_contains, element_exists, text_contains, element_visible."},
                     "after": {"type": "string", "description": "Name of the step to insert after. Omit to append."},
@@ -544,17 +544,6 @@ def _build_registry_impl() -> None:
                 return handler
 
             registry.register(name, schema, _make_pipeline_handler(name))
-
-    # ── goal_run ─────────────────────────────────────────────────────
-
-    registry.register("goal_run", {
-        "description": "Set a complex multi-step goal. The system will guide you to use todo + browser_* tools to break down and execute the task step by step. Use this for tasks that require reasoning across multiple pages or analyzing page content to decide the next action.",
-        "parameters": {
-            "type": "object",
-            "properties": {"description": {"type": "string", "description": "A clear description of what the Agent should accomplish."}},
-            "required": ["description"],
-        },
-    }, _goal_run_handler)
 
     # ── todo ─────────────────────────────────────────────────────────
 
@@ -704,8 +693,6 @@ def _build_registry_impl() -> None:
 
         registry.register(name, schema, _make_skill_handler(name))
 
-    # ── record_step (removed — merged into pipeline_add_step) ────────
-
     # ── eval_agent (removed — main agent uses browser_eval_js + browser_snapshot) ─
 
     # ── captcha ───────────────────────────────────────────────────────
@@ -787,18 +774,6 @@ async def _captcha_handler(args: dict, ctx: ToolContext) -> dict:
 
     kwargs = {k: args[k] for k in ("type", "image_bytes", "image_path", "background_bytes") if k in args}
     return await captcha(**kwargs)
-
-
-async def _goal_run_handler(args: dict, ctx: ToolContext) -> dict:
-    description = args.get("description", args.get("goal", ""))
-    return {
-        "ok": True,
-        "result": (
-            f"目标已设定: {description}\n\n"
-            f"请用 todo 工具将目标拆解为 3-6 个步骤逐项执行。"
-            f"每步完成后调 pipeline_add_step。不确定时直接问我。"
-        ),
-    }
 
 
 async def _todo_handler(args: dict, ctx: ToolContext) -> dict:

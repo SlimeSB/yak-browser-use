@@ -106,7 +106,7 @@ class TestIterationBudgetIntegration:
             budget.consume()
         assert budget.remaining == 45
 
-        # Pause for goal_run
+        # Pause for CDP reconnect
         budget.pause()
         for _ in range(10):
             budget.consume()  # ignored during pause

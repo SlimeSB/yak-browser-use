@@ -174,18 +174,12 @@ async def pipeline_add_step(
         "description": description,
     }
     if op_type is not None:
-        if op_type == "goal_run":
-            if op_args:
-                step_dict["goal_description"] = op_args.get("description", description)
-            else:
-                step_dict["goal_description"] = description
+        browser_op: dict
+        if op_args and "value" in op_args and len(op_args) == 1:
+            browser_op = {op_type: op_args["value"]}
         else:
-            browser_op: dict
-            if op_args and "value" in op_args and len(op_args) == 1:
-                browser_op = {op_type: op_args["value"]}
-            else:
-                browser_op = {op_type: op_args or {}}
-            step_dict["browser_ops"] = [browser_op]
+            browser_op = {op_type: op_args or {}}
+        step_dict["browser_ops"] = [browser_op]
     elif not heading:
         if browser_ops is not None:
             step_dict["browser_ops"] = browser_ops
@@ -344,12 +338,6 @@ async def pipeline_compile(
                     "name": f"step_{step_index}",
                     "description": f"{op_type}: {_fmt_args(args)}",
                     "browser_ops": PipelineStore.ops_to_yaml(internal_ops),
-                })
-            elif tool_name == "goal_run":
-                steps.append({
-                    "name": f"step_{step_index}",
-                    "description": args.get("description", "") or result_text[:80],
-                    "goal_description": args.get("description", "") or result_text[:200],
                 })
             else:
                 params = {k: v for k, v in args.items() if k not in ("image_bytes", "background_bytes")}

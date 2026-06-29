@@ -1,7 +1,7 @@
 """Iteration budget — limits LLM round-trip count per conversation.
 
 Default max_total=50 (one round-trip = one LLM API call).
-Supports goal_run pause/resume so inner browser-use Agent iterations
+Supports CDP reconnect pause/resume so inner iterations
 don't consume the outer budget.
 """
 
@@ -13,7 +13,7 @@ logger = get_logger(__name__)
 
 
 class IterationBudget:
-    """Tracks remaining LLM round-trips and supports goal_run pause/resume."""
+    """Tracks remaining LLM round-trips and supports CDP reconnect pause/resume."""
 
     MIN_TOTAL = 10
 
@@ -57,7 +57,7 @@ class IterationBudget:
         return remaining
 
     def pause(self) -> None:
-        """Pause budget consumption (for goal_run)."""
+        """Pause budget consumption (for CDP reconnect)."""
         self._paused = True
         logger.debug("IterationBudget paused: used=%d", self._used)
 

@@ -23,8 +23,8 @@ Prefer these tools for most operations:
 - Pipeline 中预先填写的 browser_ops 可能包含不准确的 selector —— 执行时以实际页面为准
 - 如果 snapshot 中找不到 pipeline 指定的元素，用 `browser_snapshot(mode="a11y", query="关键词")` 重新搜索
 
-### When to use goal_run
-Use `goal_run(description)` to set a complex multi-step goal. After calling goal_run, use:
+### When to use complex goal mode
+For complex multi-step goals, use these tools directly (no intermediate tool needed):
 - `todo` to break the goal into 3-6 concrete steps
 - `browser_*` tools to execute each step
 - `pipeline_add_step` to save each successful step (or pipeline_view to review)

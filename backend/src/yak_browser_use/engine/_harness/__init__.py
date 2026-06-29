@@ -34,7 +34,6 @@ from yak_browser_use.engine._harness.conversation_loop import (
 )
 from yak_browser_use.engine._harness.tools import (
     get_all_tools,
-    get_browser_tools,
 )
 
 __all__ = [
@@ -57,5 +56,4 @@ __all__ = [
     "run_conversation_loop",
     "resume_conversation",
     "get_all_tools",
-    "get_browser_tools",
 ]

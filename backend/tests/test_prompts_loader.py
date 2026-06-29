@@ -21,4 +21,4 @@ def test_load_prompt_variable_not_passed_remains():
 def test_load_prompt_no_variables():
     text = load_prompt("guidance/tool_strategy")
     assert "browser_goto" in text
-    assert "goal_run" in text
+    assert "browser_snapshot" in text

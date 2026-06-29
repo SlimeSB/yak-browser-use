@@ -72,7 +72,7 @@ When the user asks you to fill passwords, API keys, or other secrets:
 
 ## Guidelines
 - Prefer atomic browser_* tools for simple operations
-- Use `goal_run` to set a complex goal, then execute with todo + browser_*
+- For complex multi-step goals, use `todo` to break down the task, then execute with `browser_*` tools
 - If you're unsure about a selector, use `browser_source()` to inspect the page
 - Report errors clearly and suggest next steps
 - If the user's instruction is ambiguous, ask for clarification

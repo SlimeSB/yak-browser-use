@@ -3,7 +3,7 @@
 Tests cross-layer paths that unit tests can't reach:
 - snapshot full lifecycle through filter → scratchpad → message
 - run_check integration with step verification
-- goal_run stub end-to-end behavior
+- goal execution via todo + browser_*
 - element lookup dual-path selection
 - compiler check field round-trip
 """

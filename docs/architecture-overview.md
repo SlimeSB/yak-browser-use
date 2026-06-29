@@ -41,7 +41,7 @@ yak-browser-use/
 │   │
 │   ├── _harness/             # Conversation loop infrastructure ★
 │   │   ├── conversation_loop.py    # Core agent turn loop (shared by chat + preset)
-│   │   ├── tools.py                # Tool definitions (browser_*/goal_run/record_step/pipeline_*/todo/skill)
+│   │   ├── tools.py                # Tool definitions (browser_*/pipeline_*/todo/skill)
 │   │   ├── tool_executor.py        # Sequential tool call dispatcher + shared_store
 │   │   ├── pipeline_tools.py       # pipeline_load/list/update/add/remove/create implementations
 │   │   ├── pipeline_task_adapter.py # StepDef → TaskDescriptor (preset mode only)
@@ -79,10 +79,10 @@ yak-browser-use/
 ├── tools/                    # Tool registry + implementations
 │   ├── registry.py           # ToolRegistry — central dispatch (registers ~35 tools)
 │   │                         #   browser_* (22) / pipeline_* (8) / skill_* (5)
-│   │                         #   goal_run / todo / file_read / file_write
-│   │                         #   format_convert / record_step / eval_agent / captcha
+│   │                         #   todo / file_read / file_write
+│   │                         #   format_convert / eval_agent / captcha
 │   ├── adapters.py           # Tool data adaptation (csv↔json, field mapping)
-│   ├── record_step.py        # record_step — LLM records steps to pipeline.yaml
+
 │   ├── todo.py / todo_store.py   # Todo task management
 │   ├── edit_pipeline.py      # Pipeline editing with checkpoint/rollback
 │   ├── extract.py / data.py  # Data extraction & processing
@@ -239,18 +239,18 @@ POST /api/chat { message: "Open Baidu and search for coffee" }
        └→ run_conversation_loop()
             ├→ Load prompts/chat/system.md
             ├→ Inject tool_strategy guidance
-            ├→ LLM call (with browser_*/goal_run/record_step/todo tools)
+            ├→ LLM call (with browser_*/todo tools)
             ├→ LLM returns tool calls → tool_executor._execute_single_tool_call()
             │     ├→ browser_goto  → execute_browser_op("goto", …)
             │     ├→ browser_click → execute_browser_op("click", …)
-            │     └→ record_step   → append to pipeline.yaml
+            │     └→ pipeline_add_step → append to pipeline.yaml
             └→ LLM returns text → end turn
 ```
 
 **Key features:**
-- System prompt `chat/system.md` tells the LLM to "call record_step after each operation to record to the pipeline"
-- LLM can use `goal_run` to set complex goals, then split into steps with `todo` and execute
-- `record_step` appends to `workspaces/<name>/pipeline.yaml` after each operation
+- System prompt `chat/system.md` tells the LLM to "call pipeline_add_step after each operation to record to the pipeline"
+- LLM uses `todo` to break down complex goals, then executes with `browser_*` tools
+- `pipeline_add_step` appends to `workspaces/<name>/pipeline.yaml` after each operation
 - Streaming events via WebSocket to frontend (turn_start/tool_start/text_chunk, etc.)
 - Streaming LLM pushes reasoning content and text deltas in real-time
 - **Configurable highlight mode**: a11y / progressive / off — set via API or Electron settings UI
@@ -321,7 +321,7 @@ run_preset_loop()
 - System prompt is `chat/system.md` + system skills (via `build_system_prompt()`), with pipeline `TaskDescriptor` and `guidance/error_recovery.md` appended
 - `preset_mode=True` skips automatic `tool_strategy` injection (tool strategy is part of chat/system.md)
 - More flexible than legacy deterministic execution but depends on LLM capability
-- `record_step` is unnecessary (steps are pre-defined)
+- `pipeline_add_step` is unnecessary (steps are pre-defined)
 
 **Entry files:**
 - `api/routes.py` → `POST /api/run` route (legacy)
@@ -364,8 +364,8 @@ All tool definitions (OpenAI-compatible function calling schemas):
 | | `browser_eval` | Execute JavaScript |
 | | `browser_get_element_by_number` | Get element details by selector |
 | | `browser_expand_branch` | Expand folded progressive-snapshot container |
-| **Goal** | `goal_run` | Set complex goal (execute via todo + browser_*) |
-| **Recording** | `record_step` | Record an operation to pipeline.yaml |
+| **Todo** | `todo` | Task list management for complex goals |
+| **Recording** | `pipeline_add_step` | Record an operation to pipeline.yaml |
 | **Pipeline** | `pipeline_load/list/update_step/add_step/remove_step/create` | Manage and edit presets |
 | **Tasks** | `todo` | Task list management |
 | **Skill** | `skill` | Inject skill prompt into conversation |
@@ -375,7 +375,7 @@ All tool definitions (OpenAI-compatible function calling schemas):
 Unified routing for all tool calls:
 - `browser_*` → `executor.execute_browser_op()` via `ops.py` → `BrowserBridge.click/goto/fill/etc.`
 - `pipeline_*` → handler functions in `pipeline_tools.py`
-- `goal_run` → returns a prompt message (LLM decomposes itself)
+
 - `todo` → `todo.py` task management
 - `skill` → `skill_tools.py` skill injection
 - Others → `executor.execute_tool()` (registered via `ToolRegistry` from `tools/registry.py`)
@@ -443,7 +443,7 @@ Runtime memory bus for tool-to-tool data passing:
 
 ### 1. No Sub-Agents
 
-No longer spawn browser-use Agent as a sub-agent. `goal_run` remains as a mode switch signal, but instead of spawning a sub-agent, the main LLM uses `todo` + `browser_*` to break down and execute steps itself.
+No longer spawn browser-use Agent as a sub-agent. The main LLM uses `todo` + `browser_*` to break down and execute complex steps itself.
 
 ### 2. Heavy Data Goes to Scratchpad
 

@@ -181,7 +181,7 @@ POST /api/chat { message: "打开百度搜咖啡" }
   └→ service.process_chat_message()
        └→ run_conversation_loop()
             ├→ 加载 chat/system.md + pipeline 上下文
-            ├→ LLM 调用（browser_* / goal_run / todo / skill / expand_branch）
+            ├→ LLM 调用（browser_* / todo / skill / expand_branch）
             ├→ LLM 返回工具调用 → tool_executor（带 shared_store）
             │     ├→ browser_goto  → ops.py → PlaywrightBridge.goto()
             │     ├→ browser_click → ops.py → PlaywrightBridge.click()
@@ -313,7 +313,7 @@ POST /api/run { pipeline: "..." }
 
 2. **文件即契约** — pipeline.yaml 是静态契约，编译阶段严格校验（DAG 环检测、文件引用校验），运行时尽量减少意外。
 
-3. **不含 sub-agent 架构** — 主 LLM 通过 `todo`、`goal_run` 和 `browser_*` 工具直接处理所有任务——不涉及 sub-agent 的创建、调度或上下文管理。复杂步骤被拆分为主 LLM 自行执行的子任务，上下文集中在同一位置，避免了 agent 间交接的开销。Sub-agent 曾经过原型验证，因 YAGNI 被移除。
+3. **不含 sub-agent 架构** — 主 LLM 通过 `todo` 和 `browser_*` 工具直接处理所有任务——不涉及 sub-agent 的创建、调度或上下文管理。复杂步骤被拆分为主 LLM 自行执行的子任务，上下文集中在同一位置，避免了 agent 间交接的开销。Sub-agent 曾经过原型验证，因 YAGNI 被移除。
 
 ---
 

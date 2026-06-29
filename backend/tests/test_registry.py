@@ -20,7 +20,6 @@ from yak_browser_use.tools.registry import (
     _get_pipeline_dispatch,
     _get_skill_dispatch,
     _captcha_handler,
-    _goal_run_handler,
     _todo_handler,
     _file_read_handler,
     _file_write_handler,
@@ -176,7 +175,6 @@ class TestBuildRegistry:
         assert "pipeline_view" in names
         assert "pipeline_add_step" in names
         assert "todo" in names
-        assert "goal_run" in names
         assert "captcha" in names
         assert "read_data" in names
         assert "file_read" in names
@@ -184,7 +182,6 @@ class TestBuildRegistry:
         assert "format_convert" in names
         assert "browser_eval_js" in names
         assert "browser_wait_for_download" in names
-        assert "record_step" not in names
         assert "eval_agent" not in names
         assert "pipeline_load" not in names
         assert "pipeline_list" not in names
@@ -236,20 +233,6 @@ class TestDispatchMaps:
 
 
 # ── Handler functions ─────────────────────────────────────────────
-
-
-class TestGoalRunHandler:
-    @pytest.mark.asyncio
-    async def test_returns_goal_message(self):
-        result = await _goal_run_handler({"description": "Test goal", "goal": ""}, ToolContext())
-        assert result["ok"] is True
-        assert "目标已设定" in result["result"]
-        assert "Test goal" in result["result"]
-
-    @pytest.mark.asyncio
-    async def test_fallback_to_goal_field(self):
-        result = await _goal_run_handler({"goal": "Search and extract"}, ToolContext())
-        assert "Search and extract" in result["result"]
 
 
 class TestCaptchaHandler:

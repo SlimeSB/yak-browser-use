@@ -474,23 +474,6 @@ async def test_pipeline_add_step_with_op_type(sample_pipeline_file):
     assert validated.steps[-1].browser_ops == [{"type": "goto", "url": "https://example.com"}]
 
 
-@pytest.mark.asyncio
-async def test_pipeline_add_step_with_op_type_goal_run(sample_pipeline_file):
-    with _mock_write_via_edit():
-        result = await pipeline_add_step(
-            pipeline_name="test_pipeline",
-            step_name="step_5",
-            description="Goal run step",
-            op_type="goal_run",
-            op_args={"description": "Analyze page"},
-            explanation="test",
-        )
-    data = result
-    assert data["ok"] is True
-
-    validated = _load_pipeline_yaml("test_pipeline")
-    assert validated.steps[-1].goal_description == "Analyze page"
-    assert validated.steps[-1].browser_ops is None
 
 
 # ── pipeline_remove_step ───────────────────────────────────────

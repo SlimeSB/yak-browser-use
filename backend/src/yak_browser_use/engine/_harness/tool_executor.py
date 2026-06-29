@@ -73,7 +73,7 @@ async def execute_tool_calls_sequential(
         tools_dir: Directory containing tool Python files.
         pipeline_name: Current pipeline name.
         guardrail_state: Per-turn guardrail state.
-        budget: Iteration budget (paused during goal_run, not consumed here).
+        budget: Iteration budget (paused during CDP reconnect, not consumed here).
         interrupt_check: Callable returning True if conversation is interrupted.
         stream_callback: Optional callback for streaming events.
 
@@ -165,9 +165,6 @@ async def execute_tool_calls_sequential(
                 "error": error_msg if not ok else None,
                 "id": tool_call_id,
             })
-
-        if not ok and fn_name == "goal_run" and stream_callback:
-            stream_callback({"type": EVENT_ERROR, "message": error_msg})
 
     if guardrail_state:
         guardrail_state.reset()
