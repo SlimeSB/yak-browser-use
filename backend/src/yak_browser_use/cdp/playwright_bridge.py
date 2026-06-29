@@ -696,6 +696,8 @@ class PlaywrightBridge:
         self._last_highlight_elements: list[dict] = []
         self._highlight_guard_task: asyncio.Task | None = None
         self._stop_event = asyncio.Event()
+        self._page_scan_done = asyncio.Event()
+        self._page_scan_done.set()  # initially ready — no scan pending
         # Per-page element cache, so each tab shows its own highlights
         self._per_page_elements: dict[int, list[dict]] = {}
         # a11y / progressive mode state
@@ -725,6 +727,17 @@ class PlaywrightBridge:
 
         task.add_done_callback(_done)
         return task
+
+    async def wait_for_page_scan(self, timeout: float = 5.0) -> None:
+        """Wait until the current page's auto-scan completes.
+
+        Called by the tool executor after a click/goto/fill/scroll so the
+        LLM never sees stale ``_ref_map`` or ``_last_highlight_elements``.
+        """
+        try:
+            await asyncio.wait_for(self._page_scan_done.wait(), timeout=timeout)
+        except asyncio.TimeoutError:
+            logger.debug("wait_for_page_scan: timed out after %.1fs", timeout)
 
     async def start(self) -> None:
         """Connect to Chrome via CDP and grab the active page."""
@@ -1143,22 +1156,30 @@ class PlaywrightBridge:
 
     async def _on_page_load(self, page: Page) -> None:
         """Page load / reload 后自动重注高亮 + 扫描。"""
-        await self.ensure_highlights(page)
-        if page is self._page:
-            await self._auto_scan()
-        else:
-            await self._scan_and_cache_page(page)
+        self._page_scan_done.clear()
+        try:
+            await self.ensure_highlights(page)
+            if page is self._page:
+                await self._auto_scan()
+            else:
+                await self._scan_and_cache_page(page)
+        finally:
+            self._page_scan_done.set()
 
     async def _on_frame_navigated(self, frame, page: Page | None = None) -> None:
         """SPA pushState / replaceState — re-inject highlights + auto-scan."""
         pg = page or self._page
         if not pg or frame != pg.main_frame:
             return
-        await self.ensure_highlights(pg)
-        if pg is self._page:
-            await self._auto_scan()
-        else:
-            await self._scan_and_cache_page(pg)
+        self._page_scan_done.clear()
+        try:
+            await self.ensure_highlights(pg)
+            if pg is self._page:
+                await self._auto_scan()
+            else:
+                await self._scan_and_cache_page(pg)
+        finally:
+            self._page_scan_done.set()
 
     async def _scan_and_cache_page(self, page: Page) -> None:
         """扫描非活跃页面的 DOM，缓存到 per-page cache，并渲染高亮。"""

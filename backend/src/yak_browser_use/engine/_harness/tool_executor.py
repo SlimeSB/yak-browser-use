@@ -155,6 +155,8 @@ async def execute_tool_calls_sequential(
 
         if ok and fn_name in ("browser_goto", "browser_click", "browser_fill", "browser_scroll") and cdp_helpers is not None:
             await _auto_refresh_highlights(cdp_helpers)
+            if hasattr(cdp_helpers, "bridge") and cdp_helpers.bridge is not None:
+                await cdp_helpers.bridge.wait_for_page_scan()
 
         if stream_callback:
             stream_callback({
@@ -382,12 +384,18 @@ execute_tool_calls = execute_tool_calls_sequential
 
 
 async def _auto_refresh_highlights(cdp_helpers: object) -> None:
-    """Refresh DOM highlights periodically — background guard."""
+    """Refresh DOM highlights after a tool call that may have changed the page.
+
+    Pushes the bridge's cached ``_last_highlight_elements`` into the browser
+    renderer so badge positions stay in sync after click / fill / goto / scroll.
+    """
     from yak_browser_use.engine.scratchpad import sync_element_map as scratchpad_sync_element_map
     if not hasattr(cdp_helpers, "add_dom_highlights"):
         return
     try:
-        highlight_result = await cdp_helpers.add_dom_highlights()
+        bridge = cdp_helpers.bridge if hasattr(cdp_helpers, "bridge") else None
+        elements = getattr(bridge, "_last_highlight_elements", []) if bridge else []
+        highlight_result = await cdp_helpers.add_dom_highlights(elements)
         element_map = highlight_result.get("element_map", {})
         if element_map:
             elements_for_sync = [
