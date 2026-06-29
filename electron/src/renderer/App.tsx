@@ -369,7 +369,10 @@ export default function App() {
               setEvents(prev => [...prev, { type: et, timestamp: event.timestamp || (event._ts != null ? new Date(event._ts * 1000).toISOString() : new Date().toISOString()), node_name: event.step || event.pipeline || '', data: event }]);
             }
 
-            if (et === 'run_end') {
+            if (et === 'chrome_disconnected') {
+              setConnected(false);
+              setWsUrl('');
+            } else if (et === 'run_end') {
               setLoading(false);
               setCurrentRunId('');
               setCurrentPipeline('');

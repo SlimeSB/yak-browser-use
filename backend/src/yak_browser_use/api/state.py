@@ -69,9 +69,23 @@ class _EngineState:
                 raise RuntimeError("Cannot discover Chrome debug URL — is Chrome running with --remote-debugging-port?")
 
             bridge = PlaywrightBridge(ws_url, pipeline_name=pipeline_name)
-            bridge._on_disconnect_cb = self._on_bridge_disconnected
             await bridge.start()
             bridge.start_health_check()
+
+            bridge_id = id(bridge)
+            async def _on_bridge_disconnected() -> None:
+                """Bridge-specific disconnect callback — only clears state if this bridge is still current."""
+                if self.bridge is None or id(self.bridge) != bridge_id:
+                    return
+                logger.info("EngineState: processing bridge disconnect (bridge_id=%s)", bridge_id)
+                self.bridge = None
+                self.current_state = "idle"
+                await self.broadcast_event({
+                    "type": "chrome_disconnected",
+                    "reason": "browser_closed",
+                })
+
+            bridge._on_disconnect_cb = _on_bridge_disconnected
 
             self.bridge = bridge
             self.current_state = "connected"
@@ -88,16 +102,6 @@ class _EngineState:
         self.bridge = None
         self.current_state = "idle"
         logger.info("Chrome disconnected")
-
-    async def _on_bridge_disconnected(self) -> None:
-        """Callback: remote Chrome disconnected — clean up bridge state."""
-        logger.info("EngineState: processing bridge disconnect")
-        self.bridge = None
-        self.current_state = "idle"
-        await self.broadcast_event({
-            "type": "chrome_disconnected",
-            "reason": "browser_closed",
-        })
 
     @property
     def chrome_connected(self) -> bool:
