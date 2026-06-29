@@ -1,7 +1,7 @@
 """Integration tests for the agent-architecture-reform data flow.
 
 Tests cross-layer paths that unit tests can't reach:
-- snapshot full lifecycle through filter → scratchpad → message
+- snapshot full lifecycle through filter → message
 - run_check integration with step verification
 - goal execution via todo + browser_*
 - element lookup dual-path selection
@@ -11,14 +11,6 @@ from __future__ import annotations
 
 import pytest
 
-from yak_browser_use.engine.scratchpad import (
-    _scratchpads,
-    clear,
-    clear_all,
-    get as get_scratchpad,
-    store as store_scratchpad,
-    store_raw_html,
-)
 from yak_browser_use.engine._harness.tool_executor import (
     _apply_heavy_data_filter,
 )
@@ -83,12 +75,9 @@ class MockBridge:
 # ── Snapshot full lifecycle integration ──
 
 class TestSnapshotInteractiveLifecycle:
-    """CDP response → executor → filter → scratchpad → message summary."""
+    """CDP response → executor → filter → message summary."""
 
-    def setup_method(self):
-        clear_all()
-
-    def test_full_flow_stores_to_scratchpad(self):
+    def test_full_flow_creates_summary(self):
         elements = [
             {"ref": "@e1", "tag": "button", "type": "submit", "text": "Search",
              "selector": "button#search"},
@@ -106,12 +95,12 @@ class TestSnapshotInteractiveLifecycle:
         }
         _apply_heavy_data_filter("browser_snapshot", {"mode": "interactive"}, result_dict)
 
-        sp = get_scratchpad()
-        assert sp.url == "https://example.com/search"
-        assert sp.title == "Search Page"
-        assert sp.element_map == {"@e1": "button#search", "@e2": "input[name='q']"}
-        assert "Search Page" in sp.summary
-        assert "2个可交互元素" in sp.summary
+        result_text = result_dict["result"]
+        assert isinstance(result_text, str)
+        assert "Search Page" in result_text
+        assert "2个可交互元素" in result_text
+        assert "@e1" in result_text
+        assert "@e2" in result_text
 
     def test_message_receives_summary_not_raw_data(self):
         elements = [{"ref": "@e1", "selector": "button", "tag": "button", "text": "OK"}]
@@ -133,9 +122,6 @@ class TestSnapshotInteractiveLifecycle:
         assert "@e1" in result_text  # element refs now included in summary
 
 class TestSnapshotFullLifecycle:
-    def setup_method(self):
-        clear_all()
-
     def test_full_mode_strips_heavy_data(self):
         result_dict = {
             "ok": True,
@@ -149,23 +135,9 @@ class TestSnapshotFullLifecycle:
         assert "html" not in result_dict
         assert "完整快照" in result_dict["result"]
 
-    def test_full_mode_stores_html_to_scratchpad(self):
-        html = "<html><body>test body</body></html>"
-        result_dict = {
-            "ok": True,
-            "result": {"url": "https://x.com", "title": "X"},
-            "html": html,
-        }
-        _apply_heavy_data_filter("browser_snapshot", {"mode": "full"}, result_dict)
-
-        assert get_scratchpad().raw_html == html
-
 
 class TestSnapshotSimplifiedDegradedLifecycle:
-    def setup_method(self):
-        clear_all()
-
-    def test_simplified_degraded_strips_heavy_data(self):
+    def test_simplified_degraded_passes_through(self):
         result_dict = {
             "ok": True,
             "result": {
@@ -183,10 +155,9 @@ class TestSnapshotSimplifiedDegradedLifecycle:
         _apply_heavy_data_filter("browser_snapshot", {"mode": "simplified"}, result_dict)
 
         result_payload = result_dict["result"]
-        assert isinstance(result_payload, str)
-        assert "降级" in result_payload
-        assert "screenshot_base64" not in result_dict.get("result", {})
-        assert get_scratchpad().url == "https://x.com"
+        assert isinstance(result_payload, dict)
+        assert result_payload["degraded"] is True
+        assert "screenshot_base64" in result_payload
 
     def test_simplified_normal_no_filter(self):
         result_dict = {"ok": True, "result": "页面文本摘要"}
@@ -217,10 +188,7 @@ class TestSnapshotSimplifiedDegradedLifecycle:
 # ── browser_source integration ──
 
 class TestBrowserSourceLifecycle:
-    def setup_method(self):
-        clear_all()
-
-    def test_source_caches_and_strips_html(self):
+    def test_source_strips_html(self):
         result_dict = {
             "ok": True,
             "result": {},
@@ -231,19 +199,7 @@ class TestBrowserSourceLifecycle:
         assert "html" not in result_dict
         assert result_dict["result"]["length"] == len("<html><body>page source</body></html>")
 
-    def test_source_cached_true_hit(self):
-        store_raw_html("<html>cached</html>")
-        result_dict = {
-            "ok": True,
-            "result": {"length": 17, "cached": True},
-            "html": "<html>cached</html>",
-        }
-        _apply_heavy_data_filter("browser_source", {"cached": True}, result_dict)
-
-        assert result_dict["result"]["cached"] is True
-        assert "note" not in result_dict["result"]
-
-    def test_source_cached_true_miss_then_fallback(self):
+    def test_source_cached_fallback(self):
         result_dict = {
             "ok": True,
             "result": {},
@@ -389,51 +345,12 @@ class TestCheckFieldRoundTrip:
         assert runtime["check"]["element_visible"] == "#go"
 
 
-# ── Scratchpad lifecycle (memory) ──
 
-class TestScratchpadLifecycle:
-    def setup_method(self):
-        clear_all()
-
-    def test_clear_removes_session(self):
-        store_scratchpad({
-            "elements": [{"ref": "@e1", "selector": "btn"}],
-            "url": "https://x.com",
-            "title": "X",
-        }, session_id="run-1")
-        assert len(_scratchpads) == 1
-
-        clear("run-1")
-        assert len(_scratchpads) == 0
-
-    def test_clear_all_removes_everything(self):
-        store_scratchpad({"elements": [], "url": "", "title": ""}, "a")
-        store_scratchpad({"elements": [], "url": "", "title": ""}, "b")
-        store_scratchpad({"elements": [], "url": "", "title": ""}, "c")
-        assert len(_scratchpads) == 3
-
-        clear_all()
-        assert len(_scratchpads) == 0
-
-    def test_overwrite_does_not_leak_new_keys(self):
-        store_scratchpad({"elements": [{"ref": "@e1", "selector": "old"}], "url": "old.com", "title": "Old"})
-        get_scratchpad().raw_html = "<html>custom</html>"
-
-        store_scratchpad({"elements": [], "url": "new.com", "title": "New"})
-        sp = get_scratchpad()
-        assert sp.url == "new.com"
-        assert sp.title == "New"
-        assert sp.element_map == {}
-        assert sp.elements == []
-        assert sp.raw_html == "<html>custom</html>"  # preserved by design
 
 
 # ── Filter unknown modes ──
 
 class TestFilterUnknownMode:
-    def setup_method(self):
-        clear_all()
-
     def test_unknown_mode_uses_fallback(self):
         result_dict = {
             "ok": True,

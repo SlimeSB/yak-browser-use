@@ -23,7 +23,7 @@ tags: [system, goal, execution, workflow]
 | 了解页面结构 | `browser_snapshot(mode="aria")` | token 最少，含标题/链接/表格 |
 | 找可交互元素 | `browser_snapshot(mode="a11y", query="关键词")` | 精准匹配，减少噪音 |
 | 复杂长页面 | `browser_snapshot(mode="progressive", query="关键词")` | DOM 深度扫描+折叠，适合列表/搜索结果 |
-| 查看完整 HTML | `browser_source()` | 大数据自动缓存到 scratchpad |
+| 查看完整 HTML | `browser_source()` | HTML 数据已过滤，仅返回长度摘要 |
 | 查询元素详情 | `browser_lookup_selector(@e_XXXXX)` | 每次调用刷新页面缓存确保最新 |
 | 执行操作 | `browser_click` / `browser_fill` / `browser_goto` | 直接操作 |
 

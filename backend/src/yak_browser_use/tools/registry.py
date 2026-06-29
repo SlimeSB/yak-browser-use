@@ -223,7 +223,7 @@ def _build_registry_impl() -> None:
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "cached": {"type": "boolean", "description": "If true, read HTML from scratchpad cache instead of CDP. Falls back to CDP if no cache."},
+                    "cached": {"type": "boolean", "description": "If true, read HTML from bridge cache instead of CDP. Falls back to CDP if no cache."},
                 },
             },
         },

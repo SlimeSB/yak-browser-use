@@ -4,43 +4,11 @@ from __future__ import annotations
 
 from yak_browser_use.engine._harness.tool_executor import (
     _apply_heavy_data_filter,
-    _try_scratchpad_source_read,
 )
-from yak_browser_use.engine.scratchpad import _scratchpads, store, store_raw_html
-
-
-class TestScratchpadSourceRead:
-    def test_cache_hit(self):
-        _scratchpads.clear()
-        store_raw_html("<html><body>test</body></html>")
-        result = _try_scratchpad_source_read()
-        assert result is not None
-        assert result["ok"] is True
-        assert result["result"]["length"] == 30
-        assert result["result"]["cached"] is True
-        assert result["html"] == "<html><body>test</body></html>"
-
-    def test_cache_miss(self):
-        _scratchpads.clear()
-        result = _try_scratchpad_source_read()
-        assert result is None
 
 
 class TestApplyHeavyDataFilter:
-    def test_source_cached_preserved(self):
-        _scratchpads.clear()
-        result_dict = {
-            "ok": True,
-            "result": {"length": 30, "cached": True},
-            "html": "<html><body>test</body></html>",
-        }
-        _apply_heavy_data_filter("browser_source", {"cached": True}, result_dict)
-        assert result_dict["result"]["cached"] is True
-        assert result_dict["result"]["length"] == 30
-        assert "note" not in result_dict["result"]
-
     def test_source_cached_fallback(self):
-        _scratchpads.clear()
         result_dict = {
             "ok": True,
             "result": {},
@@ -51,7 +19,6 @@ class TestApplyHeavyDataFilter:
         assert "无缓存" in result_dict["result"]["note"]
 
     def test_a11y_snapshot_filter(self):
-        _scratchpads.clear()
         result_dict = {
             "ok": True,
             "result": {
@@ -71,7 +38,6 @@ class TestApplyHeavyDataFilter:
         assert "1个可交互元素" in result_dict["result"]
 
     def test_a11y_degraded_filter(self):
-        _scratchpads.clear()
         result_dict = {
             "ok": True,
             "result": {
@@ -89,7 +55,6 @@ class TestApplyHeavyDataFilter:
         assert isinstance(result_dict["result"], str)
 
     def test_full_snapshot_filter(self):
-        _scratchpads.clear()
         result_dict = {
             "ok": True,
             "result": {"url": "https://x.com", "title": "X"},
@@ -102,7 +67,6 @@ class TestApplyHeavyDataFilter:
         assert "完整快照" in str(result_dict["result"])
 
     def test_simplified_no_filter(self):
-        _scratchpads.clear()
         result_dict = {
             "ok": True,
             "result": "简化摘要",
@@ -111,7 +75,6 @@ class TestApplyHeavyDataFilter:
         assert result_dict["result"] == "简化摘要"
 
     def test_source_filter_strips_html(self):
-        _scratchpads.clear()
         result_dict = {
             "ok": True,
             "result": {},

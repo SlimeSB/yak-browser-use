@@ -201,12 +201,6 @@ async def _execute_single_tool_call(
 
     while True:
         try:
-            # ── Scratchpad caching (before dispatch) ─────────────────
-            if fn_name == "browser_source" and fn_args.get("cached"):
-                cached_result = _try_scratchpad_source_read()
-                if cached_result is not None:
-                    return cached_result
-
             # ── Strip 'bind' (framework param) before resolve ────
             source_key = strip_pointer(fn_args.pop("bind", ""))
 
@@ -389,22 +383,50 @@ async def _auto_refresh_highlights(cdp_helpers: object) -> None:
     Pushes the bridge's cached ``_last_highlight_elements`` into the browser
     renderer so badge positions stay in sync after click / fill / goto / scroll.
     """
-    from yak_browser_use.engine.scratchpad import sync_element_map as scratchpad_sync_element_map
     if not hasattr(cdp_helpers, "add_dom_highlights"):
         return
     try:
         bridge = cdp_helpers.bridge if hasattr(cdp_helpers, "bridge") else None
         elements = getattr(bridge, "_last_highlight_elements", []) if bridge else []
-        highlight_result = await cdp_helpers.add_dom_highlights(elements)
-        element_map = highlight_result.get("element_map", {})
-        if element_map:
-            elements_for_sync = [
-                {"ref": ref, "selector": info.get("selector", "")}
-                for ref, info in element_map.items()
-            ]
-            scratchpad_sync_element_map(elements_for_sync)
+        await cdp_helpers.add_dom_highlights(elements)
     except Exception:
         logger.debug("auto_refresh_highlights failed", exc_info=True)
+
+
+def _build_snapshot_summary(elements: list[dict], url: str, title: str) -> str:
+    lines: list[str] = []
+
+    if title:
+        lines.append(f"页面标题: {title}")
+    if url:
+        lines.append(f"页面URL: {url}")
+
+    el_count = len(elements)
+    if el_count > 0:
+        lines.append(f"{el_count}个可交互元素:")
+        for el in elements:
+            ref = el.get("ref", "")
+            tag = el.get("tag", "")
+            el_type = el.get("type", "")
+            text = el.get("text", "")
+            sel = el.get("selector", "")
+
+            parts: list[str] = [ref, f"<{tag}"]
+            if el_type:
+                parts.append(f' type="{el_type}"')
+            parts.append(">")
+
+            if text:
+                text_escaped = text.replace('"', '\\"')
+                parts.append(f' "{text_escaped}"')
+            parts.append(f" {sel}")
+
+            lines.append("".join(parts))
+
+    if not lines:
+        return "页面快照已获取"
+
+    return "\n".join(lines)
 
 
 def _apply_heavy_data_filter(
@@ -412,13 +434,9 @@ def _apply_heavy_data_filter(
     fn_args: dict,
     result_dict: dict,
 ) -> None:
-    from yak_browser_use.engine.scratchpad import get as get_scratchpad
-    from yak_browser_use.engine.scratchpad import store as store_scratchpad
-    from yak_browser_use.engine.scratchpad import store_raw_html as scratchpad_store_raw_html
     """Extract heavy data from browser_snapshot/browser_source results.
 
-    Writes large payloads (HTML, elements, screenshots) to scratchpad and
-    replaces result_dict["result"] with concise summaries.
+    Replaces result_dict["result"] with concise summaries.
     """
     if not result_dict.get("ok"):
         return
@@ -427,17 +445,6 @@ def _apply_heavy_data_filter(
         mode = fn_args.get("mode", "aria")
 
         if mode in ("aria", "simplified"):
-            # aria snapshot returns mode="aria"
-            result_payload = result_dict.get("result", {})
-            if isinstance(result_payload, dict) and result_payload.get("degraded"):
-                result_payload.pop("screenshot_base64", None)
-                result_payload.pop("html", None)
-                store_scratchpad({
-                    "elements": [],
-                    "url": result_payload.get("url", ""),
-                    "title": result_payload.get("title", ""),
-                })
-                result_dict["result"] = "ARIA 快照已获取（降级为 full 模式），数据已缓存"
             return
 
         result_payload = result_dict.get("result", {})
@@ -447,31 +454,17 @@ def _apply_heavy_data_filter(
                 # a11y → progressive fallback: data is progressive format
                 if result_payload.get("degraded"):
                     elements = result_payload.get("elements", [])
-                    folded = result_payload.get("folded_containers", [])
-                    branch_info = result_payload.get("branch_index", {})
                     url = result_payload.get("url", "")
                     title = result_payload.get("title", "")
-                    store_scratchpad({
-                        "elements": elements,
-                        "folded_containers": folded,
-                        "branch_index": branch_info,
-                        "url": url,
-                        "title": title,
-                    })
                     result_dict["result"] = (
                         "⚠️ Accessibility Tree 不可用，已降级到 progressive 模式\n\n"
-                        + get_scratchpad().summary
+                        + _build_snapshot_summary(elements, url, title)
                     )
                 else:
                     elements = result_payload.get("elements", [])
                     url = result_payload.get("url", "")
                     title = result_payload.get("title", "")
-                    store_scratchpad({
-                        "elements": elements,
-                        "url": url,
-                        "title": title,
-                    })
-                    result_dict["result"] = get_scratchpad().summary
+                    result_dict["result"] = _build_snapshot_summary(elements, url, title)
             else:
                 result_dict["result"] = "a11y 快照已获取（摘要不可用）"
                 logger.warning("browser_snapshot a11y returned non-dict result, using fallback")
@@ -480,18 +473,9 @@ def _apply_heavy_data_filter(
         if mode == "progressive":
             if isinstance(result_payload, dict):
                 elements = result_payload.get("elements", [])
-                folded = result_payload.get("folded_containers", [])
-                branch_info = result_payload.get("branch_index", {})
                 url = result_payload.get("url", "")
                 title = result_payload.get("title", "")
-                store_scratchpad({
-                    "elements": elements,
-                    "folded_containers": folded,
-                    "branch_index": branch_info,
-                    "url": url,
-                    "title": title,
-                })
-                result_dict["result"] = get_scratchpad().summary
+                result_dict["result"] = _build_snapshot_summary(elements, url, title)
             else:
                 result_dict["result"] = "progressive 快照已获取（摘要不可用）"
                 logger.warning("browser_snapshot progressive returned non-dict result, using fallback")
@@ -500,17 +484,7 @@ def _apply_heavy_data_filter(
         elif mode == "full":
             result_dict.pop("screenshot_base64", "")
             html = result_dict.pop("html", "")
-            result_payload_val = result_dict.get("result", {})
-            url = result_payload_val.get("url", "") if isinstance(result_payload_val, dict) else ""
-            title = result_payload_val.get("title", "") if isinstance(result_payload_val, dict) else ""
-            store_scratchpad({
-                "elements": [],
-                "url": url,
-                "title": title,
-            })
-            if html:
-                scratchpad_store_raw_html(html)
-            result_dict["result"] = "\U0001F4F8 完整快照已获取（含截图+HTML），数据已缓存"
+            result_dict["result"] = "\U0001F4F8 完整快照已获取（含截图+HTML）"
             return
 
         else:
@@ -519,13 +493,8 @@ def _apply_heavy_data_filter(
             return
 
     if fn_name == "browser_source":
-        result_payload = result_dict.get("result", {})
-        if isinstance(result_payload, dict) and result_payload.get("cached"):
-            result_dict.pop("html", None)
-            return
         html = result_dict.pop("html", "")
         if html:
-            scratchpad_store_raw_html(html)
             result_payload = {"length": len(html)}
             if fn_args.get("cached"):
                 result_payload["cached"] = False
@@ -533,19 +502,3 @@ def _apply_heavy_data_filter(
             result_dict["result"] = result_payload
         return
 
-
-def _try_scratchpad_source_read() -> dict | None:
-    from yak_browser_use.engine.scratchpad import get as get_scratchpad
-    """Try to read browser_source from scratchpad cache.
-
-    Returns a result dict with cached HTML length, or None to fall through to CDP.
-    """
-    sp = get_scratchpad()
-    if sp.raw_html:
-        length = len(sp.raw_html)
-        return {
-            "ok": True,
-            "result": {"length": length, "cached": True},
-            "html": sp.raw_html,
-        }
-    return None
