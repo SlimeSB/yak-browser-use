@@ -210,7 +210,7 @@ async def test_a11y_snapshot_uses_selector(a11y_snapshot_fn, mock_bridge):
     for el in result["elements"]:
         assert "ref" not in el
         assert "selector" in el
-        assert el["selector"].startswith("role=")
+        assert el["selector"].startswith("[data-ybu-ref=\"")
 
 
 @pytest.mark.asyncio
@@ -311,7 +311,7 @@ async def test_a11y_snapshot_has_selector(a11y_snapshot_fn, mock_bridge):
     for el in result["elements"]:
         assert "selector" in el
         assert "ref" not in el
-        assert el["selector"].startswith("role=")
+        assert el["selector"].startswith("[data-ybu-ref=\"")
 
 
 # ── Invariant I5: _in_view consistency ─────────────────────────
