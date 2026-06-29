@@ -1,17 +1,16 @@
-## ADDED Requirements
+## MODIFIED Requirements
 
 ### Requirement: goal-execution 模式
-系统 MUST 在 LLM 调用 `goal_run(description)` 后引导其使用 `todo` + `browser_*` 工具逐步执行复杂任务，而非 spawn 独立的 browser-use 子 Agent。
+系统 MUST 在用户提出复杂目标时引导 LLM 使用 `todo` + `browser_*` 工具逐步执行任务，无需先调用任何 tool 来触发模式切换。
 
-#### Scenario: goal_run 返回模式切换提示
-- **WHEN** LLM 调用 `goal_run(description="在淘宝搜索机械键盘并加入购物车")`
-- **THEN** 工具返回标准提示文本，包含目标描述和执行指引
-- **AND** 提示文本引导 LLM 用 `todo` 拆解为 3-6 个步骤
-- **AND** 提示文本引导每步完成后调 `record_step`
-- **AND** 提示文本引导不确定时直接问用户
+#### Scenario: 用户提出复杂目标
+- **WHEN** 用户提出复杂目标（如"在淘宝搜索机械键盘并加入购物车"）
+- **THEN** LLM MUST 直接使用 `todo` 工具将目标拆解为 3-6 个步骤
+- **AND** 使用 `browser_*` 工具逐步执行
+- **AND** 每步完成后调 `record_step` 写入 pipeline
 
 #### Scenario: LLM 按指引拆解任务
-- **WHEN** LLM 收到 goal_run 的提示文本
+- **WHEN** LLM 收到用户提出的复杂目标
 - **THEN** LLM 调用 `todo` 工具将目标拆解为具体步骤
 - **AND** 每个步骤标记为 pending
 
