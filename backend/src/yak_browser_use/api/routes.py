@@ -318,14 +318,24 @@ def register_all_routes(app: FastAPI) -> None:
                 if proc and engine_state.bridge:
                     engine_state.bridge.watch_process(proc)
 
+            # 高亮注入是纯装饰性操作，不应阻塞连接成功响应
             if engine_state.bridge:
-                engine_state.bridge.set_highlight_config(highlight_mode)
-                await engine_state.bridge.ensure_highlights()
-            await _inject_initial_highlights()
+                try:
+                    engine_state.bridge.set_highlight_config(highlight_mode)
+                    await engine_state.bridge.ensure_highlights()
+                except Exception:
+                    logger.warning("Non-fatal: failed to set up initial highlights", exc_info=True)
+            try:
+                await _inject_initial_highlights()
+            except Exception:
+                logger.warning("Non-fatal: failed to inject initial highlights", exc_info=True)
 
             return JSONResponse({"connected": True, "ws_url": actual_ws[:80]})
         except Exception as exc:
             logger.exception("Chrome connect failed")
+            # 清理可能已创建但未完成的路由的 bridge
+            if engine_state.bridge:
+                await engine_state.disconnect_chrome()
             raise ServerError(str(exc))
 
     @app.get("/api/chrome/status")

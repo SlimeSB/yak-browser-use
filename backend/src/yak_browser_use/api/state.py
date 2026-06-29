@@ -56,8 +56,18 @@ class _EngineState:
         The connected CDP URL (truncated for logging).
         """
         async with self._connect_lock:
+            if self._running_pipeline is not None:
+                raise RuntimeError("A pipeline is currently running — cannot reconnect Chrome")
+
             if self.bridge is not None:
-                raise RuntimeError("Chrome is already connected")
+                logger.warning("Chrome already connected — disconnecting old bridge first")
+                old_bridge = self.bridge
+                self.bridge = None
+                self.current_state = "idle"
+                try:
+                    await old_bridge.stop()
+                except Exception:
+                    logger.debug("Failed to stop old bridge", exc_info=True)
 
             self.current_state = "connecting"
 

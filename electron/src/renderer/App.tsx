@@ -30,6 +30,7 @@ export default function App() {
   const [connected, setConnected] = useState(false);
   const [wsUrl, setWsUrl] = useState('');
   const [connectionError, setConnectionError] = useState<string | null>(null);
+  const connectGenRef = useRef(0);
   const [connectMode, setConnectMode] = useState<'user' | 'isolated'>('user');
   const [selectedProfile, setSelectedProfile] = useState(t('common.defaultTemp'));
   const [profiles, setProfiles] = useState<string[]>([t('common.defaultTemp')]);
@@ -372,6 +373,7 @@ export default function App() {
             if (et === 'chrome_disconnected') {
               setConnected(false);
               setWsUrl('');
+              connectGenRef.current++;
             } else if (et === 'run_end') {
               setLoading(false);
               setCurrentRunId('');
@@ -479,9 +481,11 @@ export default function App() {
   }, [activePreset, params, pipelines, pipelineCache, addEvent, reviewMode]);
 
   const handleConnect = useCallback(async (mode: 'user' | 'isolated', profile?: string) => {
+    const gen = ++connectGenRef.current;
     setConnectionError(null);
     try {
       const resp = await api.connectBrowser(mode, profile, highlightMode);
+      if (gen !== connectGenRef.current) return;
       if (resp.needsRestart) {
         setRestartDialog({ browserName: resp.browserName || 'Chrome' });
         return;
@@ -494,10 +498,11 @@ export default function App() {
         setConnectionError(resp.error || t('connection.connectionFailed'));
       }
     } catch (e) {
+      if (gen !== connectGenRef.current) return;
       console.error('Connect failed: %s', String(e));
       setConnectionError(String(e));
     }
-  }, []);
+  }, [highlightMode]);
 
   const handleCreateProfile = useCallback(async (name: string) => {
     if (!name.trim()) return;
