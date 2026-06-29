@@ -429,15 +429,28 @@ def register_all_routes(app: FastAPI) -> None:
             service = await _get_service()
             pipeline_name = service.sessions.active_pipeline
 
+            captured_mode = engine_state.bridge._highlight_mode if engine_state.bridge else "a11y"
+
             await engine_state.disconnect_chrome()
 
             actual_ws = await engine_state.connect_chrome(ws_url, pipeline_name=pipeline_name)
 
-            await _inject_initial_highlights()
+            if engine_state.bridge:
+                try:
+                    engine_state.bridge.set_highlight_config(captured_mode)
+                    await engine_state.bridge.ensure_highlights()
+                except Exception:
+                    logger.warning("Non-fatal: failed to set up highlights after restart", exc_info=True)
+            try:
+                await _inject_initial_highlights()
+            except Exception:
+                logger.warning("Non-fatal: failed to inject highlights after restart", exc_info=True)
 
             return JSONResponse({"connected": True, "ws_url": actual_ws[:80]})
         except Exception as exc:
             logger.exception("Chrome restart failed")
+            if engine_state.bridge:
+                await engine_state.disconnect_chrome()
             raise ServerError(str(exc))
 
     # =================================================================

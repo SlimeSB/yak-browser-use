@@ -31,6 +31,12 @@ export default function App() {
   const [wsUrl, setWsUrl] = useState('');
   const [connectionError, setConnectionError] = useState<string | null>(null);
   const connectGenRef = useRef(0);
+  const connectedRef = useRef(false);
+
+  useEffect(() => {
+    connectedRef.current = connected;
+  }, [connected]);
+
   const [connectMode, setConnectMode] = useState<'user' | 'isolated'>('user');
   const [selectedProfile, setSelectedProfile] = useState(t('common.defaultTemp'));
   const [profiles, setProfiles] = useState<string[]>([t('common.defaultTemp')]);
@@ -371,9 +377,11 @@ export default function App() {
             }
 
             if (et === 'chrome_disconnected') {
+              if (connectedRef.current) {
+                connectGenRef.current++;
+              }
               setConnected(false);
               setWsUrl('');
-              connectGenRef.current++;
             } else if (et === 'run_end') {
               setLoading(false);
               setCurrentRunId('');
