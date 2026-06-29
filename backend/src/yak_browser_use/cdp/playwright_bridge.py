@@ -1429,6 +1429,8 @@ class PlaywrightBridge:
     # ------------------------------------------------------------------
 
     async def tab_new(self, url: str = "about:blank") -> dict:
+        if self._context is None:
+            return {"ok": False, "error": "browser not connected"}
         new_page = await self._context.new_page()
         page_id = str(uuid.uuid4())[:8]
         await new_page.evaluate("(id) => { window.__ybu_page_id = id }", page_id)
@@ -1438,6 +1440,8 @@ class PlaywrightBridge:
         return {"targetId": page_id, "url": new_page.url}
 
     async def tab_switch(self, target_id: str) -> dict:
+        if self._context is None:
+            return {"ok": False, "error": "browser not connected"}
         for p in self._context.pages:
             pid = await asyncio.wait_for(p.evaluate("() => window.__ybu_page_id || ''"), timeout=5.0)
             if pid == target_id:
@@ -1456,6 +1460,8 @@ class PlaywrightBridge:
         raise ValueError(f"Tab not found: {target_id}")
 
     async def tab_close(self, target_id: str) -> dict:
+        if self._context is None:
+            return {"ok": False, "error": "browser not connected"}
         for p in self._context.pages:
             pid = await asyncio.wait_for(p.evaluate("() => window.__ybu_page_id || ''"), timeout=5.0)
             if pid == target_id:
@@ -1470,6 +1476,8 @@ class PlaywrightBridge:
         raise ValueError(f"Tab not found: {target_id}")
 
     async def tab_list(self) -> list[dict]:
+        if self._context is None:
+            return []
         result = []
         for i, p in enumerate(self._context.pages):
             try:
@@ -1631,9 +1639,8 @@ class PlaywrightBridge:
             el["ref"] = ref
             el["nth"] = nth
             el["prog_label"] = ref.lstrip("@")
-            # Build Playwright-compatible locator selector
-            safe_name = name.replace('\\', '\\\\').replace('"', '\\"')
-            el["selector"] = f'role={el["role"]}[name="{safe_name}"]' if name else f'role={el["role"]}'
+            # CSS attribute selector matching the data-ybu-ref stamped below
+            el["selector"] = f'[data-ybu-ref="{ref}"]'
 
             locator = self._page.get_by_role(el["role"], name=el["name"], exact=True)
             locator = locator.nth(nth)
