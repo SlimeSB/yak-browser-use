@@ -47,9 +47,9 @@ Typical scenarios:
 `file_read` 仍存在于工具列表中（用于 pipeline YAML 引用），但**仅返回元信息**（path/size/encoding），不返回文件内容。
 
 ### 浏览器下载文件处理
-浏览器下载的文件写入 `downloads/` 目录。触发下载后必须：
-1. 先调用 `browser_wait_for_download(timeout)` 等待文件就绪，拿到返回的 `downloads/<filename>` 路径
-2. 再用 `read_data(path="downloads/<filename>")` 读取内容
+浏览器下载的文件自动写入 `downloads/` 目录，内容存入 shared_store。触发下载后：
+1. 调用 `browser_wait_for_download(timeout)` 等待文件就绪，返回 `{ok, key: "downloads/<filename>", size}`
+2. 用 `data_browse(key="downloads/<filename>", limit=500)` 分页浏览内容
 3. 如需要转换格式，用 `read_data(path="downloads/<filename>", convert_to="csv")`
 
 **注意：** 不先调用 `browser_wait_for_download` 直接 `read_data` 会导致文件不存在错误。

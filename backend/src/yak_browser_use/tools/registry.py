@@ -621,7 +621,7 @@ def _build_registry_impl() -> None:
     # ── browser_wait_for_download (formerly wait_for_download) ───────
 
     registry.register("browser_wait_for_download", {
-        "description": "[需 CDP] 等待浏览器下载的文件就绪。触发下载操作后先调用此工具，确认文件稳定后再用 read_data 读取。",
+        "description": "[需 CDP] 等待浏览器下载的文件就绪。文件内容自动存入 shared_store，返回 key 和 size。后续用 data_browse(key=...) 分页浏览。",
         "parameters": {
             "type": "object",
             "properties": {
@@ -727,6 +727,29 @@ def _build_registry_impl() -> None:
             "required": ["type"]
         },
     }, _captcha_handler)
+
+    # ── data_keys / data_browse ───────────────────────────────────────
+
+    registry.register("data_keys", {
+        "description": "列出 shared_store 中所有 key，返回每个 key 的名称、类型（list/dict/str/other）和大小（元素数或字符数）。",
+        "parameters": {
+            "type": "object",
+            "properties": {},
+        },
+    }, _data_keys_handler)
+
+    registry.register("data_browse", {
+        "description": "分页浏览 shared_store 中指定 key 的值。元素列表使用 _build_snapshot_summary 格式逐行输出，字符串截断显示，字典输出 key 列表加截断的 repr。",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "key": {"type": "string", "description": "要浏览的 key 名称。"},
+                "limit": {"type": "integer", "description": "每页返回数量（元素个数或字符数），默认 20，最大 100。"},
+                "offset": {"type": "integer", "description": "起始偏移量，默认 0。"},
+            },
+            "required": ["key"],
+        },
+    }, _data_browse_handler)
 
     logger.info("build_registry: registered %d tools", len(registry._tools))
 
@@ -864,7 +887,80 @@ async def _wait_for_download_handler(args: dict, ctx: ToolContext) -> dict:
         return {"ok": False, "error": "浏览器不可用 — 请确保 CDP 连接已建立"}
     bridge = ctx.cdp_helpers.bridge if hasattr(ctx.cdp_helpers, "bridge") else ctx.cdp_helpers
     timeout = args.get("timeout", 60)
-    return await bridge.wait_for_download(timeout=timeout)
+    result = await bridge.wait_for_download(timeout=timeout)
+    if not result.get("ok"):
+        return result
+
+    full_path = result["path"]
+    try:
+        content = Path(full_path).read_text(encoding="utf-8")
+    except Exception as e:
+        return {"ok": False, "error": f"读取下载文件失败: {e}"}
+
+    rel_key = f"downloads/{Path(full_path).name}"
+    ss = ctx.shared_store
+    if ss is not None:
+        ss[rel_key] = content
+
+    return {"ok": True, "key": rel_key, "size": len(content)}
+
+
+async def _data_keys_handler(args: dict, ctx: ToolContext) -> dict:
+    ss = ctx.shared_store
+    if ss is None:
+        return {"ok": False, "error": "shared_store 不可用"}
+    keys = []
+    for name, value in ss.items():
+        if isinstance(value, list):
+            typ = "list"
+            size = len(value)
+        elif isinstance(value, dict):
+            typ = "dict"
+            size = len(value)
+        elif isinstance(value, str):
+            typ = "str"
+            size = len(value)
+        else:
+            typ = "other"
+            size = 0
+        keys.append({"name": name, "type": typ, "size": size})
+    return {"ok": True, "keys": keys}
+
+
+async def _data_browse_handler(args: dict, ctx: ToolContext) -> dict:
+    ss = ctx.shared_store
+    if ss is None:
+        return {"ok": False, "error": "shared_store 不可用"}
+    key = args.get("key", "")
+    if key not in ss:
+        return {"ok": False, "error": f"key '{key}' 不存在"}
+    value = ss[key]
+    limit = max(min(args.get("limit", 20), 100), 1)
+    offset = max(args.get("offset", 0), 0)
+
+    if isinstance(value, list):
+        total = len(value)
+        page = value[offset:offset + limit]
+        if page and all(isinstance(el, dict) and ("ref" in el or "tag" in el) for el in page):
+            from yak_browser_use.utils.helpers import build_snapshot_summary
+            items = []
+            for el in page:
+                line = build_snapshot_summary([el], "", "")
+                if "\n" in line:
+                    line = line.rsplit("\n", 1)[-1]
+                items.append(line)
+            return {"ok": True, "key": key, "offset": offset, "limit": limit, "total": total, "items": items}
+        items = [repr(x) for x in page]
+        return {"ok": True, "key": key, "offset": offset, "limit": limit, "total": total, "items": items}
+    elif isinstance(value, str):
+        total = len(value)
+        preview = value[offset:offset + limit]
+        return {"ok": True, "key": key, "offset": offset, "limit": limit, "total": total, "preview": preview}
+    elif isinstance(value, dict):
+        ks = list(value.keys())
+        preview = repr(value)[:limit] if limit else repr(value)
+        return {"ok": True, "key": key, "keys": ks, "preview": preview}
+    return {"ok": True, "key": key, "offset": offset, "limit": limit, "value": repr(value)[:limit]}
 
 
 

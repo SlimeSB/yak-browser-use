@@ -961,7 +961,7 @@ class PlaywrightBridge:
         Polls *download_dir* every 500 ms for a new file, then waits
         1 s and verifies the file size is stable (> 100 bytes).
 
-        Returns ``{"ok": true, "path": "downloads/<filename>"}`` or
+        Returns ``{"ok": true, "path": "<absolute_path>"}`` or
         ``{"ok": false, "error": "timeout"}``.
 
         Known limitation: does not support concurrent downloads.
@@ -987,7 +987,7 @@ class PlaywrightBridge:
                 await asyncio.sleep(1.0)
                 second_stat = candidate.stat()
                 if second_stat.st_size == first_stat.st_size:
-                    return {"ok": True, "path": f"downloads/{candidate.name}"}
+                    return {"ok": True, "path": str(candidate)}
             except (OSError, FileNotFoundError):
                 known = current
                 continue

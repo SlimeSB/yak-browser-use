@@ -13,7 +13,7 @@ import time
 from pathlib import Path
 from typing import Callable
 
-from yak_browser_use.utils.helpers import prepend_resolve_errors
+from yak_browser_use.utils.helpers import prepend_resolve_errors, build_snapshot_summary
 from yak_browser_use.utils.logging import get_logger
 
 from yak_browser_use.engine._harness.tool_guardrails import ToolCallGuardrailState
@@ -393,42 +393,6 @@ async def _auto_refresh_highlights(cdp_helpers: object) -> None:
         logger.debug("auto_refresh_highlights failed", exc_info=True)
 
 
-def _build_snapshot_summary(elements: list[dict], url: str, title: str) -> str:
-    lines: list[str] = []
-
-    if title:
-        lines.append(f"页面标题: {title}")
-    if url:
-        lines.append(f"页面URL: {url}")
-
-    el_count = len(elements)
-    if el_count > 0:
-        lines.append(f"{el_count}个可交互元素:")
-        for el in elements:
-            ref = el.get("ref", "")
-            tag = el.get("tag", "")
-            el_type = el.get("type", "")
-            text = el.get("text", "")
-            sel = el.get("selector", "")
-
-            parts: list[str] = [ref, f"<{tag}"]
-            if el_type:
-                parts.append(f' type="{el_type}"')
-            parts.append(">")
-
-            if text:
-                text_escaped = text.replace('"', '\\"')
-                parts.append(f' "{text_escaped}"')
-            parts.append(f" {sel}")
-
-            lines.append("".join(parts))
-
-    if not lines:
-        return "页面快照已获取"
-
-    return "\n".join(lines)
-
-
 def _apply_heavy_data_filter(
     fn_name: str,
     fn_args: dict,
@@ -458,13 +422,13 @@ def _apply_heavy_data_filter(
                     title = result_payload.get("title", "")
                     result_dict["result"] = (
                         "⚠️ Accessibility Tree 不可用，已降级到 progressive 模式\n\n"
-                        + _build_snapshot_summary(elements, url, title)
+                        + build_snapshot_summary(elements, url, title)
                     )
                 else:
                     elements = result_payload.get("elements", [])
                     url = result_payload.get("url", "")
                     title = result_payload.get("title", "")
-                    result_dict["result"] = _build_snapshot_summary(elements, url, title)
+                    result_dict["result"] = build_snapshot_summary(elements, url, title)
             else:
                 result_dict["result"] = "a11y 快照已获取（摘要不可用）"
                 logger.warning("browser_snapshot a11y returned non-dict result, using fallback")
@@ -475,7 +439,7 @@ def _apply_heavy_data_filter(
                 elements = result_payload.get("elements", [])
                 url = result_payload.get("url", "")
                 title = result_payload.get("title", "")
-                result_dict["result"] = _build_snapshot_summary(elements, url, title)
+                result_dict["result"] = build_snapshot_summary(elements, url, title)
             else:
                 result_dict["result"] = "progressive 快照已获取（摘要不可用）"
                 logger.warning("browser_snapshot progressive returned non-dict result, using fallback")
