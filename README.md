@@ -17,8 +17,10 @@
 
 <p align="center">
   <img src="https://img.shields.io/pypi/v/yak-browser-use?style=flat-square&logo=pypi&label=PyPI" alt="PyPI">
+  <img src="https://img.shields.io/pypi/dm/yak-browser-use?style=flat-square&label=downloads" alt="Downloads">
+  <img src="https://img.shields.io/github/stars/SlimeSB/yak-browser-use?style=flat-square&logo=github" alt="GitHub Stars">
   <img src="https://img.shields.io/github/actions/workflow/status/SlimeSB/yak-browser-use/ci.yml?branch=main&style=flat-square&label=CI" alt="CI">
-  <img src="https://img.shields.io/badge/python-%E2%89%A53.12-blue?style=flat-square&logo=python" alt="Python ≥3.12">
+  <img src="https://img.shields.io/badge/python-%E2%89%A53.12%20|%203.13-blue?style=flat-square&logo=python" alt="Python ≥3.12 / 3.13">
   <img src="https://img.shields.io/badge/license-MIT-green?style=flat-square" alt="MIT License">
   <img src="https://img.shields.io/badge/status-alpha-orange?style=flat-square" alt="Alpha">
   <img src="https://img.shields.io/badge/Playwright-ready-45ba4b?style=flat-square&logo=playwright" alt="Playwright">
@@ -91,6 +93,8 @@ Opens the Web UI in your browser — zero setup. The first run auto-installs the
 | [uv](https://docs.astral.sh/uv/) | ≥ 0.4 | `powershell -c "irm https://astral.sh/uv/install.ps1 \| iex"` |
 | Node.js | ≥ 18 | [nodejs.org](https://nodejs.org) |
 | Chrome / Chromium | ≥ 120 | Your existing Chrome, or `uv run playwright install chromium` |
+
+> `uvx` launches directly from PyPI — no local Python/Node.js setup needed.
 
 ### Install
 
@@ -221,10 +225,10 @@ POST /api/run { pipeline: "..." }
 ```
 | yak-browser-use/
 | ├── backend/
+| │   ├── pyproject.toml              # Project config + deps
 | │   ├── src/
 | │   │   └── yak_browser_use/        # All Python source code ★
 | │   │       ├── __main__.py         # CLI entry (run/serve/web/logs)
-| │   │       ├── pyproject.toml      # Project config + deps
 | │   │       │
 | │   │       ├── api/                # FastAPI REST + WebSocket
 | │   │       │   ├── routes.py       # Route registration
@@ -265,11 +269,11 @@ POST /api/run { pipeline: "..." }
 | │   │       │   ├── graph.py / resolver.py / prepare.py
 | │   │       │   ├── diff.py / generator.py / step_type.py
 | │   │       │
-| │   │       ├── tools/              # Tool registry (43+ tools)
+| │   │       ├── tools/              # Tool registry (41 tools)
 | │   │       │   ├── registry.py     # Central dispatch
 | │   │       │   ├── adapters.py / captcha.py
 | │   │       │   ├── file_read.py / file_write.py / format_convert.py
-│   │       │   ├── read_data.py    # Unified content reading (progressive disclosure)
+| │   │       │   ├── read_data.py    # Unified content reading (progressive disclosure)
 | │   │       │   ├── extract.py / data.py
 | │   │       │   ├── todo.py / todo_store.py
 | │   │       │   ├── edit_pipeline.py
@@ -285,7 +289,7 @@ POST /api/run { pipeline: "..." }
 | │   │       └── static/             # Web UI frontend (build artifact)
 | │   │
 | │   ├── tests/                      # 800+ unit & integration tests
-| │   ├── README.md                   # This file
+| │   ├── README.md                   # Auto-synced stub
 | │   └── uv.lock                     # Lockfile
 | │
 | ├── electron/                       # Electron desktop frontend
@@ -308,6 +312,8 @@ POST /api/run { pipeline: "..." }
 1. **PlaywrightBridge Unified Driver** — All browser operations go through `PlaywrightBridge` (`connect_over_cdp()`), gaining auto-wait / auto-scroll / auto-retry, plus health check heartbeat, process watcher, disconnect handling, and SSRF guard. `BrowserBridge` protocol (`cdp/protocols.py`) defines the interface contract.
 
 2. **File as Contract** — pipeline.yaml is a static contract, strictly validated at compile time (DAG cycle detection, file reference validation), minimizing surprises at runtime.
+
+3. **No sub-agent architecture** — The main LLM handles all tasks directly via `todo`, `goal_run`, and `browser_*` tools — no sub-agent spawning, scheduling, or context management. Complex steps are decomposed into subtasks the main LLM executes itself, keeping context in one place and avoiding the overhead of agent-to-agent handoffs. Sub-agents were prototyped and removed as YAGNI.
 
 ---
 

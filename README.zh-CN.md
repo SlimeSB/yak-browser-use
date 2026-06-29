@@ -17,8 +17,10 @@
 
 <p align="center">
   <img src="https://img.shields.io/pypi/v/yak-browser-use?style=flat-square&logo=pypi&label=PyPI" alt="PyPI">
+  <img src="https://img.shields.io/pypi/dm/yak-browser-use?style=flat-square&label=downloads" alt="Downloads">
+  <img src="https://img.shields.io/github/stars/SlimeSB/yak-browser-use?style=flat-square&logo=github" alt="GitHub Stars">
   <img src="https://img.shields.io/github/actions/workflow/status/SlimeSB/yak-browser-use/ci.yml?branch=main&style=flat-square&label=CI" alt="CI">
-  <img src="https://img.shields.io/badge/python-%E2%89%A53.12-blue?style=flat-square&logo=python" alt="Python ≥3.12">
+  <img src="https://img.shields.io/badge/python-%E2%89%A53.12%20|%203.13-blue?style=flat-square&logo=python" alt="Python ≥3.12 / 3.13">
   <img src="https://img.shields.io/badge/license-MIT-green?style=flat-square" alt="MIT License">
   <img src="https://img.shields.io/badge/status-alpha-orange?style=flat-square" alt="Alpha">
   <img src="https://img.shields.io/badge/Playwright-ready-45ba4b?style=flat-square&logo=playwright" alt="Playwright">
@@ -60,6 +62,7 @@
 | 5 | **共享存储的双语法模板解析** — `{path}`（全值引用，保留类型）+ `${path}`（内联字符串插值，`$` 前缀消歧义避免跟 JSON 花括号打架）。刻意设计的两个独立语法，不是无心不一致。 | 在不同工具间传递整个数据结构（`{step_3}`），或在 URL 和模板里插值（`https://${host}/api`）。每种语法有清晰的语义和失败模式。 |
 | 6 | **Scratchpad 承载重数据** — HTML 源码、截图 base64、元素列表存入内存缓存。LLM 看到摘要，通过 `browser_source(cached=true)` 或 `browser_lookup_selector(@e5)` 按需获取细节。 | 保持 LLM 上下文窗口清洁的同时不丢弃数据。Agent 根据需要决定需要什么细节，而不是预先猜测。 |
 | 7 | **read_data — 统一渐进式数据读取** — `read_data` 是文件内容读取的**唯一入口**。支持渐进式披露（offset/limit）、格式转换（`convert_to="csv"`）和二进制文件处理。`file_read` 目前仅返回元信息。 | 之前文件读取分散在 `file_read`、`file_read_head` 和 eval agent 中。统一工具让数据读取一致、可预期，并内置格式转换。 |
+| 8 | **三步 Pipeline 与程序化检查** — Pipeline 步骤为 `goal → ops → check`，其中 `check` 支持 `url_contains`、`element_exists`、`text_contains`、`element_visible` — 确定性程序化验收，不依赖 LLM 判断。 | 多数 Pipeline 框架把验收留给 LLM。Ybu 的程序化检查快速、确定、独立于 LLM 成本/延迟——一个简单的检查不需要调用模型。 |
 | 9 | **结构化错误恢复生态** — `error_classifier`（错误分类）→ `retry_utils`（可配退避）→ `turn_context`（轮次重试计数器），辅以 `error_recovery` 系统提示词引导。全链路打通，不是临时 try/except。 | 真实浏览器自动化持续失败（超时、元素找不到、CDP 断连）。结构化的恢复链路让 Agent 在真实世界的混乱中存活下来，而不是把错误砸用户脸上。 |
 | 10 | **审核门控 + 熔断器 + 补偿回滚** — 三层安全生命周期。Guardian 对敏感操作要求人工审批，熔断器防止连续失败级联扩散，补偿机制支持变更回滚。 | 浏览器自动化会搞坏东西。安全生命周期意味着破坏性操作需要审批、连续失败不会级联、回滚是可行的——不只是"哦豁"。 |
 | 11 | **Chat + 浏览器同步与流式 LLM** — 用户输入指令 → Agent 操作浏览器 → 推理过程、文本增量、工具调用结果全部通过 WebSocket 实时流式推送 | 无需配置文件、无需脚本。用自然语言就能驱动浏览器。看到 Agent 边思考边工作，而不是只看到最终结果。 |
@@ -222,10 +225,10 @@ POST /api/run { pipeline: "..." }
 ```
 | yak-browser-use/
 | ├── backend/
+| │   ├── pyproject.toml              # 项目配置 + 依赖
 | │   ├── src/
 | │   │   └── yak_browser_use/        # 全部 Python 源码 ★
 | │   │       ├── __main__.py         # CLI 入口（run/serve/web/logs）
-| │   │       ├── pyproject.toml      # 项目配置 + 依赖
 | │   │       │
 | │   │       ├── api/                # FastAPI REST + WebSocket 接口
 | │   │       │   ├── routes.py       # 路由注册
@@ -266,10 +269,11 @@ POST /api/run { pipeline: "..." }
 | │   │       │   ├── graph.py / resolver.py / prepare.py
 | │   │       │   ├── diff.py / generator.py / step_type.py
 | │   │       │
-| │   │       ├── tools/              # 工具注册（43 工具）
+| │   │       ├── tools/              # 工具注册（41 工具）
 | │   │       │   ├── registry.py     # 集中调度
 | │   │       │   ├── adapters.py / captcha.py
 | │   │       │   ├── file_read.py / file_write.py / format_convert.py
+| │   │       │   ├── read_data.py    # 统一渐进式数据读取
 | │   │       │   ├── extract.py / data.py
 | │   │       │   ├── todo.py / todo_store.py
 | │   │       │   ├── edit_pipeline.py
@@ -308,6 +312,8 @@ POST /api/run { pipeline: "..." }
 1. **PlaywrightBridge 统一驱动** — 所有浏览器操作通过 PlaywrightBridge (`connect_over_cdp()`)，获得 auto-wait / auto-scroll / auto-retry，外加健康检测心跳、子进程监控、断连处理和 SSRF 防护。`BrowserBridge` 协议（`cdp/protocols.py`）定义了接口契约。
 
 2. **文件即契约** — pipeline.yaml 是静态契约，编译阶段严格校验（DAG 环检测、文件引用校验），运行时尽量减少意外。
+
+3. **不含 sub-agent 架构** — 主 LLM 通过 `todo`、`goal_run` 和 `browser_*` 工具直接处理所有任务——不涉及 sub-agent 的创建、调度或上下文管理。复杂步骤被拆分为主 LLM 自行执行的子任务，上下文集中在同一位置，避免了 agent 间交接的开销。Sub-agent 曾经过原型验证，因 YAGNI 被移除。
 
 ---
 
