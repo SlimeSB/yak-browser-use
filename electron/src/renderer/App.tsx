@@ -1,7 +1,7 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import './styles/global.css';
-import type { PipelineMeta, EventData, ChatMessage, PendingEdit } from './types';
+import type { PipelineMeta, EventData, ChatMessage, PendingEdit, SessionMeta, TreeNode } from './types';
 import * as api from './apiClient';
 import TitleBar from './components/TitleBar';
 import ConnectionBar from './components/ConnectionBar';
@@ -80,63 +80,112 @@ export default function App() {
 
   const [pipelineEditor, setPipelineEditor] = useState('');
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
-  const [sessions, setSessions] = useState<Array<{ session_id: string; display_name?: string | null; created_at: string; message_count: number; status: string }>>([]);
   const [currentSessionId, setCurrentSessionId] = useState<string>('');
   const [loadingSession, setLoadingSession] = useState(false);
+  const [chatSessions, setChatSessions] = useState<SessionMeta[]>([]);
+  const [pipelineSessions, setPipelineSessions] = useState<Record<string, SessionMeta[]>>({});
+  const [expandedNodes, setExpandedNodes] = useState<Set<string>>(new Set(['__chat__']));
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
+    try { return localStorage.getItem('chat-sidebar-collapsed') === 'true'; } catch { return false; }
+  });
 
 
 
   const loadSessions = useCallback(async (pipelineName: string) => {
     try {
       const r = await api.listSessions(pipelineName);
-      if (r.sessions) {
-        setSessions(r.sessions);
-        if (r.sessions.length > 0) {
-          setCurrentSessionId(r.sessions[0].session_id);
-        } else {
-          setCurrentSessionId('');
-        }
+      const list = r.sessions || [];
+      if (pipelineName === '__chat__' || !pipelineName) {
+        setChatSessions(list);
+      } else {
+        setPipelineSessions(prev => ({ ...prev, [pipelineName]: list }));
       }
+      return list;
     } catch (e) {
       console.error('listSessions failed: %s', String(e));
-      setSessions([]);
-      setCurrentSessionId('');
+      if (pipelineName === '__chat__' || !pipelineName) {
+        setChatSessions([]);
+      } else {
+        setPipelineSessions(prev => ({ ...prev, [pipelineName]: [] }));
+      }
+      return [];
     }
   }, []);
 
   const switchPipeline = useCallback(async (pipelineName: string) => {
     setActivePreset(pipelineName);
+    setChatMessages([]);
+    setCurrentSessionId('');
     try {
       const r = await api.switchSession(pipelineName);
-      setChatMessages([]);
-      setCurrentSessionId('');
-      if (r.sessions) {
-        setSessions(r.sessions);
-        if (r.sessions.length > 0) {
-          setCurrentSessionId(r.sessions[0].session_id);
-        }
+      const list = r.sessions || [];
+      if (pipelineName === '__chat__' || !pipelineName) {
+        setChatSessions(list);
       } else {
-        setSessions([]);
+        setPipelineSessions(prev => ({ ...prev, [pipelineName]: list }));
+      }
+      if (list.length > 0) {
+        setCurrentSessionId(list[0].session_id);
       }
     } catch (e) {
       console.error('switchSession failed: %s', String(e));
-      setSessions([]);
-      setChatMessages([]);
+      if (pipelineName === '__chat__' || !pipelineName) {
+        setChatSessions([]);
+      } else {
+        setPipelineSessions(prev => ({ ...prev, [pipelineName]: [] }));
+      }
     }
   }, []);
 
+  const handleToggleExpand = useCallback(async (name: string) => {
+    // Switch to this pipeline if not active
+    if (name !== activePreset) {
+      await switchPipeline(name);
+    }
+    // Toggle expand
+    setExpandedNodes(prev => {
+      const next = new Set(prev);
+      if (next.has(name)) {
+        next.delete(name);
+      } else {
+        next.add(name);
+      }
+      return next;
+    });
+    // Load sessions on first expand
+    if (name !== '__chat__' && !pipelineSessions[name]) {
+      await loadSessions(name);
+    }
+  }, [activePreset, switchPipeline, pipelineSessions, loadSessions]);
+
+  const toggleSidebar = useCallback(() => {
+    setSidebarCollapsed(prev => {
+      const next = !prev;
+      try { localStorage.setItem('chat-sidebar-collapsed', String(next)); } catch { /* ok */ }
+      return next;
+    });
+  }, []);
+
   useEffect(() => {
+    let cancelled = false;
     api.listPipelines().then(async r => {
+      if (cancelled) return;
+      // Always load __chat__ sessions first
+      const chatList = await loadSessions('__chat__');
+      if (cancelled) return;
       if (r.pipelines && r.pipelines.length > 0) {
         setPipelines(r.pipelines);
         const initial = r.pipelines[0].name;
+        const list = await loadSessions(initial);
+        if (cancelled) return;
+        if (list.length > 0) setCurrentSessionId(list[0].session_id);
         setActivePreset(initial);
-        await loadSessions(initial);
       } else {
-        // No pipelines — try restoring __chat__ session
-        await loadSessions('__chat__');
+        if (chatList.length > 0) setCurrentSessionId(chatList[0].session_id);
+        setActivePreset('__chat__');
       }
     }).catch((e) => { console.error('listPipelines failed: %s', String(e)); });
+    return () => { cancelled = true; };
   }, []);
 
   useEffect(() => {
@@ -151,25 +200,33 @@ export default function App() {
     setPendingEdits([]);
   }, [activePreset]);
 
-  // Sync sessions when activePreset changes (from pipeline list click)
+  // Sync sessions when activePreset changes (e.g. from exec tab)
   useEffect(() => {
-    if (!activePreset) return;
-    loadSessions(activePreset);
-  }, [activePreset, loadSessions]);
+    if (!activePreset || activePreset === '__chat__') return;
+    if (!pipelineSessions[activePreset]) {
+      loadSessions(activePreset).then(list => {
+        if (list.length > 0) setCurrentSessionId(list[0].session_id);
+      });
+    }
+  }, [activePreset]);
 
   useEffect(() => {
+    if (!activePreset || activePreset === '__chat__') {
+      setPipelineEditor('');
+      return;
+    }
     const preset = pipelines.find(p => p.name === activePreset);
     if (preset) {
-      let pipelineContent = pipelineCache[activePreset];
-      if (pipelineContent) {
-        setPipelineEditor(pipelineContent);
+      const cached = pipelineCache[activePreset];
+      if (cached) {
+        setPipelineEditor(cached);
       } else {
         api.getPipeline(activePreset).then(resp => {
           if (resp.content) {
             setPipelineCache(prev => ({ ...prev, [activePreset]: resp.content }));
             setPipelineEditor(resp.content);
           }
-    }).catch((e) => { console.error('getPipeline failed: %s', String(e)); });
+        }).catch((e) => { console.error('getPipeline failed: %s', String(e)); });
       }
     }
   }, [activePreset, pipelines]);
@@ -488,7 +545,7 @@ export default function App() {
   }, []);
 
   const refreshPipeline = useCallback(async () => {
-    if (!activePreset) return;
+    if (!activePreset || activePreset === '__chat__') return;
     try {
       const resp = await api.getPipeline(activePreset);
       if (resp.content) {
@@ -605,17 +662,17 @@ export default function App() {
     const r = await api.deletePipeline(name);
     if (r.ok) {
       if (activePreset === name) {
-        setActivePreset('');
+        switchPipeline('__chat__');
         setPipelineEditor('');
       }
       handleRefreshPipelines();
     } else {
       window.alert(r.error || 'Delete failed');
     }
-  }, [activePreset, handleRefreshPipelines]);
+  }, [activePreset, handleRefreshPipelines, switchPipeline]);
 
   const handleSavePipeline = useCallback(async () => {
-    if (!activePreset || !pipelineEditor.trim()) return;
+    if (!activePreset || activePreset === '__chat__' || !pipelineEditor.trim()) return;
     try {
       const r = await api.savePipeline(activePreset, pipelineEditor);
       if (r.ok) {
@@ -649,6 +706,21 @@ export default function App() {
 
   const stepStarts = events.filter(e => e.type === 'step_start');
   const stepEnds = events.filter(e => e.type === 'step_end');
+
+  const treeNodes: TreeNode[] = [
+    {
+      name: '__chat__',
+      label: t('chat.noWorkspace', 'No Workspace'),
+      isPipeline: false,
+      sessions: chatSessions,
+    },
+    ...pipelines.map(p => ({
+      name: p.name,
+      label: p.title || p.name,
+      isPipeline: true,
+      sessions: pipelineSessions[p.name] || [],
+    })),
+  ];
 
   return (
     <div className="app-container">
@@ -731,23 +803,15 @@ export default function App() {
 
       <div className="tab-content" style={{ display: activeTab === 'agentmd' ? 'flex' : 'none' }}>
         <ChatTab
+          treeNodes={treeNodes}
+          expandedNodes={expandedNodes}
+          onToggleExpand={handleToggleExpand}
+          sidebarCollapsed={sidebarCollapsed}
+          onToggleSidebar={toggleSidebar}
           messages={chatMessages}
           setMessages={setChatMessages}
           connected={connected}
-          pipelines={pipelines}
           activePreset={activePreset}
-          onPresetChange={switchPipeline}
-          pipelineEditor={pipelineEditor}
-          onPipelineEditorChange={setPipelineEditor}
-          onRefreshPipeline={refreshPipeline}
-          pendingEdit={activePendingEdit}
-          onConfirmEdit={handleChatConfirm}
-          onRevertEdit={handleChatRevert}
-          onDeletePipeline={handleDeletePipeline}
-          onSavePipeline={handleSavePipeline}
-          reversed={chatLayoutReversed}
-          theme={theme}
-          sessions={sessions}
           currentSessionId={currentSessionId}
           loadingSession={loadingSession}
           onNewSession={async () => {
@@ -757,9 +821,13 @@ export default function App() {
               if (r.session_id) {
                 setCurrentSessionId(r.session_id);
                 setChatMessages([]);
-                // Refresh session list
                 const list = await api.listSessions(activePreset);
-                if (list.sessions) setSessions(list.sessions);
+                const sessionsList = list.sessions || [];
+                if (activePreset === '__chat__' || !activePreset) {
+                  setChatSessions(sessionsList);
+                } else {
+                  setPipelineSessions(prev => ({ ...prev, [activePreset]: sessionsList }));
+                }
               }
             } catch (e) {
               console.error('newSession failed: %s', String(e));
@@ -772,11 +840,15 @@ export default function App() {
             try {
               await api.archiveSession(activePreset, sessionId);
               const list = await api.listSessions(activePreset);
-              if (list.sessions) {
-                setSessions(list.sessions);
-                if (currentSessionId === sessionId) {
-                  setCurrentSessionId(list.sessions.length > 0 ? list.sessions[0].session_id : '');
-                }
+              const sessionsList = list.sessions || [];
+              if (activePreset === '__chat__' || !activePreset) {
+                setChatSessions(sessionsList);
+              } else {
+                setPipelineSessions(prev => ({ ...prev, [activePreset]: sessionsList }));
+              }
+              if (currentSessionId === sessionId) {
+                const found = sessionsList.find(s => s.session_id !== sessionId);
+                setCurrentSessionId(found?.session_id || '');
               }
             } catch (e) {
               console.error('archiveSession failed: %s', String(e));
@@ -796,6 +868,16 @@ export default function App() {
               setLoadingSession(false);
             }
           }}
+          pipelineEditor={pipelineEditor}
+          onPipelineEditorChange={setPipelineEditor}
+          onRefreshPipeline={refreshPipeline}
+          pendingEdit={activePendingEdit}
+          onConfirmEdit={handleChatConfirm}
+          onRevertEdit={handleChatRevert}
+          onDeletePipeline={handleDeletePipeline}
+          onSavePipeline={handleSavePipeline}
+          reversed={chatLayoutReversed}
+          theme={theme}
         />
       </div>
 

@@ -56,6 +56,21 @@ export interface Param {
   value: string;
 }
 
+export interface SessionMeta {
+  session_id: string;
+  display_name?: string | null;
+  created_at: string;
+  message_count: number;
+  status: string;
+}
+
+export interface TreeNode {
+  name: string;
+  label: string;
+  isPipeline: boolean;
+  sessions: SessionMeta[];
+}
+
 export interface PendingEdit {
   edit_id: string;
   original: string;

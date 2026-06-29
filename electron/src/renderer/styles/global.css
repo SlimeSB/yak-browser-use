@@ -2255,25 +2255,33 @@ body {
 }
 
 .chat-session-sidebar {
-  width: 160px;
+  width: 220px;
+  min-width: 220px;
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
   border-right: 1px solid var(--border);
   background: var(--bg);
   overflow: hidden;
+  transition: margin-left 0.15s, min-width 0.15s;
+}
+.chat-session-sidebar.collapsed {
+  margin-left: -220px;
+  min-width: 0;
+  border-right-color: transparent;
 }
 
 .chat-session-header {
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  padding: 8px 10px;
+  gap: 4px;
+  padding: 10px 8px 10px 12px;
   border-bottom: 1px solid var(--border);
   flex-shrink: 0;
 }
 
 .chat-session-title {
+  flex: 1;
   font-size: 11px;
   font-weight: 600;
   text-transform: uppercase;
@@ -2281,52 +2289,134 @@ body {
   color: var(--text-muted);
 }
 
+/* ── Tree ── */
 .chat-session-list {
   flex: 1;
   overflow-y: auto;
   padding: 4px 0;
 }
+.chat-session-list::-webkit-scrollbar { width: 4px; }
+.chat-session-list::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
 
 .chat-session-empty {
-  padding: 16px 10px;
+  padding: 20px 12px;
   font-size: 11px;
   color: var(--text-muted);
   text-align: center;
 }
 
-.chat-session-item {
+/* Parent node */
+.tree-node {
+  user-select: none;
+}
+
+.tree-node-header {
   display: flex;
   align-items: center;
   gap: 4px;
-  padding: 4px 6px 4px 10px;
+  padding: 5px 8px 5px 10px;
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--text-secondary);
+  transition: all var(--transition-fast);
+  border-left: 2px solid transparent;
+}
+.tree-node-header:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+.tree-node-header.active {
+  background: var(--bg-subtle);
+  color: var(--text);
+  border-left-color: var(--blue);
+  font-weight: 600;
+}
+
+.tree-node-arrow {
+  font-size: 9px;
+  width: 14px;
+  flex-shrink: 0;
+  color: var(--text-muted);
+  transition: transform var(--transition-fast);
+}
+.tree-node-arrow.expanded {
+  transform: rotate(90deg);
+}
+
+.tree-node-icon {
+  font-size: 13px;
+  flex-shrink: 0;
+}
+
+.tree-node-label {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tree-node-badge {
+  font-size: 10px;
+  color: var(--text-muted);
+  flex-shrink: 0;
+  margin-right: 4px;
+}
+
+/* Session children */
+.tree-children {
+  overflow: hidden;
+  transition: max-height 0.2s ease;
+}
+.tree-children.collapsed {
+  max-height: 0 !important;
+}
+
+.tree-session {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 6px 3px 28px;
   cursor: pointer;
   font-size: 11px;
   color: var(--text-muted);
   transition: all var(--transition-fast);
   border-left: 2px solid transparent;
 }
-
-.chat-session-item:hover {
+.tree-session:hover {
   background: var(--bg-hover);
   color: var(--text-secondary);
 }
-
-.chat-session-item.active {
+.tree-session.active {
   background: var(--bg-card);
   color: var(--text);
   border-left-color: var(--blue);
   font-weight: 500;
 }
 
-.chat-session-label {
+.tree-session-dot {
+  font-size: 8px;
+  flex-shrink: 0;
+  width: 10px;
+  color: var(--text-muted);
+}
+.tree-session-dot.active-dot {
+  color: var(--blue);
+}
+
+.tree-session-label {
   flex: 1;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  cursor: pointer;
 }
 
-.chat-session-archive-btn {
+.tree-session-count {
+  font-size: 10px;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.tree-session-archive {
   flex-shrink: 0;
   opacity: 0;
   background: none;
@@ -2336,14 +2426,52 @@ body {
   padding: 2px 4px;
   line-height: 1;
   transition: opacity var(--transition-fast);
+  color: var(--text-muted);
+}
+.tree-session:hover .tree-session-archive,
+.tree-session.active .tree-session-archive {
+  opacity: 0.5;
+}
+.tree-session-archive:hover {
+  opacity: 1 !important;
+  color: var(--danger);
 }
 
-.chat-session-item:hover .chat-session-archive-btn,
-.chat-session-item.active .chat-session-archive-btn {
-  opacity: 0.6;
+/* Divider */
+.tree-divider {
+  height: 1px;
+  background: var(--border);
+  margin: 6px 10px;
 }
-.chat-session-archive-btn:hover {
-  opacity: 1 !important;
+.tree-divider-label {
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-muted);
+  padding: 6px 12px 2px;
+  font-weight: 600;
+}
+
+/* Collapse button in main header */
+.btn-collapse {
+  width: 22px;
+  height: 22px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 11px;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all var(--transition-fast);
+  flex-shrink: 0;
+}
+.btn-collapse:hover {
+  background: var(--bg-hover);
+  color: var(--text);
 }
 
 .chat-left {

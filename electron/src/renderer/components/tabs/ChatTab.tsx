@@ -2,25 +2,25 @@ import React, { useState, useRef, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import type { ChatMessage, PipelineMeta, PendingEdit } from '../../types';
+import type { ChatMessage, PendingEdit, TreeNode } from '../../types';
 import * as api from '../../apiClient';
 import MonacoYamlEditor from '../editor/MonacoYamlEditor';
 
-interface SessionMeta {
-  session_id: string;
-  display_name?: string | null;
-  created_at: string;
-  message_count: number;
-  status: string;
-}
-
 interface ChatTabProps {
+  treeNodes: TreeNode[];
+  expandedNodes: Set<string>;
+  onToggleExpand: (name: string) => void;
+  sidebarCollapsed: boolean;
+  onToggleSidebar: () => void;
   messages: ChatMessage[];
   setMessages: React.Dispatch<React.SetStateAction<ChatMessage[]>>;
   connected: boolean;
-  pipelines: PipelineMeta[];
   activePreset: string;
-  onPresetChange: (name: string) => void;
+  currentSessionId?: string;
+  loadingSession?: boolean;
+  onNewSession?: () => void;
+  onSelectSession?: (sessionId: string) => void;
+  onArchiveSession?: (sessionId: string) => void;
   pipelineEditor: string;
   onPipelineEditorChange: (text: string) => void;
   onRefreshPipeline: () => void;
@@ -31,22 +31,18 @@ interface ChatTabProps {
   onSavePipeline?: () => Promise<void>;
   reversed?: boolean;
   theme?: string;
-  sessions?: SessionMeta[];
-  currentSessionId?: string;
-  loadingSession?: boolean;
-  onNewSession?: () => void;
-  onSelectSession?: (sessionId: string) => void;
-  onArchiveSession?: (sessionId: string) => void;
 }
 
 export default function ChatTab({
+  treeNodes, expandedNodes, onToggleExpand,
+  sidebarCollapsed, onToggleSidebar,
   messages, setMessages, connected,
-  pipelines, activePreset, onPresetChange,
+  activePreset, currentSessionId, loadingSession,
+  onNewSession, onSelectSession, onArchiveSession,
   pipelineEditor, onPipelineEditorChange, onRefreshPipeline,
   pendingEdit, onConfirmEdit, onRevertEdit,
   onDeletePipeline, onSavePipeline,
   reversed, theme,
-  sessions, currentSessionId, loadingSession, onNewSession, onSelectSession, onArchiveSession,
 }: ChatTabProps) {
   const { t } = useTranslation();
   const [input, setInput] = useState('');
@@ -238,7 +234,7 @@ export default function ChatTab({
     </div>
   );
 
-  const formatSessionLabel = (s: SessionMeta): string => {
+  const formatSessionLabel = (s: { session_id: string; created_at: string; message_count: number }): string => {
     try {
       const datePart = s.created_at.slice(0, 16).replace('T', ' ');
       return `${datePart} (${s.message_count})`;
@@ -247,68 +243,121 @@ export default function ChatTab({
     }
   };
 
+  const activeNode = treeNodes.find(n => n.name === activePreset);
+  const hasPipelines = treeNodes.some(n => n.isPipeline);
+
+  const renderTree = () => (
+    <div className="chat-session-list">
+      {treeNodes.length === 0 && (
+        <div className="chat-session-empty">{t('chat.noSessions', 'No sessions')}</div>
+      )}
+      {treeNodes.map((node, idx) => {
+        const isExpanded = expandedNodes.has(node.name);
+        const isActive = activePreset === node.name;
+
+        const parts: React.ReactNode[] = [];
+
+        // Divider before pipeline section
+        if (idx === 0 && hasPipelines && node.name === '__chat__') {
+          parts.push(
+            <div key="divider-label" className="tree-divider-label">Pipelines</div>,
+            <div key="divider-line" className="tree-divider" />
+          );
+        }
+
+        // Parent node header
+        parts.push(
+          <div key={node.name} className="tree-node">
+            <div
+              className={'tree-node-header' + (isActive ? ' active' : '')}
+              onClick={() => onToggleExpand(node.name)}
+            >
+              <span className={'tree-node-arrow' + (isExpanded ? ' expanded' : '')}>▶</span>
+              <span className="tree-node-icon">{node.isPipeline ? '📦' : '📁'}</span>
+              <span className="tree-node-label">{node.label}</span>
+              <span className="tree-node-badge">({node.sessions.length})</span>
+            </div>
+            <div className={'tree-children' + (isExpanded ? '' : ' collapsed')}
+              style={{ maxHeight: isExpanded ? node.sessions.length * 28 + 8 + 'px' : 0 }}
+            >
+              {node.sessions.map(s => (
+                <div
+                  key={s.session_id}
+                  className={'tree-session' + (currentSessionId === s.session_id ? ' active' : '')}
+                  onClick={() => onSelectSession?.(s.session_id)}
+                >
+                  <span className={'tree-session-dot' + (currentSessionId === s.session_id ? ' active-dot' : '')}>
+                    {currentSessionId === s.session_id ? '●' : '○'}
+                  </span>
+                  <span className="tree-session-label">{formatSessionLabel(s)}</span>
+                  <span className="tree-session-count">{t('chat.sessionCount', { count: s.message_count })}</span>
+                  <button
+                    className="tree-session-archive"
+                    title={t('chat.archiveSession', 'Archive')}
+                    onClick={(e) => { e.stopPropagation(); onArchiveSession?.(s.session_id); }}
+                  >
+                    🗑
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+
+        return parts;
+      })}
+    </div>
+  );
+
   return (
     <div className="chat-layout">
       <div className="chat-body" ref={bodyRef} style={{ flexDirection: reversed ? 'row-reverse' : 'row' }}>
-        <div className="chat-session-sidebar">
+        <div className={'chat-session-sidebar' + (sidebarCollapsed ? ' collapsed' : '')}>
           <div className="chat-session-header">
             <span className="chat-session-title">{t('chat.sessions', 'Sessions')}</span>
             <button
-              className="btn btn-small btn-primary"
+              className="btn-icon"
               onClick={onNewSession}
-              disabled={loadingSession || !activePreset || messages.length === 0}
+              disabled={loadingSession || messages.length === 0}
               title={t('chat.newSession', 'New Session')}
+              style={{ width: 20, height: 20, border: '1px solid var(--border)', borderRadius: 3, background: 'transparent', color: 'var(--text-muted)', cursor: 'pointer', fontSize: 13, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, opacity: loadingSession || messages.length === 0 ? 0.35 : 1 }}
             >
               +
             </button>
           </div>
-          <div className="chat-session-list">
-            {(!sessions || sessions.length === 0) && (
-              <div className="chat-session-empty">{t('chat.noSessions', 'No sessions')}</div>
-            )}
-            {sessions?.map(s => (
-              <div
-                key={s.session_id}
-                className={`chat-session-item ${currentSessionId === s.session_id ? 'active' : ''}`}
-              >
-                <span className="chat-session-label" onClick={() => onSelectSession?.(s.session_id)}>{formatSessionLabel(s)}</span>
-                <button
-                  className="btn btn-xs btn-secondary chat-session-archive-btn"
-                  title={t('chat.archiveSession', 'Archive')}
-                  onClick={(e) => { e.stopPropagation(); onArchiveSession?.(s.session_id); }}
-                >
-                  🗑
-                </button>
-              </div>
-            ))}
-          </div>
+          {renderTree()}
         </div>
+
         <div className="chat-left" style={{ width: `${splitRatio}%`, flex: 'none' }}>
           <div className="chat-header">
             <div className="chat-header-left">
-              <span className="chat-title">{t('chat.title')}</span>
-              <select
-                className="select"
-                value={activePreset}
-                onChange={e => onPresetChange(e.target.value)}
+              <button
+                className="btn-collapse"
+                onClick={onToggleSidebar}
+                title={sidebarCollapsed ? t('chat.expandSidebar', 'Expand') : t('chat.collapseSidebar', 'Collapse')}
               >
-                {pipelines.length === 0 && (
-                  <option value="">{t('preset.noPipelines')}</option>
-                )}
-                {pipelines.map(p => (
-                  <option key={p.name} value={p.name}>{p.title || p.name}</option>
-                ))}
-              </select>
+                {sidebarCollapsed ? '▶' : '◀'}
+              </button>
+              <span className="chat-title">{activeNode?.label || t('chat.title')}</span>
+              {activeNode && (
+                <span className="tree-node-badge" style={{ fontSize: 10, color: 'var(--text-muted)' }}>
+                  ({activeNode.sessions.length})
+                </span>
+              )}
               {sessionStatus && sessionStatus !== 'idle' && (
                 <span className={`chat-status ${sessionStatus}`}>{sessionStatus}</span>
               )}
             </div>
             <div className="chat-header-actions">
-              <button className="btn btn-small btn-danger" onClick={() => {
-                if (confirm(t('pipelineManager.deleteConfirm', { name: activePreset }))) {
-                  onDeletePipeline?.(activePreset);
-                }
-              }}>🗑 {t('pipelineManager.delete')}</button>
+              {activePreset && activePreset !== '__chat__' && (
+                <button className="btn btn-small btn-danger" onClick={() => {
+                  if (confirm(t('pipelineManager.deleteConfirm', { name: activeNode?.label || activePreset }))) {
+                    onDeletePipeline?.(activePreset);
+                  }
+                }}>
+                  🗑 {t('pipelineManager.delete')}
+                </button>
+              )}
               <button className="btn btn-small btn-secondary" onClick={handleReset}>
                 {t('common.reset')}
               </button>
