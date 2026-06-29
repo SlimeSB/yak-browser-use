@@ -269,6 +269,8 @@ class PipelineStore:
             step_dict["description"] = normal_keys["description"]
         if "depends_on" in normal_keys:
             step_dict["depends_on"] = normal_keys["depends_on"]
+        if "check" in normal_keys:
+            step_dict["check"] = normal_keys["check"]
 
         type_fields = [k for k in ("browser_ops", "tool_name", "goal_description") if k in normal_keys]
         if len(type_fields) == 1:

@@ -456,12 +456,12 @@ def _build_registry_impl() -> None:
                     "tool_name": {"type": "string", "description": "Name of a custom tool to invoke. Mutually exclusive with browser_ops and goal_description."},
                     "goal_description": {"type": "string", "description": "Description for a goal_run step. Mutually exclusive with browser_ops and tool_name."},
                     "depends_on": {"type": "array", "description": "List of step names this step depends on.", "items": {"type": "string"}},
-                    "check": {"type": "object", "description": "Optional programmatic check conditions for this step. Supported keys: url_contains, element_exists, text_contains, element_visible."},
+                    "check": {"type": "object", "description": "Programmatic check conditions for this step. Use {} to skip verification. Supported keys: url_contains, element_exists, text_contains, element_visible."},
                     "after": {"type": "string", "description": "Name of the step to insert after. Omit to append."},
                     "heading": {"type": "boolean", "description": "Set to true to create an outline placeholder step without browser_ops, tool_name, or goal_description."},
                     "explanation": {"type": "string", "description": "Human-readable explanation of what was changed and why."},
                 },
-                "required": ["pipeline_name", "step_name", "description"],
+                "required": ["pipeline_name", "step_name", "description", "check"],
             },
         },
         "pipeline_remove_step": {
@@ -483,7 +483,7 @@ def _build_registry_impl() -> None:
                 "properties": {
                     "pipeline_name": {"type": "string", "description": "Name for the new pipeline preset."},
                     "description": {"type": "string", "description": "Human-readable description of the pipeline."},
-                    "steps": {"type": "array", "description": "List of step objects. Each step must have: name (string), description (string). Optional: browser_ops (list of dicts), tool_name (string), goal_description (string), depends_on (list of strings), check (dict).", "items": {"type": "object"}},
+                    "steps": {"type": "array", "description": "List of step objects. Each step must have: name (string), description (string), check (dict, use {} to skip). Optional: browser_ops (list of dicts), tool_name (string), goal_description (string), depends_on (list of strings).", "items": {"type": "object"}},
                     "explanation": {"type": "string", "description": "Human-readable explanation of what was created and why."},
                 },
                 "required": ["pipeline_name", "description", "steps"],

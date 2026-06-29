@@ -108,6 +108,8 @@ async def pipeline_view(name: str | None = None, **kwargs) -> dict:
             step_info["goal_description"] = s.goal_description
         if s.browser_ops is not None:
             step_info["browser_ops"] = PipelineStore.ops_to_yaml(s.browser_ops)
+        if s.check is not None:
+            step_info["check"] = s.check
         steps.append(step_info)
 
     return {
@@ -156,6 +158,7 @@ async def pipeline_add_step(
     depends_on: list | None = None,
     after: str | None = None,
     heading: bool = False,
+    check: dict | None = None,
     explanation: str = "",
     op_type: str | None = None,
     op_args: dict | None = None,
@@ -192,6 +195,8 @@ async def pipeline_add_step(
             step_dict["goal_description"] = goal_description
     if depends_on is not None:
         step_dict["depends_on"] = depends_on
+    if check is not None:
+        step_dict["check"] = check
 
     try:
         new_step = StepYaml.model_validate(step_dict)
