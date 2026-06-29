@@ -941,7 +941,7 @@ class PlaywrightBridge:
         page.on("download", _on_download)
 
     async def wait_for_download(
-        self, timeout: int = 60, pipeline_name: str | None = None
+        self, timeout: int = 60
     ) -> dict:
         """Poll for a newly completed download file.
 
@@ -953,7 +953,7 @@ class PlaywrightBridge:
 
         Known limitation: does not support concurrent downloads.
         """
-        target_dir = self._resolve_download_path(pipeline_name)
+        target_dir = self._resolve_download_path()
         known = set(target_dir.iterdir()) if target_dir.exists() else set()
 
         deadline = asyncio.get_event_loop().time() + timeout
@@ -970,13 +970,11 @@ class PlaywrightBridge:
             try:
                 first_stat = candidate.stat()
                 if first_stat.st_size <= 100:
-                    known = current
                     continue
                 await asyncio.sleep(1.0)
                 second_stat = candidate.stat()
                 if second_stat.st_size == first_stat.st_size:
                     return {"ok": True, "path": f"downloads/{candidate.name}"}
-                known = current
             except (OSError, FileNotFoundError):
                 known = current
                 continue
