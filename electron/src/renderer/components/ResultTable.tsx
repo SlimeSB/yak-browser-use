@@ -30,7 +30,7 @@ export default function ResultTable({ data, errors, columnSchema }: ResultTableP
     <div className="card">
       <div className="card-title">{t('results.title')}</div>
       {errors && errors.length > 0 && (
-        <div style={{ color: 'var(--danger)', fontSize: 11, marginBottom: 6 }}>
+        <div style={{ color: 'var(--danger)', fontSize: 'var(--fs-sm)', marginBottom: 6 }}>
           {errors.map((e, i) => <div key={i}>{e}</div>)}
         </div>
       )}
@@ -57,7 +57,7 @@ export default function ResultTable({ data, errors, columnSchema }: ResultTableP
           </div>
         </>
       ) : (
-        <div style={{ fontSize: 11, color: 'var(--text-muted)', textAlign: 'center', padding: '8px 0' }}>
+        <div style={{ fontSize: 'var(--fs-sm)', color: 'var(--text-muted)', textAlign: 'center', padding: '8px 0' }}>
           {t('results.waiting')}
         </div>
       )}

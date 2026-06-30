@@ -251,8 +251,7 @@ export default function ChatTab() {
               className={'tree-node-header' + (isActive ? ' active' : '')}
               onClick={() => toggleExpand(node.name)}
             >
-              <span className={'tree-node-arrow' + (isExpanded ? ' expanded' : '')}>▶</span>
-              <span className="tree-node-icon">{node.isPipeline ? '📦' : '📁'}</span>
+              <span className={'tree-node-arrow' + (isExpanded ? ' expanded' : '')}>{'>'}</span>
               <span className="tree-node-label">{node.label}</span>
               <span className="tree-node-badge">({node.sessions.length})</span>
             </div>
@@ -275,7 +274,7 @@ export default function ChatTab() {
                     title={t('chat.archiveSession', 'Archive')}
                     onClick={(e) => { e.stopPropagation(); archiveSession(s.session_id); }}
                   >
-                    🗑
+                    ✕
                   </button>
                 </div>
               ))}
@@ -299,7 +298,7 @@ export default function ChatTab() {
               onClick={newSession}
               disabled={loadingSession || messages.length === 0}
               title={t('chat.newSession', 'New Session')}
-              style={{ width: 20, height: 20, border: '1px solid var(--border)', borderRadius: 3, background: 'transparent', color: 'var(--text-muted)', cursor: 'pointer', fontSize: 13, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, opacity: loadingSession || messages.length === 0 ? 0.35 : 1 }}
+              style={{ width: 22, height: 22, border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', background: 'transparent', color: 'var(--text-muted)', cursor: 'pointer', fontSize: 'var(--fs-base)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, opacity: loadingSession || messages.length === 0 ? 0.35 : 1 }}
             >
               +
             </button>
@@ -318,21 +317,7 @@ export default function ChatTab() {
                 {sidebarCollapsed ? '▶' : '◀'}
               </button>
               {activePreset !== '__chat__' && (
-                <>
-                  <span className="chat-title">{treeNodes.find(n => n.name === activePreset)?.label || t('chat.title')}</span>
-                  <button
-                    className="btn btn-small btn-danger"
-                    onClick={() => {
-                      const node = treeNodes.find(n => n.name === activePreset);
-                      if (node && confirm(t('pipelineManager.deleteConfirm', { name: node.label || activePreset }))) {
-                        deletePipeline(activePreset);
-                      }
-                    }}
-                    title={t('pipelineManager.delete')}
-                  >
-                    🗑 {t('pipelineManager.delete')}
-                  </button>
-                </>
+                <span className="chat-title">{treeNodes.find(n => n.name === activePreset)?.label || t('chat.title')}</span>
               )}
             </div>
             <div className="chat-header-right">
@@ -345,7 +330,7 @@ export default function ChatTab() {
           <div className="chat-messages" ref={scrollRef}>
             {messages.length === 0 && (
               <div className="chat-empty">
-                <div className="chat-empty-icon">💬</div>
+                <div className="chat-empty-icon">C</div>
                 <p>{t('chat.startPrompt')}</p>
                 <span className="chat-empty-hint">{t('chat.placeholder')}</span>
               </div>

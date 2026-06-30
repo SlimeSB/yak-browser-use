@@ -18,7 +18,7 @@ export default function ParamsPanel({
       <div className="panel-title">{t('params.title')}</div>
       <div className="panel-body">
         {keys.length === 0 ? (
-          <div style={{ fontSize: 11, color: 'var(--text-muted)', textAlign: 'center', padding: '6px 0' }}>
+          <div style={{ fontSize: 'var(--fs-sm)', color: 'var(--text-muted)', textAlign: 'center', padding: '6px 0' }}>
             {t('params.noParams')}
           </div>
         ) : (

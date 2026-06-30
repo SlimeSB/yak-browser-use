@@ -20,7 +20,7 @@ export default function PresetSelectRow({
     <div className="panel">
       <div className="panel-title">
         <span>{t('preset.pipeline')}</span>
-        <span style={{ fontWeight: 400, textTransform: 'none', letterSpacing: 0 }}>
+        <span style={{ fontWeight: 'var(--fw-regular)', textTransform: 'none', letterSpacing: 0 }}>
           {pipelines.length} {t('preset.available')}
         </span>
       </div>

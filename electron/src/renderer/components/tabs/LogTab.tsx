@@ -47,13 +47,13 @@ export default function LogTab() {
   return (
     <div className="log-layout">
       <div className="log-left">
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 10px 4px', borderBottom: '1px solid var(--border)' }}>
-          <span style={{ fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px', color: 'var(--text-muted)' }}>{t('log.steps')}</span>
-          {currentRunId && <span style={{ fontSize: 9, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>{currentRunId.slice(0, 8)}</span>}
+        <div className="log-sidebar-header">
+          <span className="log-sidebar-title">{t('log.steps')}</span>
+          {currentRunId && <span className="log-sidebar-meta">{currentRunId.slice(0, 8)}</span>}
         </div>
         <div className="log-steps">
           {stepNames.length === 0 ? (
-            <div style={{ fontSize: 10, color: 'var(--text-muted)', textAlign: 'center', padding: 12 }}>
+            <div className="log-steps-empty">
               {t('log.noStepData')}
             </div>
           ) : (
@@ -76,18 +76,18 @@ export default function LogTab() {
       </div>
       <div className="log-main">
         <div className="log-toolbar">
-          <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)' }}>📋 {t('exec.liveLog')}</span>
+          <span style={{ fontSize: 'var(--fs-sm)', fontWeight: 'var(--fw-semibold)', color: 'var(--text-secondary)' }}>{t('exec.liveLog')}</span>
           <span style={{ flex: 1 }} />
-          <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>{events.length} {t('log.events')}</span>
+          <span style={{ fontSize: 'var(--fs-xs)', color: 'var(--text-muted)' }}>{events.length} {t('log.events')}</span>
           <button className="btn btn-secondary btn-xs" onClick={onClearEvents}>{t('log.clear')}</button>
         </div>
         {pendingReview && (
           <div className="review-card">
             <div className="review-card-header">
               <div className="review-card-title">
-                <span>⚠</span> {t('log.pendingReview')}
+                <span>!</span> {t('log.pendingReview')}
               </div>
-              <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>{pendingReview.guardLayer || t('log.guardian')}</span>
+              <span style={{ fontSize: 'var(--fs-xs)', color: 'var(--text-muted)' }}>{pendingReview.guardLayer || t('log.guardian')}</span>
             </div>
             <div className="review-card-body">
               <div className="review-card-reason">{pendingReview.reason}</div>
@@ -102,13 +102,13 @@ export default function LogTab() {
                 </div>
               )}
               <div className="review-card-footer">
-                <button className="btn btn-success btn-sm" onClick={handleApprove}>✓ {t('log.approve')}</button>
+                <button className="btn btn-success btn-sm" onClick={handleApprove}>{t('log.approve')}</button>
                 {!showingLogReject ? (
-                  <button className="btn btn-danger btn-sm" onClick={() => setShowingLogReject(true)}>✗ {t('log.reject')}</button>
+                  <button className="btn btn-danger btn-sm" onClick={() => setShowingLogReject(true)}>{t('log.reject')}</button>
                 ) : (
                   <div style={{ display: 'flex', gap: 6, flex: 1 }}>
                     <input
-                      className="param-input" style={{ flex: 1, fontSize: 11 }}
+                      className="param-input" style={{ flex: 1, fontSize: 'var(--fs-sm)' }}
                       placeholder={t('log.reason') + t('log.required')}
                       value={logRejectReason}
                       onChange={e => setLogRejectReason(e.target.value)}
@@ -127,12 +127,12 @@ export default function LogTab() {
       <div className="log-right">
         {pendingReview && diffLines.length > 0 && (
           <div className="artifact-section">
-            <div className="artifact-title">📄 {t('log.viewDiff')}</div>
+            <div className="artifact-title">{t('log.viewDiff')}</div>
             <DiffView lines={diffLines} maxHeight={200} />
           </div>
         )}
         <div className="artifact-section">
-          <div className="artifact-title">📦 {t('log.artifacts')}</div>
+          <div className="artifact-title">{t('log.artifacts')}</div>
           {result ? (
             <ResultTable data={result} errors={resultErrors} />
           ) : (
@@ -143,8 +143,8 @@ export default function LogTab() {
           )}
         </div>
         <div className="artifact-section">
-          <div className="artifact-title">📊 {t('log.summary')}</div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, fontSize: 11 }}>
+          <div className="artifact-title">{t('log.summary')}</div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, fontSize: 'var(--fs-sm)' }}>
             <div><span style={{ color: 'var(--text-muted)' }}>{t('log.step')}s</span> {stepEnds.length}/{stepStarts.length}</div>
             <div><span style={{ color: 'var(--text-muted)' }}>{t('log.events')}</span> {events.length}</div>
             <div><span style={{ color: 'var(--text-muted)' }}>{t('log.status')}</span>{' '}

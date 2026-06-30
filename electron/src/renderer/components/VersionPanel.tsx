@@ -69,14 +69,14 @@ export default function VersionPanel({ pipelineName, onRefresh }: VersionPanelPr
         <button className="btn btn-danger btn-sm" onClick={handleRelearn} disabled={loading}>
           {loading ? t('exec.processing') : t('versions.relearn')}
         </button>
-        <span style={{ fontSize: 11, color: 'var(--text-muted)', marginLeft: 8 }}>
+        <span style={{ fontSize: 'var(--fs-sm)', color: 'var(--text-muted)', marginLeft: 8 }}>
           {t('versions.deleteLatest')}
         </span>
       </div>
       {viewing && (
         <div className="version-preview" style={{ marginTop: 8, maxHeight: 200, overflow: 'auto', background: 'var(--bg-subtle)', padding: 8, borderRadius: 4 }}>
-          <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 4 }}>{t('versions.view')} v{viewing.version}</div>
-          <pre style={{ fontSize: 10, whiteSpace: 'pre-wrap', margin: 0 }}>{viewing.content.slice(0, 2000)}{viewing.content.length > 2000 ? '...' : ''}</pre>
+          <div style={{ fontSize: 'var(--fs-sm)', color: 'var(--text-muted)', marginBottom: 4 }}>{t('versions.view')} v{viewing.version}</div>
+          <pre style={{ fontSize: 'var(--fs-xs)', whiteSpace: 'pre-wrap', margin: 0 }}>{viewing.content.slice(0, 2000)}{viewing.content.length > 2000 ? '...' : ''}</pre>
           <button className="btn btn-sm btn-secondary" onClick={() => setViewing(null)} style={{ marginTop: 4 }}>{t('versions.close')}</button>
         </div>
       )}

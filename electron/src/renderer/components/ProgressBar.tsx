@@ -18,7 +18,7 @@ export default function ProgressBar({ events }: ProgressBarProps) {
     return (
       <div className="card">
         <div className="card-title">{t('progress.title')}</div>
-        <div style={{ fontSize: 11, color: 'var(--text-muted)', textAlign: 'center', padding: '8px 0' }}>
+        <div style={{ fontSize: 'var(--fs-sm)', color: 'var(--text-muted)', textAlign: 'center', padding: '8px 0' }}>
           {t('progress.waiting')}
         </div>
       </div>
@@ -34,7 +34,7 @@ export default function ProgressBar({ events }: ProgressBarProps) {
         <div className="progress-bar">
           <div className={`progress-bar-fill ${stepErrors.length > 0 ? 'error' : ''}`} style={{ width: `${pct}%` }} />
         </div>
-        <span style={{ fontSize: 11, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>
+        <span style={{ fontSize: 'var(--fs-sm)', color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>
           {done}/{total} {pct}%
         </span>
       </div>

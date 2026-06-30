@@ -20,13 +20,13 @@ export default function SuggestionsPanel({
     <div className="card" style={{ borderColor: '#f59e0b', borderWidth: 2 }}>
       <div className="card-title" style={{ color: '#f59e0b' }}>
         {t('log.pendingReview')}
-        {guardLayer && <span style={{ fontSize: 10, marginLeft: 8 }}>[{guardLayer}]</span>}
+        {guardLayer && <span style={{ fontSize: 'var(--fs-xs)', marginLeft: 8 }}>[{guardLayer}]</span>}
       </div>
-      <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginBottom: 8 }}>
+      <div style={{ fontSize: 'var(--fs-sm)', color: 'var(--text-secondary)', marginBottom: 8 }}>
         {reason}
       </div>
       <div style={{ maxHeight: 120, overflow: 'auto', marginBottom: 8 }}>
-        <table className="result-table" style={{ fontSize: 10 }}>
+        <table className="result-table" style={{ fontSize: 'var(--fs-xs)' }}>
           <thead>
             <tr>
               <th>{t('log.type')}</th>

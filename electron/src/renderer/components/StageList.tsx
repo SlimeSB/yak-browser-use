@@ -27,7 +27,7 @@ export default function StageList({ stages, events }: StageListProps) {
     return (
       <div className="card">
         <div className="card-title">{t('stages.title')}</div>
-        <div style={{ fontSize: 11, color: 'var(--text-muted)', textAlign: 'center', padding: '8px 0' }}>
+        <div style={{ fontSize: 'var(--fs-sm)', color: 'var(--text-muted)', textAlign: 'center', padding: '8px 0' }}>
           {t('stages.waiting')}
         </div>
       </div>
@@ -48,7 +48,7 @@ export default function StageList({ stages, events }: StageListProps) {
                 {status === 'done' ? '✓' : status === 'error' ? '✗' : status === 'current' ? '●' : `${i + 1}`}
               </span>
               <span className="stage-name" style={{
-                fontWeight: status === 'current' ? 600 : 400,
+                fontWeight: status === 'current' ? 'var(--fw-semibold)' : 'var(--fw-regular)',
               }}>{name}</span>
               <span className="stage-status-text">
                 {status === 'done' ? t('stages.done') : status === 'current' ? t('stages.running') : status === 'error' ? t('stages.failed') : t('stages.pending')}

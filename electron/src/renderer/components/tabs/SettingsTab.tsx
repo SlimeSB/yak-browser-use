@@ -220,7 +220,7 @@ export default function SettingsTab() {
               ))}
             </div>
             {presetsError && (
-              <div style={{ fontSize: 11, color: '#e81123' }}>✗ {presetsError}</div>
+              <div style={{ fontSize: 'var(--fs-sm)', color: '#e81123' }}>{'⚠'}{presetsError}</div>
             )}
 
             {activePreset && (
@@ -232,7 +232,7 @@ export default function SettingsTab() {
                 <option value="">-- Select model --</option>
                 {activePreset.models.map(m => (
                   <option key={m.id} value={m.id}>
-                    {m.name} ({m.id}){m.context ? ` — ${(m.context / 1000).toFixed(0)}K ctx` : ''}
+                    {m.name} ({m.id}){m.context ? ` ⚡${(m.context / 1000).toFixed(0)}K ctx` : ''}
                   </option>
                 ))}
               </select>
@@ -252,7 +252,7 @@ export default function SettingsTab() {
                 {testing ? 'Testing...' : 'Test'}
               </button>
               {testResult && (
-                <span style={{ fontSize: 11, color: testResult.ok ? 'var(--primary)' : '#e81123', marginLeft: 4 }}>
+                <span style={{ fontSize: 'var(--fs-sm)', color: testResult.ok ? 'var(--primary)' : '#e81123', marginLeft: 4 }}>
                   {testResult.ok ? '✓ ' + testResult.msg : '✗ ' + testResult.msg}
                 </span>
               )}

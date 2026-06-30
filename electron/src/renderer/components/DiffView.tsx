@@ -52,7 +52,7 @@ export default function DiffView({ lines, maxHeight }: DiffViewProps) {
   const { t } = useTranslation();
   if (!lines || lines.length === 0) {
     return (
-      <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', fontSize: 12 }}>
+      <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', fontSize: 'var(--fs-base)' }}>
         {t('diff.noChanges')}
       </div>
     );
@@ -66,7 +66,7 @@ export default function DiffView({ lines, maxHeight }: DiffViewProps) {
             {dl.type === 'del' ? (dl.oldLineNum ?? '') : (dl.newLineNum ?? '')}
           </span>
           <span className="diff-line-content">
-            <span className="diff-prefix">{dl.type === 'add' ? '+' : dl.type === 'del' ? '−' : ' '}</span>
+            <span className="diff-prefix">{dl.type === 'add' ? '+' : dl.type === 'del' ? '-' : ' '}</span>
             {renderHighlightedLine(dl.line, dl.highlights)}
           </span>
         </div>

@@ -26,7 +26,7 @@ export default function ReviewModeToggle({
           </label>
         ))}
       </div>
-      <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 4 }}>
+      <div style={{ fontSize: 'var(--fs-xs)', color: 'var(--text-muted)', marginTop: 4 }}>
         {mode === 'human' && 'All pending operations sent to frontend for manual review'}
         {mode === 'llm' && 'LLM auto-review: pass = inject, reject = blacklist'}
         {mode === 'none' && 'All operations auto-approved, no review'}

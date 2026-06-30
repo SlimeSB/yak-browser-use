@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import './styles/global.css';
 import * as api from './apiClient';
@@ -34,12 +34,27 @@ const TABS = [
 ];
 
 export default function App() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const activeTab = useUiStore(s => s.activeTab);
   const setActiveTab = useUiStore(s => s.setActiveTab);
   const loading = usePipelineStore(s => s.loading);
   const pendingReview = usePipelineStore(s => s.pendingReview);
   const initDoneRef = useRef(false);
+  const sidebarRef = useRef<HTMLElement>(null);
+
+  const measureAndSetWidth = useCallback(() => {
+    const el = sidebarRef.current;
+    if (!el) return;
+    const labels = el.querySelectorAll<HTMLElement>('.sidebar-label');
+    let max = 0;
+    labels.forEach(l => { max = Math.max(max, l.scrollWidth); });
+    if (max > 0) {
+      const expandedW = 58 + max + 20;
+      el.style.setProperty('--sidebar-expanded', expandedW + 'px');
+    }
+  }, []);
+
+  useEffect(() => { measureAndSetWidth(); }, [measureAndSetWidth, i18n.language]);
 
   useEffect(() => {
     if (initDoneRef.current) return;
@@ -95,18 +110,49 @@ export default function App() {
       <ConnectionBar />
 
       <div className="app-body">
-        <nav className="sidebar">
-          {TABS.map(tab => (
+        <nav className="sidebar" ref={sidebarRef} onMouseEnter={measureAndSetWidth}>
+          {/* Group 1: Run & Chat */}
+          {TABS.slice(0, 2).map(tab => (
             <button
               key={tab.id}
               className={`sidebar-btn ${activeTab === tab.id ? 'active' : ''}`}
               onClick={() => setActiveTab(tab.id)}
               title={t(tab.label)}
             >
-              <span className="sidebar-icon">{ICONS[tab.icon]}</span>
+              <span className="sidebar-icon-wrap">{ICONS[tab.icon]}</span>
+              <span className="sidebar-label">{t(tab.label)}</span>
+              {tab.id === 'exec' && loading && <span className="sidebar-spinner" />}
+            </button>
+          ))}
+
+          <div className="sidebar-divider" />
+
+          {/* Group 2: Browse & Manage */}
+          {TABS.slice(2, 4).map(tab => (
+            <button
+              key={tab.id}
+              className={`sidebar-btn ${activeTab === tab.id ? 'active' : ''}`}
+              onClick={() => setActiveTab(tab.id)}
+              title={t(tab.label)}
+            >
+              <span className="sidebar-icon-wrap">{ICONS[tab.icon]}</span>
               <span className="sidebar-label">{t(tab.label)}</span>
               {tab.id === 'log' && pendingReview && <span className="sidebar-dot" />}
-              {tab.id === 'exec' && loading && <span className="sidebar-spinner" />}
+            </button>
+          ))}
+
+          <div className="sidebar-group-gap" />
+
+          {/* Group 3: Config */}
+          {TABS.slice(4).map(tab => (
+            <button
+              key={tab.id}
+              className={`sidebar-btn ${activeTab === tab.id ? 'active' : ''}`}
+              onClick={() => setActiveTab(tab.id)}
+              title={t(tab.label)}
+            >
+              <span className="sidebar-icon-wrap">{ICONS[tab.icon]}</span>
+              <span className="sidebar-label">{t(tab.label)}</span>
             </button>
           ))}
         </nav>

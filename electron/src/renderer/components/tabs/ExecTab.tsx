@@ -48,15 +48,15 @@ export default function ExecTab() {
         {loading && currentRunId && (
           <div style={{ display: 'flex', gap: 6, justifyContent: 'center' }}>
             <button className="btn btn-danger btn-sm" onClick={cancel} disabled={cancelling}>
-              {cancelling ? t('exec.cancel') + '...' : '⏹ ' + t('exec.cancel')}
+              {cancelling ? t('exec.cancel') + '...' : t('exec.cancel')}
             </button>
           </div>
         )}
         <div className="quick-actions">
-          <button className="qa-btn" onClick={() => setActiveTab('agentmd')}>📄 {t('exec.generatePipeline')}</button>
-          <button className="qa-btn" onClick={() => setActiveTab('params')}>⚙ {t('exec.manageParams')}</button>
-          <button className="qa-btn" onClick={() => setActiveTab('pipelines')}>📦 {t('pipelineManager.title')}</button>
-          <button className="qa-btn" onClick={() => setActiveTab('settings')}>⚙ {t('settingsTab.title')}</button>
+          <button className="qa-btn" onClick={() => setActiveTab('agentmd')}>{t('exec.generatePipeline')}</button>
+          <button className="qa-btn" onClick={() => setActiveTab('params')}>{t('exec.manageParams')}</button>
+          <button className="qa-btn" onClick={() => setActiveTab('pipelines')}>{t('pipelineManager.title')}</button>
+          <button className="qa-btn" onClick={() => setActiveTab('settings')}>{t('settingsTab.title')}</button>
         </div>
         {preset && (
           <ParamsPanel
