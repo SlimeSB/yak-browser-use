@@ -353,8 +353,7 @@ def _build_assistant_message(response: object) -> dict:
     tool_calls = getattr(response, "tool_calls", None)
 
     msg: dict = {"role": "assistant"}
-    if content:
-        msg["content"] = content
+    msg["content"] = content
     if tool_calls:
         msg["tool_calls"] = tool_calls
     return msg
