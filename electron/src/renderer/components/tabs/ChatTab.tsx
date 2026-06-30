@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import type { ChatMessage, PendingEdit, TreeNode } from '../../types';
+import { nextMsgId } from '../../types';
 import * as api from '../../apiClient';
 import MonacoYamlEditor from '../editor/MonacoYamlEditor';
 
@@ -54,8 +55,8 @@ export default function ChatTab({
   const bodyRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const draggingRef = useRef(false);
-  const [expandedThinks, setExpandedThinks] = useState<Set<number>>(new Set());
-  const [expandedToolErrors, setExpandedToolErrors] = useState<Set<number>>(new Set());
+  const [expandedThinks, setExpandedThinks] = useState<Set<string>>(new Set());
+  const [expandedToolErrors, setExpandedToolErrors] = useState<Set<string>>(new Set());
   const cancelledRef = useRef(false);
   const activePresetRef = useRef(activePreset);
   const connectedRef = useRef(connected);
@@ -76,8 +77,11 @@ export default function ChatTab({
   }, [splitRatio]);
 
   useEffect(() => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    const el = scrollRef.current;
+    if (!el) return;
+    const isNearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 100;
+    if (isNearBottom) {
+      el.scrollTop = el.scrollHeight;
     }
   }, [messages]);
 
@@ -106,6 +110,13 @@ export default function ChatTab({
     document.addEventListener('mouseup', onUp);
   };
 
+  useEffect(() => {
+    return () => {
+      draggingRef.current = false;
+      document.body.style.userSelect = '';
+    };
+  }, []);
+
   const autoResize = () => {
     const el = textareaRef.current;
     if (el) {
@@ -130,21 +141,30 @@ export default function ChatTab({
     setSending(true);
     setSessionStatus('running');
 
-    setMessages(prev => [...prev, { role: 'user', content: text }]);
+    const addErrorSafe = (errMsg: string) => {
+      setMessages(prev => {
+        const last = prev[prev.length - 1];
+        // If WebSocket already added an empty assistant message, replace it
+        if (last && last.role === 'assistant' && !last.content) {
+          return [...prev.slice(0, -1), { id: nextMsgId(), role: 'assistant', content: `Error: ${errMsg}` }];
+        }
+        return [...prev, { id: nextMsgId(), role: 'assistant', content: `Error: ${errMsg}` }];
+      });
+    };
+
+    setMessages(prev => [...prev, { id: nextMsgId(), role: 'user', content: text }]);
 
     try {
       const pipelineName = activePresetRef.current || undefined;
-      console.log('[handleSend] pipeline=%s session=%s text=%s',
-        pipelineName, currentSessionId, text.slice(0, 60));
       const result = await api.chat(text, pipelineName);
       if (result.ok) {
         onRefreshPipeline();
       } else {
-        setMessages(prev => [...prev, { role: 'assistant', content: `Error: ${result.error ?? 'Unknown'}` }]);
+        addErrorSafe(result.error ?? 'Unknown');
       }
     } catch (e) {
       if (!cancelledRef.current) {
-        setMessages(prev => [...prev, { role: 'assistant', content: `Error: ${String(e)}` }]);
+        addErrorSafe(String(e));
       }
     } finally {
       cancelledRef.current = false;
@@ -176,7 +196,7 @@ export default function ChatTab({
     sendingRef.current = false;
     setSending(false);
     setSessionStatus('idle');
-    setMessages(prev => [...prev, { role: 'system', content: t('chat.interrupted') }]);
+    setMessages(prev => [...prev, { id: nextMsgId(), role: 'system', content: t('chat.interrupted') }]);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -382,18 +402,19 @@ export default function ChatTab({
               </div>
             )}
             {messages.map((msg, i) => {
+              const msgKey = msg.id || `msg_${i}`;
               if (msg.role === 'tool') {
                 const statusClass = msg.toolOk === undefined ? '' : msg.toolOk ? 'ok' : 'err';
                 const failed = msg.toolOk === false;
                 const hasOutput = msg.content && msg.content !== 'Done' && msg.content !== 'Failed';
                 return (
-                  <React.Fragment key={i}>
+                  <React.Fragment key={msgKey}>
                     <div
                       className={`chat-tool-inline${hasOutput ? ' chat-tool-clickable' : ''}`}
                       onClick={hasOutput ? () => {
                         setExpandedToolErrors(prev => {
                           const next = new Set(prev);
-                          if (next.has(i)) { next.delete(i); } else { next.add(i); }
+                          if (next.has(msgKey)) { next.delete(msgKey); } else { next.add(msgKey); }
                           return next;
                         });
                       } : undefined}
@@ -407,7 +428,7 @@ export default function ChatTab({
                         {msg.toolOk === undefined ? '...' : msg.toolOk ? '✓' : '✗'}
                       </span>
                     </div>
-                    {hasOutput && expandedToolErrors.has(i) && (
+                    {hasOutput && expandedToolErrors.has(msgKey) && (
                       <div className={failed ? 'chat-tool-error-content' : 'chat-tool-output-content'}>
                         {msg.content}
                       </div>
@@ -417,23 +438,23 @@ export default function ChatTab({
               }
               if (msg.role === 'assistant') {
                 return (
-                  <div key={i} className="chat-msg assistant">
+                  <div key={msgKey} className="chat-msg assistant">
                     {msg.reasoning && (
-                      <div className={`chat-think-block ${expandedThinks.has(i) ? 'expanded' : ''}`}>
+                      <div className={`chat-think-block ${expandedThinks.has(msgKey) ? 'expanded' : ''}`}>
                         <div
                           className="chat-think-header"
                           onClick={() => {
                             setExpandedThinks(prev => {
                               const next = new Set(prev);
-                              if (next.has(i)) { next.delete(i); } else { next.add(i); }
+                              if (next.has(msgKey)) { next.delete(msgKey); } else { next.add(msgKey); }
                               return next;
                             });
                           }}
                         >
-                          <span className="chat-think-arrow">{expandedThinks.has(i) ? '▾' : '▸'}</span>
+                          <span className="chat-think-arrow">{expandedThinks.has(msgKey) ? '▾' : '▸'}</span>
                           <span className="chat-think-title">{t('chat.think')}</span>
                         </div>
-                        {expandedThinks.has(i) && (
+                        {expandedThinks.has(msgKey) && (
                           <div className="chat-think-content">{msg.reasoning}</div>
                         )}
                       </div>
@@ -446,7 +467,7 @@ export default function ChatTab({
               }
               if (msg.role === 'user') {
                 return (
-                  <div key={i} className="chat-msg user">
+                  <div key={msgKey} className="chat-msg user">
                     <div className="chat-bubble user">
                       <div className="chat-markdown">
                         <ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.content}</ReactMarkdown>
@@ -456,7 +477,7 @@ export default function ChatTab({
                 );
               }
               return (
-                <div key={i} className="chat-msg system">
+                <div key={msgKey} className="chat-msg system">
                   <div className="chat-markdown">
                     <ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.content}</ReactMarkdown>
                   </div>

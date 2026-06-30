@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { VersionInfo } from '../types';
 import * as api from '../apiClient';
@@ -13,6 +13,7 @@ export default function VersionPanel({ pipelineName, onRefresh }: VersionPanelPr
   const [versions, setVersions] = useState<VersionInfo[]>([]);
   const [viewing, setViewing] = useState<{ version: string; content: string } | null>(null);
   const [loading, setLoading] = useState(false);
+  const viewGenRef = useRef(0);
 
   const load = useCallback(async () => {
     if (!pipelineName) return;
@@ -25,9 +26,11 @@ export default function VersionPanel({ pipelineName, onRefresh }: VersionPanelPr
   useEffect(() => { load(); }, [load]);
 
   const handleView = useCallback(async (version: string) => {
+    const gen = ++viewGenRef.current;
     setViewing(null);
     try {
       const resp = await api.getVersion(pipelineName, version);
+      if (gen !== viewGenRef.current) return;
       setViewing({ version: resp.version, content: resp.content });
     } catch (e) { console.error('getVersion failed:', e); }
   }, [pipelineName]);

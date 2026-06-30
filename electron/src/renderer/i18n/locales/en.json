@@ -153,7 +153,8 @@
     "highlightOff": "Off",
     "a11yDesc": "Accessibility Tree (lightweight, default)",
     "progressiveDesc": "CDP DOM depth scan (dense pages)",
-    "highlightOffDesc": "No highlighting overlay"
+    "highlightOffDesc": "No highlighting overlay",
+    "saved": "Saved"
   },
   "log": {
     "title": "Log",
@@ -233,6 +234,18 @@
     "noChanges": "No changes detected — content is identical",
     "suggestedChanges": "AI suggested changes to the pipeline",
     "errorDetail": "Error Details",
-    "output": "Output"
+    "output": "Output",
+    "callingTool": "[Calling {{toolName}}...]",
+    "savePipeline": "Save pipeline",
+    "noSessions": "No sessions",
+    "sessions": "Sessions",
+    "newSession": "New Session",
+    "expandSidebar": "Expand",
+    "collapseSidebar": "Collapse",
+    "sessionCount": "{{count}} msgs",
+    "archiveSession": "Archive",
+    "archiveSessionConfirm": "Archive this session?",
+    "interrupted": "Session interrupted",
+    "noWorkspace": "No Workspace"
   }
 }

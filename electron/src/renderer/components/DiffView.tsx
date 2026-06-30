@@ -63,7 +63,7 @@ export default function DiffView({ lines, maxHeight }: DiffViewProps) {
       {lines.map((dl, i) => (
         <div key={i} className={`diff-line ${dl.type}`}>
           <span className="diff-line-num">
-            {dl.type === 'del' ? dl.oldLineNum : dl.newLineNum ?? ''}
+            {dl.type === 'del' ? (dl.oldLineNum ?? '') : (dl.newLineNum ?? '')}
           </span>
           <span className="diff-line-content">
             <span className="diff-prefix">{dl.type === 'add' ? '+' : dl.type === 'del' ? '−' : ' '}</span>

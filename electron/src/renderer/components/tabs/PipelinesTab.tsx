@@ -46,11 +46,12 @@ export default function PipelinesTab({
                 onSelectPreset(p.name);
                 onTabChange('agentmd');
               }}>✏ {t('pipelineManager.edit')}</button>
-              <button className="btn btn-secondary btn-xs" onClick={() => {
+              <button className="btn btn-secondary btn-xs" onClick={async () => {
                 onSelectPreset(p.name);
-                api.getPipeline(p.name).then(resp => {
+                try {
+                  const resp = await api.getPipeline(p.name);
                   if (resp.content) {
-                    try { navigator.clipboard.writeText(resp.content); } catch {
+                    try { await navigator.clipboard.writeText(resp.content); } catch {
                       const ta = document.createElement('textarea');
                       ta.value = resp.content;
                       ta.style.position = 'fixed'; ta.style.opacity = '0';
@@ -59,7 +60,7 @@ export default function PipelinesTab({
                       document.body.removeChild(ta);
                     }
                   }
-                }).catch((e) => { console.error('getPipeline failed:', e); });
+                } catch (e) { window.alert('Copy failed: ' + String(e)); }
               }}>📋 {t('pipelineManager.copy')}</button>
               <button className="btn btn-danger btn-xs" onClick={() => {
                 if (confirm(t('pipelineManager.deleteConfirm', { name: p.title || p.name }))) {

@@ -38,7 +38,12 @@ export default function EventLog({ events, maxHeight }: EventLogProps) {
   const { t } = useTranslation();
   const logRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    if (logRef.current) logRef.current.scrollTop = logRef.current.scrollHeight;
+    const el = logRef.current;
+    if (!el) return;
+    const isNearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
+    if (isNearBottom) {
+      el.scrollTop = el.scrollHeight;
+    }
   }, [events]);
 
   const formatTime = (ts: string) => {

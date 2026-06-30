@@ -101,11 +101,16 @@ export class PythonBackend {
       }
     });
 
+    const extractPort = (text: string): number | null => {
+      const match = text.match(/(?:running on|Uvicorn running on|ybu FastAPI running on)\s+http:\/\/127\.0\.0\.1:(\d+)/i);
+      return match ? parseInt(match[1], 10) : null;
+    };
+
     this.process.stdout?.on('data', (data: Buffer) => {
       const text = data.toString();
-      const match = text.match(/running on http:\/\/127\.0\.0\.1:(\d+)/);
-      if (match) {
-        this.port = parseInt(match[1], 10);
+      const port = extractPort(text);
+      if (port) {
+        this.port = port;
       }
     });
 
@@ -114,11 +119,9 @@ export class PythonBackend {
       const text = data;
       stderrChunks.push(text);
       logger.debug('[stderr] ' + text.trimEnd());
-      const uvicornMatch = text.match(/Uvicorn running on http:\/\/127\.0\.0\.1:(\d+)/);
-      const cliMatch = text.match(/ybu FastAPI running on http:\/\/127\.0\.0\.1:(\d+)/);
-      const match = uvicornMatch || cliMatch;
-      if (match) {
-        this.port = parseInt(match[1], 10);
+      const port = extractPort(text);
+      if (port) {
+        this.port = port;
         logger.info('Python backend started on port %d', this.port);
       }
     });

@@ -1,10 +1,12 @@
 import type { PipelineMeta, VersionInfo, ChatMessage, PresetDefinition } from './types';
 
 async function getBaseUrl(): Promise<string> {
-  if ((window as any).electronAPI?.getPort) {
-    const port = await (window as any).electronAPI.getPort();
-    return `http://127.0.0.1:${port}`;
-  }
+  try {
+    if ((window as any).electronAPI?.getPort) {
+      const port = await (window as any).electronAPI.getPort();
+      if (port > 0) return `http://127.0.0.1:${port}`;
+    }
+  } catch { /* fall through to web mode */ }
   return '';
 }
 
@@ -62,7 +64,10 @@ export async function savePipeline(name: string, content: string): Promise<{ ok:
 
 export async function listIsolatedProfiles(): Promise<{ profiles: string[] }> {
   const result = await safeFetch('/api/chrome/isolated-profiles');
-  if (!result.ok) return { profiles: ['Default Temp'] };
+  if (!result.ok) {
+    console.warn('listIsolatedProfiles failed:', result.error);
+    return { profiles: ['Default Temp'] };
+  }
   return { profiles: result.data?.profiles || [] };
 }
 

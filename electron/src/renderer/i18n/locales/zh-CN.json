@@ -153,7 +153,8 @@
     "highlightOff": "关闭",
     "a11yDesc": "无障碍树（轻量，默认）",
     "progressiveDesc": "CDP DOM 深度扫描（密集页面）",
-    "highlightOffDesc": "不高亮"
+    "highlightOffDesc": "不高亮",
+    "saved": "已保存"
   },
   "log": {
     "title": "日志",
@@ -233,6 +234,18 @@
     "noChanges": "未检测到变更 — 内容完全相同",
     "suggestedChanges": "AI 建议了对管线的修改",
     "errorDetail": "错误详情",
-    "output": "输出"
+    "output": "输出",
+    "callingTool": "[正在调用 {{toolName}}...]",
+    "savePipeline": "保存管线",
+    "noSessions": "暂无对话",
+    "sessions": "对话",
+    "newSession": "新建对话",
+    "expandSidebar": "展开",
+    "collapseSidebar": "折叠",
+    "sessionCount": "{{count}} 条消息",
+    "archiveSession": "归档",
+    "archiveSessionConfirm": "确定归档此对话？",
+    "interrupted": "对话已中断",
+    "noWorkspace": "无工作区"
   }
 }

@@ -2,6 +2,7 @@ import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import './styles/global.css';
 import type { PipelineMeta, EventData, ChatMessage, PendingEdit, SessionMeta, TreeNode } from './types';
+import { nextMsgId } from './types';
 import * as api from './apiClient';
 import TitleBar from './components/TitleBar';
 import ConnectionBar from './components/ConnectionBar';
@@ -14,7 +15,7 @@ import ParamsTab from './components/tabs/ParamsTab';
 import SettingsTab from './components/tabs/SettingsTab';
 
 function interpolateTemplate(template: string, ctx: Record<string, string>): string {
-  return template.replace(/{{([\w.]+)}}/g, (_match, key: string) => ctx[key] ?? `{{${key}}}`);
+  return template.replace(/{{([\w.-]+)}}/g, (_match, key: string) => ctx[key] ?? `{{${key}}}`);
 }
 
 export default function App() {
@@ -81,7 +82,7 @@ export default function App() {
 
   const [pendingEdits, setPendingEdits] = useState<PendingEdit[]>([]);
   const processedEditIdsRef = useRef<Set<string>>(new Set());
-  const streamStatesRef = useRef<Record<number, { accumulating: string; reasoningParts: string[]; complete: boolean }>>({});
+  const streamStatesRef = useRef<Record<number, { accumulating: string; reasoningParts: string[]; toolAnnotation: string; complete: boolean }>>({});
 
   const activePendingEdit = pendingEdits.length > 0 ? pendingEdits[0] : null;
 
@@ -121,6 +122,7 @@ export default function App() {
 
   const switchPipeline = useCallback(async (pipelineName: string) => {
     if (pipelineName === activePreset) return;
+    const prevPreset = activePreset;
     setActivePreset(pipelineName);
     setChatMessages([]);
     setCurrentSessionId('');
@@ -137,13 +139,14 @@ export default function App() {
       }
     } catch (e) {
       console.error('switchSession failed: %s', String(e));
+      setActivePreset(prevPreset);
       if (pipelineName === '__chat__' || !pipelineName) {
         setChatSessions([]);
       } else {
         setPipelineSessions(prev => ({ ...prev, [pipelineName]: [] }));
       }
     }
-  }, []);
+  }, [activePreset]);
 
   const handleToggleExpand = useCallback(async (name: string) => {
     if (name !== activePreset) {
@@ -212,6 +215,7 @@ export default function App() {
 
   useEffect(() => {
     setPendingEdits([]);
+    processedEditIdsRef.current = new Set();
   }, [activePreset]);
 
   // Debug: log chatMessages changes to help trace stale message issues
@@ -224,7 +228,15 @@ export default function App() {
 
   // Sync sessions when activePreset changes (e.g. from exec tab)
   useEffect(() => {
-    if (!activePreset || activePreset === '__chat__') return;
+    if (!activePreset) return;
+    if (activePreset === '__chat__') {
+      if (chatSessions.length === 0) {
+        loadSessions('__chat__').then(list => {
+          if (list.length > 0) setCurrentSessionId(list[0].session_id);
+        });
+      }
+      return;
+    }
     if (!pipelineSessions[activePreset]) {
       loadSessions(activePreset).then(list => {
         if (list.length > 0) setCurrentSessionId(list[0].session_id);
@@ -272,7 +284,17 @@ export default function App() {
   useEffect(() => {
     let ws: WebSocket | null = null;
     let reconnectTimer: ReturnType<typeof setTimeout>;
+    let reconnectScheduled = false;
     let stopped = false;
+    const scheduleReconnect = (delay: number) => {
+      if (reconnectScheduled) return;
+      reconnectScheduled = true;
+      clearTimeout(reconnectTimer);
+      reconnectTimer = setTimeout(() => {
+        reconnectScheduled = false;
+        connect();
+      }, delay);
+    };
     const connect = async () => {
       if (stopped) return;
       try {
@@ -286,6 +308,7 @@ export default function App() {
             // Chat events
             if (et === 'chat.tool_start') {
               setChatMessages(prev => [...prev, {
+                id: nextMsgId(),
                 role: 'tool',
                 content: '',
                 toolName: event.tool_name || '',
@@ -312,32 +335,39 @@ export default function App() {
               });
               setEvents(prev => [...prev, { type: et, timestamp: event.timestamp || (event._ts != null ? new Date(event._ts * 1000).toISOString() : new Date().toISOString()), node_name: event.step || event.pipeline || '', data: event }]);
             } else if (et === 'chat.error') {
-              setChatMessages(prev => [...prev, { role: 'assistant', content: `[Error] ${event.message || ''}` }]);
+              const ti = event.turn_index as number;
+              if (ti != null && streamStatesRef.current[ti]) {
+                streamStatesRef.current[ti].complete = true;
+              }
+              setChatMessages(prev => [...prev, { id: nextMsgId(), role: 'assistant', content: `[Error] ${event.message || ''}` }]);
             } else if (et === 'chat.stream_start') {
               const ti = event.turn_index as number;
-              console.log('[ws] stream_start turn=%d session=%s chatMessages.len=%d',
-                ti, event.session_id || '?', chatMessages.length);
               // Always reset stream state (handles LLM retries)
-              streamStatesRef.current[ti] = { accumulating: '', reasoningParts: [], complete: false };
+              streamStatesRef.current[ti] = { accumulating: '', reasoningParts: [], toolAnnotation: '', complete: false };
+              // Prune stale states (>20 turns old)
+              for (const k of Object.keys(streamStatesRef.current)) {
+                const n = Number(k);
+                if (!isNaN(n) && n < ti - 20) delete streamStatesRef.current[n];
+              }
               setChatMessages(prev => {
                 // Replace last empty/incomplete assistant message (LLM retry dedup)
                 const last = prev[prev.length - 1];
                 if (last && last.role === 'assistant' && !last.content) {
-                  return [...prev.slice(0, -1), { role: 'assistant', content: '' }];
+                  return [...prev.slice(0, -1), { id: nextMsgId(), role: 'assistant', content: '' }];
                 }
-                return [...prev, { role: 'assistant', content: '' }];
+                return [...prev, { id: nextMsgId(), role: 'assistant', content: '' }];
               });
             } else if (et === 'chat.text_chunk') {
               const ti = event.turn_index as number;
               const content = event.content as string || '';
-              const st = streamStatesRef.current[ti] || { accumulating: '', reasoningParts: [], complete: false };
+              const st = streamStatesRef.current[ti] || { accumulating: '', reasoningParts: [], toolAnnotation: '', complete: false };
               streamStatesRef.current[ti] = st;
               st.accumulating += content;
               setChatMessages(prev => {
                 const next = [...prev];
                 for (let i = next.length - 1; i >= 0; i--) {
                   if (next[i].role === 'assistant') {
-                    next[i] = { ...next[i], content: st.accumulating };
+                    next[i] = { ...next[i], content: st.toolAnnotation + st.accumulating };
                     break;
                   }
                 }
@@ -346,7 +376,7 @@ export default function App() {
             } else if (et === 'chat.think_chunk') {
               const ti = event.turn_index as number;
               const content = event.content as string || '';
-              const st = streamStatesRef.current[ti] || { accumulating: '', reasoningParts: [], complete: false };
+              const st = streamStatesRef.current[ti] || { accumulating: '', reasoningParts: [], toolAnnotation: '', complete: false };
               streamStatesRef.current[ti] = st;
               st.reasoningParts.push(content);
               setChatMessages(prev => {
@@ -361,12 +391,19 @@ export default function App() {
               });
             } else if (et === 'chat.tool_generated') {
               const toolName = event.tool_name as string || '';
+              const ti = event.turn_index as number;
+              if (ti != null) {
+                const st = streamStatesRef.current[ti] || { accumulating: '', reasoningParts: [], toolAnnotation: '', complete: false };
+                streamStatesRef.current[ti] = st;
+                st.toolAnnotation = '\n\n' + t('chat.callingTool', { toolName });
+              }
               setChatMessages(prev => {
                 const next = [...prev];
                 for (let i = next.length - 1; i >= 0; i--) {
                   if (next[i].role === 'assistant') {
                     const existing = next[i].content;
-                    next[i] = { ...next[i], content: existing ? existing + `\n\n[正在调用 ${toolName}...]` : `[正在调用 ${toolName}...]` };
+                    const label = t('chat.callingTool', { toolName });
+                    next[i] = { ...next[i], content: existing ? existing + '\n\n' + label : label };
                     break;
                   }
                 }
@@ -374,8 +411,20 @@ export default function App() {
               });
             } else if (et === 'chat.stream_end') {
               const ti = event.turn_index as number;
-              if (streamStatesRef.current[ti]) {
-                streamStatesRef.current[ti].complete = true;
+              const st = streamStatesRef.current[ti];
+              if (st) {
+                st.complete = true;
+                // Force render with final accumulated text
+                setChatMessages(prev => {
+                  const next = [...prev];
+                  for (let i = next.length - 1; i >= 0; i--) {
+                    if (next[i].role === 'assistant') {
+                      next[i] = { ...next[i], content: st.toolAnnotation + (st.accumulating || next[i].content) };
+                      break;
+                    }
+                  }
+                  return next;
+                });
               }
             } else if (et === 'pipeline.edit') {
               const editId = event.edit_id as string;
@@ -419,11 +468,11 @@ export default function App() {
             }
           } catch (e) { console.log('WebSocket message parse error: %s', String(e)); }
         };
-        ws.onclose = () => { if (!stopped) reconnectTimer = setTimeout(connect, 3000); };
-        ws.onerror = () => { console.log('WebSocket error'); };
+        ws.onclose = () => { if (!stopped) scheduleReconnect(3000); };
+        ws.onerror = () => { console.log('WebSocket error'); if (!stopped) scheduleReconnect(5000); };
       } catch (e) {
         console.log('WebSocket connect failed: %s', String(e));
-        if (!stopped) reconnectTimer = setTimeout(connect, 5000);
+        if (!stopped) scheduleReconnect(5000);
       }
     };
     connect();
@@ -477,10 +526,9 @@ export default function App() {
     }
 
     const pipelineResolved = interpolateTemplate(pipelineContent, params);
-    const pipelineWithMode = pipelineResolved.replace(
-      /^---\n/,
-      `---\nreview_mode: "${reviewMode}"\n`
-    );
+    const pipelineWithMode = pipelineResolved.startsWith('---')
+      ? pipelineResolved.replace(/^---\r?\n/, `---\nreview_mode: "${reviewMode}"\n`)
+      : `---\nreview_mode: "${reviewMode}"\n${pipelineResolved}`;
     setLoading(true);
     setResult(null);
     setResultErrors(null);
@@ -533,6 +581,8 @@ export default function App() {
         setWsUrl(resp.wsUrl || '');
         setConnectionError(null);
       } else {
+        setConnected(false);
+        setWsUrl('');
         setConnectionError(resp.error || t('connection.connectionFailed'));
       }
     } catch (e) {
@@ -708,7 +758,7 @@ export default function App() {
     const r = await api.deletePipeline(name);
     if (r.ok) {
       if (activePreset === name) {
-        switchPipeline('__chat__');
+        await switchPipeline('__chat__');
         setPipelineEditor('');
       }
       handleRefreshPipelines();

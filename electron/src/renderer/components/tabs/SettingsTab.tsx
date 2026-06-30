@@ -57,17 +57,35 @@ export default function SettingsTab({
 
   const handleSaveProvider = async () => {
     setSaving(true);
-    const r = await api.setProviderConfig({ ...providerConfig });
-    if (r.ok) { setSaved(true); setTimeout(() => setSaved(false), 2000); }
+    setTestResult(null);
+    try {
+      const r = await api.setProviderConfig({ ...providerConfig });
+      setSaved(true);
+      setTestResult({ ok: true, msg: t('settingsTab.saved') });
+      setTimeout(() => setSaved(false), 2000);
+    } catch (e) {
+      setTestResult({ ok: false, msg: String(e) });
+    }
     setSaving(false);
   };
+
+  useEffect(() => {
+    if (testResult) {
+      const t = setTimeout(() => setTestResult(null), 4000);
+      return () => clearTimeout(t);
+    }
+  }, [testResult]);
 
   const handleTest = async () => {
     setTesting(true);
     setTestResult(null);
-    const { model, api_key, api_base } = providerConfig;
-    const r = await api.testProvider({ model, api_key, api_base });
-    setTestResult(r.ok ? { ok: true, msg: t('settingsTab.testPassed') } : { ok: false, msg: r.error || 'Failed' });
+    try {
+      const { model, api_key, api_base } = providerConfig;
+      const r = await api.testProvider({ model, api_key, api_base });
+      setTestResult(r.ok ? { ok: true, msg: t('settingsTab.testPassed') } : { ok: false, msg: r.error || 'Failed' });
+    } catch (e) {
+      setTestResult({ ok: false, msg: String(e) });
+    }
     setTesting(false);
   };
 

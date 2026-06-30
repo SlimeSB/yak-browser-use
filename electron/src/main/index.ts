@@ -17,8 +17,6 @@ const logger = getLogger('main');
 let py: PythonBackend;
 let mainWindow: BrowserWindow | null = null;
 
-const PORT = 0; // auto-detect from backend
-
 async function createWindow() {
   logger.info('Creating main window');
   mainWindow = new BrowserWindow({
@@ -105,7 +103,8 @@ app.whenReady().then(async () => {
         const text = await resp.text().catch(() => '');
         return { ok: false, error: `HTTP ${resp.status}: ${text.slice(0, 200)}` };
       }
-      return { ok: true, data: await resp.json() as Record<string, unknown> };
+      const text = await resp.text();
+      return { ok: true, data: text ? JSON.parse(text) as Record<string, unknown> : {} };
     } catch (e) {
       return { ok: false, error: String(e) };
     }
@@ -309,17 +308,17 @@ app.whenReady().then(async () => {
   // Version management
   ipcMain.handle('versions:list', async (_event, pipelineName: string) => {
     logger.debug('IPC: versions:list %s', pipelineName);
-    return _apiFetch(`/api/versions/${pipelineName}`, {}, 'versions:list');
+    return _apiFetch(`/api/versions/${encodeURIComponent(pipelineName)}`, {}, 'versions:list');
   });
 
   ipcMain.handle('versions:get', async (_event, { pipelineName, version }: { pipelineName: string; version: string }) => {
     logger.debug('IPC: versions:get %s v%s', pipelineName, version);
-    return _apiFetch(`/api/versions/${pipelineName}/${version}`, {}, 'versions:get');
+    return _apiFetch(`/api/versions/${encodeURIComponent(pipelineName)}/${encodeURIComponent(version)}`, {}, 'versions:get');
   });
 
   ipcMain.handle('versions:relearn', async (_event, pipelineName: string) => {
     logger.debug('IPC: versions:relearn %s', pipelineName);
-    return _apiFetch(`/api/versions/${pipelineName}/relearn`, { method: 'POST' }, 'versions:relearn');
+    return _apiFetch(`/api/versions/${encodeURIComponent(pipelineName)}/relearn`, { method: 'POST' }, 'versions:relearn');
   });
 
   // Window controls
@@ -363,7 +362,7 @@ app.whenReady().then(async () => {
 
   ipcMain.handle('credentials:delete', async (_event, key: string) => {
     logger.debug('IPC: credentials:delete %s', key);
-    return _apiFetch(`/api/params/${key}`, { method: 'DELETE' }, 'credentials:delete');
+    return _apiFetch(`/api/params/${encodeURIComponent(key)}`, { method: 'DELETE' }, 'credentials:delete');
   });
 
   // Backend port for WebSocket
@@ -377,12 +376,12 @@ app.whenReady().then(async () => {
 
   ipcMain.handle('pipelines:get', async (_event, name: string) => {
     logger.debug('IPC: pipelines:get %s', name);
-    return _apiFetch(`/api/pipelines/${name}`, {}, 'pipelines:get');
+    return _apiFetch(`/api/pipelines/${encodeURIComponent(name)}`, {}, 'pipelines:get');
   });
 
   ipcMain.handle('pipelines:delete', async (_event, name: string) => {
     logger.info('IPC: pipelines:delete %s', name);
-    return _apiFetch(`/api/pipelines/${name}`, { method: 'DELETE' }, 'pipelines:delete');
+    return _apiFetch(`/api/pipelines/${encodeURIComponent(name)}`, { method: 'DELETE' }, 'pipelines:delete');
   });
 
   // Chat endpoints
@@ -486,32 +485,36 @@ app.whenReady().then(async () => {
   await createWindow();
 
   // F8: save current page HTML + screenshot for debugging
-  globalShortcut.register('F8', async () => {
-    logger.info('F8 pressed — saving page...');
-    try {
-      const result = await _safeFetch('/api/chrome/save-page', { method: 'POST' });
-      if (result.ok && result.data?.path) {
-        logger.info('Page saved to %s', result.data.path);
-        dialog.showMessageBox(mainWindow!, {
-          type: 'info', title: 'Page Saved',
-          message: `Page saved to:\n${result.data.path}`,
-          buttons: ['OK'],
-        });
-      } else {
+  try {
+    globalShortcut.register('F8', async () => {
+      logger.info('F8 pressed — saving page...');
+      try {
+        const result = await _safeFetch('/api/chrome/save-page', { method: 'POST' });
+        if (result.ok && result.data?.path) {
+          logger.info('Page saved to %s', result.data.path);
+          dialog.showMessageBox(mainWindow!, {
+            type: 'info', title: 'Page Saved',
+            message: `Page saved to:\n${result.data.path}`,
+            buttons: ['OK'],
+          });
+        } else {
+          dialog.showMessageBox(mainWindow!, {
+            type: 'error', title: 'Save Failed',
+            message: result.error || 'Unknown error',
+            buttons: ['OK'],
+          });
+        }
+      } catch (e) {
         dialog.showMessageBox(mainWindow!, {
           type: 'error', title: 'Save Failed',
-          message: result.error || 'Unknown error',
+          message: String(e),
           buttons: ['OK'],
         });
       }
-    } catch (e) {
-      dialog.showMessageBox(mainWindow!, {
-        type: 'error', title: 'Save Failed',
-        message: String(e),
-        buttons: ['OK'],
-      });
-    }
-  });
+    });
+  } catch (e) {
+    logger.error('Failed to register F8 shortcut: %s', (e as Error).message);
+  }
 }).catch((e) => {
   logger.error('App startup failed: %s', (e as Error).message);
   dialog.showErrorBox('Startup Failed', `Application startup error:\n${(e as Error).message}`);

@@ -25,6 +25,8 @@ export default function MonacoYamlEditor({
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const disposedRef = useRef(false);
   const applyingDiffRef = useRef(false);
+  const onChangeRef = useRef(onChange);
+  onChangeRef.current = onChange;
 
   const hasDiff = original !== undefined && modified !== undefined && original !== modified;
 
@@ -96,7 +98,7 @@ export default function MonacoYamlEditor({
         if (originalModelRef.current && text !== originalModelRef.current.getValue()) {
           originalModelRef.current.setValue(_nonEmpty(text));
         }
-        onChange?.(text);
+        onChangeRef.current?.(text);
       }, 300);
     });
 
@@ -154,13 +156,14 @@ export default function MonacoYamlEditor({
     } else {
       editorRef.current.updateOptions({ readOnly: false });
       const currentText = modifiedModelRef.current?.getValue() ?? '';
-      if (originalModelRef.current && originalModelRef.current.getValue() !== currentText) {
+      if (currentText !== value && originalModelRef.current) {
         applyingDiffRef.current = true;
-        originalModelRef.current.setValue(_nonEmpty(currentText));
+        modifiedModelRef.current?.setValue(_nonEmpty(value));
+        originalModelRef.current.setValue(_nonEmpty(value));
         applyingDiffRef.current = false;
       }
     }
-  }, [original, modified, hasDiff, setModels]);
+  }, [original, modified, hasDiff, setModels, value]);
 
   return (
     <div
