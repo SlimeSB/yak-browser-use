@@ -97,7 +97,7 @@ def _ax_value(value_obj: dict | None) -> str:
     if isinstance(v, str):
         return v
     if isinstance(v, bool | int | float):
-        return str(v)
+        return str(v).lower()
     return ""
 
 
@@ -119,10 +119,28 @@ def _flatten_cdp_ax_nodes(nodes: list[dict]) -> list[dict]:
             "name": _ax_value(node.get("name")),
             "value": _ax_value(node.get("value")),
             "description": _ax_value(node.get("description")),
-            "checked": node.get("checked"),
-            "disabled": node.get("disabled", False),
+            "checked": _ax_value(node.get("checked")),
+            "disabled": _ax_value(node.get("disabled")),
+            "expanded": _ax_value(node.get("expanded")),
+            "haspopup": _ax_value(node.get("haspopup")),
+            "pressed": _ax_value(node.get("pressed")),
+            "selected": _ax_value(node.get("selected")),
+            "hidden": _ax_value(node.get("hidden")),
         })
     return elements
+
+
+def _match(el: dict, q: str) -> bool:
+    """Generic query matching: key name match (value truthy) then string value match."""
+    q = q.lower()
+    for k, v in el.items():
+        if k.startswith("_"):
+            continue
+        if q in k.lower() and v:
+            return True
+        if isinstance(v, str) and q in v.lower():
+            return True
+    return False
 
 
 def _extract_text_from_children(node: dict) -> str:
@@ -317,6 +335,42 @@ class CollectState:
                                    attrs.get("role", "").lower() in _ALWAYS_FULL_ROLES),
                     "_in_view": False,
                 }
+                # Interaction state attributes (conditional)
+                if "disabled" in attrs:
+                    el["disabled"] = True
+                if "aria-disabled" in attrs:
+                    el["aria_disabled"] = attrs["aria-disabled"]
+                if "aria-expanded" in attrs:
+                    el["aria_expanded"] = attrs["aria-expanded"]
+                if "aria-haspopup" in attrs:
+                    el["aria_haspopup"] = attrs["aria-haspopup"]
+                if "aria-pressed" in attrs:
+                    el["aria_pressed"] = attrs["aria-pressed"]
+                if "aria-selected" in attrs:
+                    el["aria_selected"] = attrs["aria-selected"]
+                if "aria-checked" in attrs:
+                    el["aria_checked"] = attrs["aria-checked"]
+                if "aria-hidden" in attrs:
+                    el["aria_hidden"] = attrs["aria-hidden"]
+                if "hidden" in attrs:
+                    el["hidden"] = True
+                if "readonly" in attrs:
+                    el["readonly"] = True
+                if "required" in attrs:
+                    el["required"] = True
+
+                # Semantic attributes (conditional)
+                if "type" in attrs:
+                    el["type"] = attrs["type"]
+                if "aria-label" in attrs:
+                    el["aria_label"] = attrs["aria-label"]
+                if "placeholder" in attrs:
+                    el["placeholder"] = attrs["placeholder"]
+                if "value" in attrs:
+                    el["value"] = attrs["value"]
+                if tag == "a" and attrs.get("href"):
+                    el["href"] = attrs["href"]
+
                 self.elements_all.append(el)
                 self._ref_map[ref] = el
                 # Increment ALL ancestor containers, not just the nearest one
@@ -1643,13 +1697,9 @@ class PlaywrightBridge:
         nodes = result.get("nodes", [])
         elements = _flatten_cdp_ax_nodes(nodes)
 
-        # Filter by query (case-insensitive name/role match)
+        # Filter by query (generic field matching)
         if query:
-            q = query.lower()
-            elements = [
-                el for el in elements
-                if q in (el.get("name") or "").lower() or q in (el.get("role") or "").lower()
-            ]
+            elements = [el for el in elements if _match(el, query)]
 
         # I1: clear old _ref_map so stale refs don't survive
         self._ref_map.clear()
@@ -1744,16 +1794,9 @@ class PlaywrightBridge:
         # Phase 2: build LLM view
         view_elements, folded, branch_index = build_llm_view(state)
 
-        # Filter by query if provided (case-insensitive text/tag/role match)
+        # Filter by query if provided (generic field matching)
         if query:
-            q = query.lower()
-            view_elements = [
-                e for e in view_elements
-                if (q in e.get("text", "").lower()
-                    or q in e.get("tag", "").lower()
-                    or q in e.get("role", "").lower()
-                    or q in e.get("ref", "").lower())
-            ]
+            view_elements = [e for e in view_elements if _match(e, query)]
             # Re-stamp kept refs after filter
             kept_refs = {e["ref"] for e in view_elements}
             for el in state.elements_all:
@@ -1791,11 +1834,14 @@ class PlaywrightBridge:
         await self.ensure_highlights()
 
         # Strip private fields AND ref before returning to LLM
+        show_hidden = bool(query)
         public_elements = []
         for el in view_elements:
             pub = {}
             for k, v in el.items():
                 if k.startswith("_") or k == "ref":
+                    continue
+                if (k in ("hidden", "aria_hidden")) and not show_hidden:
                     continue
                 pub[k] = v
             public_elements.append(pub)

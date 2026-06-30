@@ -29,14 +29,15 @@
 - **THEN** 该元素不会因为 "false" 而被匹配（因为不存在 `disabled` key，且 query 不匹配空字符串）
 - **NOTE** 这是 known tradeoff：条件写入策略下，`disabled=False` 和"不存在 disabled 属性"对 LLM 不可区分
 
-### Requirement: a11y 模式 query 匹配扩展到四字段
+### Requirement: a11y 模式 query 匹配使用通用 `_match`
 
-`a11y_snapshot` 的 `query` 参数 MUST 在 `name` 和 `role` 之外，也匹配 `value` 和 `description` 字段。
+`a11y_snapshot` 的 `query` 参数 MUST 使用与 progressive 相同的 `_match` 函数，遍历所有非 `_` 前缀字段进行匹配（key 名匹配要求 value 非空）。
 
 #### Scenario: query="disabled" 在 a11y 模式下匹配
 
 - **WHEN** LLM 调用 `browser_snapshot(mode="a11y", query="disabled")`
-- **THEN** 返回的元素列表中包含 `disabled: "true"` 的元素（通过 name 字段匹配 "disabled"；value 和 description 字段也被搜索但此场景下不贡献匹配）
+- **THEN** 返回的元素列表中包含 `disabled: "true"` 的元素（通过 key 名匹配 `disabled` 字段，值为 `"true"` 非空）
+- **AND** `disabled: ""` 的元素不被匹配（空值 key 名不命中）
 
 #### Scenario: a11y query 匹配 value 字段
 

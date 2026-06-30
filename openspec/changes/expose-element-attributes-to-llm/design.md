@@ -12,7 +12,7 @@
 - progressive 模式元素数据暴露交互状态属性（`disabled`、`aria-expanded`、`aria-hidden` 等）和语义属性（`type`、`placeholder`、`href` 等）
 - `query` 参数支持按属性值搜索（`query="disabled"` 匹配禁用元素）
 - `hidden`/`aria_hidden` 探索模式（无 query）不暴露，搜索模式（有 query）始终暴露
-- a11y 模式补齐 `expanded`/`haspopup` 等 CDP AX 属性，修复 `checked`/`disabled` 的 `_ax_value()` 提取问题
+- a11y 模式补齐 `expanded`/`haspopup` 等 CDP AX 属性，修复 `checked`/`disabled` 的 `_ax_value()` 提取问题；a11y query 匹配改用通用 `_match`
 - 条件写入：属性不存在时不写 key，控制 token 成本
 
 **非目标：**
@@ -72,7 +72,7 @@ def _match(el: dict, q: str) -> bool:
 
 | 风险 | 缓解 |
 |------|------|
-| Token 膨胀 ~50% | 条件写入 + hidden 默认不暴露；实测后可根据数据调整 |
+| Token 膨胀 ~50% | 条件写入 + hidden 探索模式不暴露；实测后可根据数据调整 |
 | `disabled=False` 不可搜索 | Known tradeoff，spec 中明确说明 |
 | `value` 与 `text` 字段重叠 | 两者语义不同（text 是可见标签，value 是原始值），spec 中说明 |
 | `aria_label` 与 `text` 重叠 | `text` 的 fallback 链包含 `aria-label`，但 `aria_label` 是原始值，两者互补 |

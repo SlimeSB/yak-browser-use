@@ -27,7 +27,7 @@ def test_ax_value_returns_string():
 
 
 def test_ax_value_returns_bool():
-    assert _ax_value({"value": True, "type": "boolean"}) == "True"
+    assert _ax_value({"value": True, "type": "boolean"}) == "true"
 
 
 def test_ax_value_none():
