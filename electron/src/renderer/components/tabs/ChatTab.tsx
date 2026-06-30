@@ -1,6 +1,9 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import { useChatStore } from '../../stores/chatStore';
+import type { ChatMessage } from '../../types';
 import { useConnectionStore } from '../../stores/connectionStore';
 import { usePipelineStore } from '../../stores/pipelineStore';
 import { useUiStore } from '../../stores/uiStore';
@@ -45,7 +48,6 @@ export default function ChatTab() {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const draggingRef = useRef(false);
   const [expandedThinks, setExpandedThinks] = useState<Set<string>>(new Set());
-  const [expandedToolErrors, setExpandedToolErrors] = useState<Set<string>>(new Set());
   const cancelledRef = useRef(false);
   const activePresetRef = useRef(activePreset);
   const connectedRef = useRef(connected);
@@ -56,6 +58,25 @@ export default function ChatTab() {
   useEffect(() => {
     loadSessions(activePreset);
   }, []);
+
+  const mergedMessages = useMemo(() => {
+    const result: (ChatMessage & { toolCalls?: ChatMessage[] })[] = [];
+    for (let i = 0; i < messages.length; i++) {
+      const msg = messages[i];
+      if (msg.role === 'tool') continue;
+      if (msg.role === 'assistant') {
+        const tools: ChatMessage[] = [];
+        while (i + 1 < messages.length && messages[i + 1].role === 'tool') {
+          tools.push(messages[i + 1]);
+          i++;
+        }
+        result.push({ ...msg, toolCalls: tools.length > 0 ? tools : undefined });
+      } else {
+        result.push(msg);
+      }
+    }
+    return result;
+  }, [messages]);
 
   const [splitRatio, setSplitRatio] = useState(() => {
     try {
@@ -343,16 +364,34 @@ export default function ChatTab() {
                 <span className="chat-empty-hint">{t('chat.placeholder')}</span>
               </div>
             )}
-            {messages.map((msg, i) => {
+            {mergedMessages.map((msg, i) => {
               const thinkKey = `${msg.id! || i}_think`;
-              const errKey = `${msg.id! || i}_err`;
               return (
                 <div key={msg.id || i} className={`chat-message ${msg.role}`}>
                   {msg.role === 'user' && <div className="chat-user-bubble"><pre>{msg.content}</pre></div>}
                   {msg.role === 'assistant' && (
                     <>
-                      <div className="chat-agent-label">{t('chat.title')}</div>
-                      <div className="chat-agent-bubble"><pre>{msg.content}</pre></div>
+                      {msg.content && (
+                        <div className="chat-agent-content"><ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.content}</ReactMarkdown></div>
+                      )}
+                      {((msg as any).toolCalls?.length ?? 0) > 0 && (
+                        <div className="tool-chips">
+                          {(msg as any).toolCalls.map((tc: ChatMessage, j: number) => {
+                            const isRunning = tc.toolOk === undefined;
+                            const isOk = tc.toolOk === true;
+                            const isErr = tc.toolOk === false;
+                            return (
+                              <div key={j} className={`tool-chip ${isRunning ? 'status-running' : isOk ? 'status-ok' : 'status-err'}`}>
+                                <span className="icon">{isRunning ? '◌' : isOk ? '✓' : '✗'}</span>
+                                <span className="name">{tc.toolName || t('chat.title')}</span>
+                                {tc.toolDuration !== undefined && (
+                                  <><span className="sep">·</span><span className="duration">{tc.toolDuration}ms</span></>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
                       {msg.reasoning && (
                         <div className="chat-think">
                           <span className="chat-think-toggle"
@@ -370,36 +409,6 @@ export default function ChatTab() {
                         </div>
                       )}
                     </>
-                  )}
-                  {msg.role === 'tool' && (
-                    <div className="chat-tool-call">
-                      <div className="chat-tool-header">
-                        <span className="chat-tool-name">{msg.toolName || t('chat.title')}</span>
-                        {msg.toolOk !== undefined && (
-                          <span className={`chat-tool-status ${msg.toolOk ? 'ok' : 'err'}`}>
-                            {msg.toolOk ? '✓' : '✗'}
-                          </span>
-                        )}
-                        {msg.toolDuration !== undefined && (
-                          <span className="chat-tool-duration">{msg.toolDuration}ms</span>
-                        )}
-                      </div>
-                      <pre className="chat-tool-body">{msg.content}</pre>
-                      {msg.toolOk === false && (
-                        <span className="chat-tool-err-toggle"
-                          onClick={() => setExpandedToolErrors(prev => {
-                            const next = new Set(prev);
-                            if (next.has(errKey)) next.delete(errKey); else next.add(errKey);
-                            return next;
-                          })}
-                        >
-                          ▶ <span className="chat-tool-err-title">{t('chat.errorDetail', 'Error Details')}</span>
-                        </span>
-                      )}
-                      {msg.toolOk === false && expandedToolErrors.has(errKey) && (
-                        <pre className="chat-tool-err-body">{msg.content}</pre>
-                      )}
-                    </div>
                   )}
                   {msg.role === 'system' && (
                     <div className="chat-system-msg"><pre>{msg.content}</pre></div>
