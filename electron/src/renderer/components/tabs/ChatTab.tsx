@@ -344,9 +344,7 @@ export default function ChatTab() {
 
           <div className="chat-messages" ref={scrollRef}>
             {messages.length === 0 && (
-              <div className="chat-greeting">
-                <p>{t('chat.startPrompt')}</p>
-              </div>
+              <></>
             )}
             {messages.map((msg, i) => {
               const thinkKey = `${msg.id! || i}_think`;
