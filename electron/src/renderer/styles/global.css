@@ -3027,12 +3027,12 @@ body {
 .chat-user-bubble {
   align-self: flex-end;
   max-width: 75%;
-  padding: 9px 14px;
-  border-radius: 16px 16px 4px 16px;
+  padding: 4px 10px;
+  border-radius: 8px;
   background: var(--primary);
   color: #fff;
-  font-size: var(--fs-md);
-  line-height: var(--lh-normal);
+  font-size: var(--fs-base);
+  line-height: 1.4;
   word-wrap: break-word;
 }
 .chat-user-bubble pre {
