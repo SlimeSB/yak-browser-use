@@ -27,20 +27,6 @@ from yak_browser_use.engine._lifecycle.compensation import CompensationRegistry
 
 logger = get_logger(__name__)
 
-ERROR_CODES: dict[str, str] = {
-    "SYNTAX_ERROR": "Tool code compile/syntax failure",
-    "RUNTIME_ERROR": "Tool execution runtime exception",
-    "TIMEOUT_ERROR": "Tool execution timeout",
-    "OUTPUT_ERROR": "Output file missing or empty",
-    "INPUT_ERROR": "Input file not found or unreadable",
-    "BROWSER_ERROR": "Browser operation failed",
-    "BROWSER_UNAVAILABLE": "Browser not available",
-    "CHECK_FAILED": "Step check validation failed",
-    "GUARDIAN_ERROR": "Guardian validation failed",
-    "PATH_ERROR": "Path security check failed",
-    "LLM_ERROR": "LLM tool code generation failed",
-}
-
 SENSITIVE_KEYS: frozenset = frozenset({
     "text", "value", "credential", "password", "secret", "token", "key", "api_key",
 })

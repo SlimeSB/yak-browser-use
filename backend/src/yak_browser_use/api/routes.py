@@ -22,6 +22,69 @@ from yak_browser_use.utils._path import project_root
 logger = get_logger(__name__)
 
 
+# ── Pydantic request models ──────────────────────────────────────
+
+from pydantic import BaseModel, Field
+
+class ProviderConfigSaveRequest(BaseModel):
+    model: str = ""
+    api_key: str = ""
+    api_base: str = ""
+    extra: dict[str, Any] = {}
+
+class ProviderTestRequest(BaseModel):
+    model: str = "gpt-4o"
+    api_key: str = ""
+    api_base: str = ""
+
+class RunRequest(BaseModel):
+    pipeline: str
+    params: dict[str, Any] = {}
+
+class ChromeConnectRequest(BaseModel):
+    mode: str = "user"
+    profile_name: str | None = None
+    ws_url: str | None = None
+    highlight_mode: str = "a11y"
+    pipeline_name: str | None = None
+
+class HighlightConfigRequest(BaseModel):
+    mode: str = "a11y"
+
+class ProgLabelRequest(BaseModel):
+    id: str
+
+class SetParamRequest(BaseModel):
+    key: str
+    value: str
+
+class ChatMessageRequest(BaseModel):
+    message: str
+    pipeline_name: str = ""
+
+class ChatConfirmRequest(BaseModel):
+    edit_id: str
+
+class ChatRevertRequest(BaseModel):
+    edit_id: str
+
+class SessionNewRequest(BaseModel):
+    pipeline_name: str
+
+class SessionSwitchRequest(BaseModel):
+    pipeline_name: str
+
+class PipelineSaveRequest(BaseModel):
+    content: str
+
+class LogForwardRequest(BaseModel):
+    entries: list[dict[str, Any]]
+
+class ReviewStepRequest(BaseModel):
+    action: str
+    reason: str = ""
+
+
 # ── Helpers ─────────────────────────────────────────────────────────
 
 
@@ -61,24 +124,24 @@ def register_all_routes(app: FastAPI) -> None:
         return JSONResponse({"ok": True, "config": {}})
 
     @app.post("/api/provider-config")
-    async def api_set_provider_config(request: dict) -> JSONResponse:
+    async def api_set_provider_config(request: ProviderConfigSaveRequest) -> JSONResponse:
         """Save LLM provider configuration."""
         from yak_browser_use.utils.browser import _get_config_path
         p = _get_config_path()
         p.parent.mkdir(parents=True, exist_ok=True)
-        p.write_text(json.dumps(request, ensure_ascii=False, indent=2), encoding="utf-8")
+        p.write_text(json.dumps(request.model_dump(mode="json"), ensure_ascii=False, indent=2), encoding="utf-8")
         return JSONResponse({"ok": True})
 
     @app.post("/api/provider-test")
-    async def api_test_provider(request: dict) -> JSONResponse:
+    async def api_test_provider(request: ProviderTestRequest) -> JSONResponse:
         """Test an LLM provider config by making a simple call."""
         try:
             from yak_browser_use.llm.client import LLMClient
             from yak_browser_use.llm.messages import UserMessage
 
-            model = request.get("model", "gpt-4o")
-            api_key = request.get("api_key", "")
-            api_base = request.get("api_base", "")
+            model = request.model
+            api_key = request.api_key
+            api_base = request.api_base
 
             kwargs: dict = {"model": model}
             if api_key:
@@ -146,7 +209,7 @@ def register_all_routes(app: FastAPI) -> None:
     # =================================================================
 
     @app.post("/api/run")
-    async def api_run(request: dict) -> JSONResponse:
+    async def api_run(request: RunRequest) -> JSONResponse:
         """Execute a pipeline.yaml pipeline (runs as an async background task).
 
         Request body: ``{"pipeline": "...", "params": {...}}``
@@ -154,8 +217,8 @@ def register_all_routes(app: FastAPI) -> None:
         Returns immediately with a ``run_id``.  Poll ``GET /api/status``
         or subscribe to ``/ws/events`` for completion.
         """
-        pipeline_text = request.get("pipeline", "")
-        params = request.get("params", {}) or {}
+        pipeline_text = request.pipeline
+        params = request.params or {}
         logger.debug("POST /api/run: pipeline=%s... params=%s", pipeline_text[:80], params)
 
         if not engine_state.chrome_connected:
@@ -296,16 +359,16 @@ def register_all_routes(app: FastAPI) -> None:
             logger.debug("initial highlight injection after connect failed", exc_info=True)
 
     @app.post("/api/chrome/connect")
-    async def api_chrome_connect(request: dict) -> JSONResponse:
+    async def api_chrome_connect(request: ChromeConnectRequest) -> JSONResponse:
         """Connect to Chrome via CDP WebSocket.
 
         Request body: ``{"mode": "user"|"isolated", "profile_name": "...", "ws_url": "..."}``
         """
-        mode = request.get("mode", "user")
-        profile_name = request.get("profile_name")
-        ws_url = request.get("ws_url")
-        highlight_mode = request.get("highlight_mode", "a11y")
-        pipeline_name = request.get("pipeline_name")
+        mode = request.mode
+        profile_name = request.profile_name
+        ws_url = request.ws_url
+        highlight_mode = request.highlight_mode
+        pipeline_name = request.pipeline_name
         logger.info("Chrome connect requested: mode=%s profile=%s highlight=%s", mode, profile_name or "none", highlight_mode)
 
         if engine_state.running_pipeline is not None:
@@ -478,12 +541,12 @@ def register_all_routes(app: FastAPI) -> None:
     # =================================================================
 
     @app.post("/api/highlight-config")
-    async def api_highlight_config(request: dict) -> JSONResponse:
+    async def api_highlight_config(request: HighlightConfigRequest) -> JSONResponse:
         """Set highlight mode: ``"a11y"``, ``"progressive"``, or ``"off"``.
 
         Request body: ``{"mode": "a11y|progressive|off"}``
         """
-        mode = request.get("mode", "a11y")
+        mode = request.mode
         if mode not in ("a11y", "progressive", "off"):
             raise APIError(f"Invalid mode: {mode!r}, must be a11y/progressive/off")
         if engine_state.bridge:
@@ -493,14 +556,14 @@ def register_all_routes(app: FastAPI) -> None:
         return JSONResponse({"ok": True, "mode": mode})
 
     @app.post("/api/prog-label")
-    async def api_prog_label(request: dict) -> JSONResponse:
+    async def api_prog_label(request: ProgLabelRequest) -> JSONResponse:
         """Resolve a ref or prog_label to full element details.
 
-        Request body: ``{"id": "p_175"}`` or ``{"id": "0-2-175"}
+        Request body: ``{"id": "p_175"}`` or ``{"id": "0-2-175"}``
 
         Returns {ref, prog_label, selector, tag, text, role} or error.
         """
-        rid = request.get("id", "")
+        rid = request.id
         if not rid:
             raise APIError("missing 'id' field")
         bridge = engine_state.bridge
@@ -566,13 +629,13 @@ def register_all_routes(app: FastAPI) -> None:
             raise ServerError(str(exc))
 
     @app.post("/api/params")
-    async def api_set_param(request: dict) -> JSONResponse:
+    async def api_set_param(request: SetParamRequest) -> JSONResponse:
         """Set a parameter value.
 
         Request body: ``{"key": "name", "value": "val"}``
         """
-        key = request.get("key", "")
-        value = request.get("value", "")
+        key = request.key
+        value = request.value
         if not key or not value:
             raise APIError("'key' and 'value' are required")
 
@@ -801,7 +864,7 @@ def register_all_routes(app: FastAPI) -> None:
             raise ServerError(str(exc))
 
     @app.post("/api/pipeline/{thread_id}/review")
-    async def api_review_step(thread_id: str, request: dict) -> JSONResponse:
+    async def api_review_step(thread_id: str, request: ReviewStepRequest) -> JSONResponse:
         """Review/approve/reject a pending pipeline operation.
 
         NOTE: Full implementation requires engine.checkpoint.MemorySaver
@@ -848,7 +911,7 @@ def register_all_routes(app: FastAPI) -> None:
     # =================================================================
 
     @app.post("/api/chat")
-    async def chat_message(request: dict) -> JSONResponse:
+    async def chat_message(request: ChatMessageRequest) -> JSONResponse:
         """Process a chat message through the conversation engine.
 
         Request: {"message": "open baidu and search coffee"}
@@ -856,11 +919,11 @@ def register_all_routes(app: FastAPI) -> None:
         """
         from yak_browser_use.engine.agent import _create_chat_llm_call
 
-        message = request.get("message", "").strip()
+        message = request.message.strip()
         if not message:
             raise APIError("message is required")
 
-        pipeline_name = request.get("pipeline_name", "") or ""
+        pipeline_name = request.pipeline_name or ""
         if pipeline_name:
             pipeline_name = Path(pipeline_name).name  # sanitize
 
@@ -961,14 +1024,14 @@ def register_all_routes(app: FastAPI) -> None:
         return JSONResponse({"ok": True})
 
     @app.post("/api/chat/confirm")
-    async def chat_confirm(request: dict) -> JSONResponse:
+    async def chat_confirm(request: ChatConfirmRequest) -> JSONResponse:
         """Confirm a pipeline edit — delete the checkpoint file and sync preset to workspace.
 
         Request body: {"edit_id": "..."}
 
         Idempotent: repeated calls return {"status": "already_confirmed"}.
         """
-        edit_id = request.get("edit_id", "").strip()
+        edit_id = request.edit_id.strip()
         if not edit_id:
             return JSONResponse({"status": "error", "error": "edit_id is required"}, status_code=400)
 
@@ -997,7 +1060,7 @@ def register_all_routes(app: FastAPI) -> None:
             raise ServerError(str(exc))
 
     @app.post("/api/chat/revert")
-    async def chat_revert(request: dict) -> JSONResponse:
+    async def chat_revert(request: ChatRevertRequest) -> JSONResponse:
         """Revert a pipeline edit — restore the checkpoint file.
 
         Request body: {"edit_id": "..."}
@@ -1006,7 +1069,7 @@ def register_all_routes(app: FastAPI) -> None:
         Idempotent: repeated calls return {"status": "already_reverted"}.
         Returns error if the edit was already confirmed.
         """
-        edit_id = request.get("edit_id", "").strip()
+        edit_id = request.edit_id.strip()
         if not edit_id:
             return JSONResponse({"status": "error", "error": "edit_id is required"}, status_code=400)
 
@@ -1061,18 +1124,18 @@ def register_all_routes(app: FastAPI) -> None:
         })
 
     @app.post("/api/session/new")
-    async def session_new(request: dict) -> JSONResponse:
+    async def session_new(request: SessionNewRequest) -> JSONResponse:
         """Create a new session for a pipeline."""
         service = await _get_service()
-        pipeline_name = request.get("pipeline_name", "")
+        pipeline_name = request.pipeline_name
         result = service.new_session(pipeline_name)
         return JSONResponse(result)
 
     @app.post("/api/session/switch")
-    async def session_switch(request: dict) -> JSONResponse:
+    async def session_switch(request: SessionSwitchRequest) -> JSONResponse:
         """Switch active pipeline, save current session, load target."""
         service = await _get_service()
-        pipeline_name = request.get("pipeline_name", "")
+        pipeline_name = request.pipeline_name
         sessions = service.switch_session(pipeline_name)
 
         if engine_state.bridge is not None:
@@ -1225,13 +1288,13 @@ def register_all_routes(app: FastAPI) -> None:
         return JSONResponse({"name": name, "content": content, "meta": meta})
 
     @app.put("/api/pipelines/{name}")
-    async def api_save_pipeline(name: str, request: dict) -> JSONResponse:
+    async def api_save_pipeline(name: str, request: PipelineSaveRequest) -> JSONResponse:
         """Save/update a pipeline's YAML content.
 
         Request body: ``{"content": "..."}``
         Validates that the content is parseable YAML before saving.
         """
-        content = request.get("content", "")
+        content = request.content
         if not content or not content.strip():
             raise APIError("'content' is required and must not be empty")
 
@@ -1321,13 +1384,13 @@ def register_all_routes(app: FastAPI) -> None:
             logger.debug("Log relay disconnected")
 
     @app.post("/api/logs/forward")
-    async def api_logs_forward(request: dict) -> JSONResponse:
+    async def api_logs_forward(request: LogForwardRequest) -> JSONResponse:
         """HTTP endpoint for batched log forwarding from Electron.
 
         Request body: ``{"entries": [{"ts": "...", "level": "...", "name": "...", "msg": "..."}, ...]}``
         """
         import sys
-        entries = request.get("entries", [])
+        entries = request.entries
         for entry in entries:
             level = entry.get("level", "INFO")
             name = entry.get("name", "electron")

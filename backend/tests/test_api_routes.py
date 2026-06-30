@@ -208,12 +208,12 @@ class TestParams:
     def test_set_param_missing_key(self, client):
         with patch("yak_browser_use.api.routes.engine_state", _mock_engine_state()):
             resp = client.post("/api/params", json={"value": "val"})
-        assert resp.status_code == 400
+        assert resp.status_code == 422
 
     def test_set_param_missing_value(self, client):
         with patch("yak_browser_use.api.routes.engine_state", _mock_engine_state()):
             resp = client.post("/api/params", json={"key": "k"})
-        assert resp.status_code == 400
+        assert resp.status_code == 422
 
     def test_set_and_delete_param(self, client):
         with (
