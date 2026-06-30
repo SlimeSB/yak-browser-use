@@ -262,6 +262,7 @@ export default function App() {
       if (stopped) return;
       try {
         ws = await api.createWebSocket('/ws/events');
+        if (stopped) { ws.close(); return; }
         ws.onmessage = (ev) => {
           try {
             const event = JSON.parse(ev.data);
@@ -287,7 +288,7 @@ export default function App() {
                       ...next[i],
                       toolOk: event.ok,
                       toolDuration: event.duration_ms,
-                      content: event.error || (event.ok ? 'Done' : 'Failed'),
+                      content: event.result || event.error || (event.ok ? 'Done' : 'Failed'),
                     };
                     break;
                   }
@@ -299,7 +300,9 @@ export default function App() {
               setChatMessages(prev => [...prev, { role: 'assistant', content: `[Error] ${event.message || ''}` }]);
             } else if (et === 'chat.stream_start') {
               const ti = event.turn_index as number;
-              streamStatesRef.current[ti] = { accumulating: '', reasoningParts: [], complete: false };
+              if (!streamStatesRef.current[ti]) {
+                streamStatesRef.current[ti] = { accumulating: '', reasoningParts: [], complete: false };
+              }
               setChatMessages(prev => {
                 const next = [...prev];
                 if (ti >= next.length) {
@@ -346,7 +349,9 @@ export default function App() {
               });
             } else if (et === 'chat.stream_end') {
               const ti = event.turn_index as number;
-              delete streamStatesRef.current[ti];
+              if (streamStatesRef.current[ti]) {
+                streamStatesRef.current[ti].complete = true;
+              }
             } else if (et === 'pipeline.edit') {
               const editId = event.edit_id as string;
               if (editId && !processedEditIdsRef.current.has(editId)) {

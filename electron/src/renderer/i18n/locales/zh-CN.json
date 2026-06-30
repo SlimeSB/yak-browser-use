@@ -231,6 +231,8 @@
     "stop": "■ 停止",
     "interrupted": "对话已中断",
     "noChanges": "未检测到变更 — 内容完全相同",
-    "suggestedChanges": "AI 建议了对管线的修改"
+    "suggestedChanges": "AI 建议了对管线的修改",
+    "errorDetail": "错误详情",
+    "output": "输出"
   }
 }

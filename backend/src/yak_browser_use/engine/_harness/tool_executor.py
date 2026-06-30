@@ -159,6 +159,9 @@ async def execute_tool_calls_sequential(
                 await cdp_helpers.bridge.wait_for_page_scan()
 
         if stream_callback:
+            result_text_for_event = result_text
+            if len(result_text_for_event) > 500:
+                result_text_for_event = result_text_for_event[:500] + "..."
             stream_callback({
                 "type": EVENT_TOOL_END,
                 "tool_name": fn_name,
@@ -166,6 +169,7 @@ async def execute_tool_calls_sequential(
                 "duration_ms": result_dict.get("duration_ms", int((time.time() - start) * 1000)),
                 "error": error_msg if not ok else None,
                 "id": tool_call_id,
+                "result": result_text_for_event,
             })
 
     if guardrail_state:

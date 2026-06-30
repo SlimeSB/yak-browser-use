@@ -374,6 +374,7 @@ export default function ChatTab({
               if (msg.role === 'tool') {
                 const statusClass = msg.toolOk === undefined ? '' : msg.toolOk ? 'ok' : 'err';
                 const failed = msg.toolOk === false;
+                const hasOutput = msg.content && msg.content !== 'Done' && msg.content !== 'Failed';
                 return (
                   <div key={i} className={`chat-tool-inline${failed ? ' chat-tool-failed' : ''}`}>
                     <span className="chat-tool-inline-arrow">{failed ? '✗' : '↓'}</span>
@@ -384,7 +385,7 @@ export default function ChatTab({
                     <span className={`chat-tool-inline-status ${statusClass}`}>
                       {msg.toolOk === undefined ? '...' : msg.toolOk ? '✓' : '✗'}
                     </span>
-                    {failed && msg.content && msg.content !== 'Failed' && (
+                    {hasOutput && (
                       <div className={`chat-tool-error-block ${expandedToolErrors.has(i) ? 'expanded' : ''}`}>
                         <div
                           className="chat-tool-error-header"
@@ -397,7 +398,7 @@ export default function ChatTab({
                           }}
                         >
                           <span className="chat-tool-error-arrow">{expandedToolErrors.has(i) ? '▾' : '▸'}</span>
-                          <span className="chat-tool-error-label">{t('chat.errorDetail')}</span>
+                          <span className="chat-tool-error-label">{failed ? t('chat.errorDetail') : t('chat.output')}</span>
                         </div>
                         {expandedToolErrors.has(i) && (
                           <div className="chat-tool-error-content">{msg.content}</div>

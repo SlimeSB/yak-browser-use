@@ -231,6 +231,8 @@
     "stop": "■ Stop",
     "interrupted": "Session interrupted",
     "noChanges": "No changes detected — content is identical",
-    "suggestedChanges": "AI suggested changes to the pipeline"
+    "suggestedChanges": "AI suggested changes to the pipeline",
+    "errorDetail": "Error Details",
+    "output": "Output"
   }
 }
