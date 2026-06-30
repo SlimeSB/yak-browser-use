@@ -1181,14 +1181,14 @@ class PlaywrightBridge:
 
             is_active = pg is self._page
             if is_active:
-                display_elements = self._last_highlight_elements[:200]
+                display_elements = self._last_highlight_elements[:MAX_LLM_ELEMENTS]
                 await pg.evaluate(
                     f"window.__ybu_last_elements = {_json.dumps(display_elements)};"
                 )
             else:
                 cached = self._per_page_elements.get(id(pg), [])
                 await pg.evaluate(
-                    f"window.__ybu_last_elements = {_json.dumps(cached[:200])};"
+                    f"window.__ybu_last_elements = {_json.dumps(cached[:MAX_LLM_ELEMENTS])};"
                 )
             await pg.evaluate(_HIGHLIGHT_BOOTSTRAP)
             await pg.evaluate("window.__ybu_run && window.__ybu_run();")
