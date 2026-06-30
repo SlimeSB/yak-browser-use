@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { showAlert } from '../utils/dialog';
 
 interface SuggestionsPanelProps {
   extraOps: Array<{ type: string; value?: string; selector?: string }>;
@@ -67,7 +68,7 @@ export default function SuggestionsPanel({
               className="btn btn-danger btn-sm"
               onClick={() => {
                 if (!rejectReason.trim()) {
-                  window.alert(t('log.reason') + t('log.required'));
+                  showAlert(t('log.reason') + ' ' + t('log.required'));
                   return;
                 }
                 onReject(rejectReason);

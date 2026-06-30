@@ -2,6 +2,7 @@ import { _create } from './_factory';
 import * as api from '../apiClient';
 import type { PipelineMeta, EventData } from '../types';
 import { interpolateTemplate } from '../utils/interpolate';
+import { showAlert } from '../utils/dialog';
 
 // ── Helpers ──────────────────────────────────────────────────
 
@@ -99,7 +100,7 @@ export const usePipelineStore = _create<PipelineState>((set, get) => ({
       }
       await get().refreshPipelines();
     } else {
-      window.alert((r as any).error || 'Delete failed');
+      showAlert(r.error || 'Delete failed');
     }
   },
 
@@ -112,10 +113,10 @@ export const usePipelineStore = _create<PipelineState>((set, get) => ({
         set((st) => ({ pipelineCache: { ...st.pipelineCache, [activePreset]: pipelineEditor } }));
         await get().refreshPipelines();
       } else {
-        window.alert((r as any).error || 'Save failed');
+        showAlert(r.error || 'Save failed');
       }
     } catch (e) {
-      window.alert(String(e));
+      showAlert(String(e));
     }
   },
 
@@ -131,7 +132,7 @@ export const usePipelineStore = _create<PipelineState>((set, get) => ({
       if (!s.params[key]?.trim()) missingKeys.push(p.inputs[key]);
     }
     if (missingKeys.length > 0) {
-      window.alert('Please fill in: ' + missingKeys.join(', '));
+      showAlert('Please fill in: ' + missingKeys.join(', '));
       return;
     }
 
@@ -146,11 +147,11 @@ export const usePipelineStore = _create<PipelineState>((set, get) => ({
             pipelineEditor: pipelineContent,
           }));
         } else {
-          window.alert('Failed to load pipeline definition');
+          showAlert('Failed to load pipeline definition');
           return;
         }
       } catch (e) {
-        window.alert('Failed to load pipeline');
+        showAlert('Failed to load pipeline');
         return;
       }
     }

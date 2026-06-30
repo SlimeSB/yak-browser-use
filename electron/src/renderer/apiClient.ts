@@ -61,14 +61,14 @@ export function getPipeline(name: string) {
 }
 
 export function deletePipeline(name: string) {
-  return apiFetch<{ ok: boolean; name: string }>(
+  return apiFetch<{ ok: boolean; name: string; error?: string }>(
     `/api/pipelines/${encodeURIComponent(name)}`,
     { method: 'DELETE' }
   );
 }
 
 export function savePipeline(name: string, content: string) {
-  return apiFetch<{ ok: boolean; name: string }>(
+  return apiFetch<{ ok: boolean; name: string; error?: string }>(
     `/api/pipelines/${encodeURIComponent(name)}`,
     { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ content }) }
   );

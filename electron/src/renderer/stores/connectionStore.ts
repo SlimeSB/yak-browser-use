@@ -1,5 +1,7 @@
 import { _create } from './_factory';
 import * as api from '../apiClient';
+import { showAlert } from '../utils/dialog';
+import { readStorage, writeStorage } from '../utils/storage';
 
 interface ConnectionState {
   connected: boolean;
@@ -28,7 +30,7 @@ interface ConnectionState {
 }
 
 function loadHighlightMode(): string {
-  try { return localStorage.getItem('highlight-mode') || 'a11y'; } catch { return 'a11y'; }
+  return readStorage<string>('highlight-mode', 'a11y');
 }
 
 export const useConnectionStore = _create<ConnectionState>((set, get) => ({
@@ -99,10 +101,10 @@ export const useConnectionStore = _create<ConnectionState>((set, get) => ({
           return { profiles: [...s.profiles, resp.profile_name], selectedProfile: resp.profile_name };
         });
       } else {
-        window.alert('Creation failed: ' + (resp.error || 'Unknown'));
+        showAlert('Creation failed: ' + (resp.error || 'Unknown'));
       }
     } catch (e) {
-      window.alert('Creation failed: ' + String(e));
+      showAlert('Creation failed: ' + String(e));
     }
   },
 
@@ -118,7 +120,7 @@ export const useConnectionStore = _create<ConnectionState>((set, get) => ({
   setConnectionError: (err) => set({ connectionError: err }),
   setHighlightMode: (mode) => {
     set({ highlightMode: mode });
-    try { localStorage.setItem('highlight-mode', mode); } catch { /* ok */ }
+    writeStorage('highlight-mode', mode);
   },
 }));
 

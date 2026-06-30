@@ -7,6 +7,7 @@ import type { ChatMessage, TreeNode } from '../../types';
 import { usePipelineStore } from '../../stores/pipelineStore';
 import { useUiStore } from '../../stores/uiStore';
 import MonacoYamlEditor from '../editor/MonacoYamlEditor';
+import { readStorage, writeStorage } from '../../utils/storage';
 
 // ── Tree sidebar ─────────────────────────────────────────────
 
@@ -309,16 +310,11 @@ export default function ChatTab() {
 
   // Split ratio
   const [splitRatio, setSplitRatio] = useState(() => {
-    try {
-      const saved = localStorage.getItem('chat-split-ratio');
-      const n = parseFloat(saved || '');
-      return (n >= 20 && n <= 80) ? n : 50;
-    } catch { return 50; }
+    const n = readStorage('chat-split-ratio', 0);
+    return (n >= 20 && n <= 80) ? n : 50;
   });
 
-  useEffect(() => {
-    try { localStorage.setItem('chat-split-ratio', String(splitRatio)); } catch { /* ok */ }
-  }, [splitRatio]);
+  useEffect(() => { writeStorage('chat-split-ratio', splitRatio); }, [splitRatio]);
 
   // Handlers
   const autoResize = () => {

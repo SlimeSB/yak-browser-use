@@ -5,6 +5,7 @@ import * as api from '../../apiClient';
 import VersionPanel from '../VersionPanel';
 import { useUiStore } from '../../stores/uiStore';
 import { copyToClipboard } from '../../utils/clipboard';
+import { showAlert } from '../../utils/dialog';
 
 export default function PipelinesTab() {
   const { t } = useTranslation();
@@ -49,7 +50,7 @@ export default function PipelinesTab() {
                 try {
                   const resp = await api.getPipeline(p.name);
                   if (resp.content) await copyToClipboard(resp.content);
-                } catch (e) { window.alert('Copy failed: ' + String(e)); }
+                } catch (e) { showAlert('Copy failed: ' + String(e)); }
               }}>{t('pipelineManager.copy')}</button>
               <button className="btn btn-danger btn-xs" onClick={() => {
                 if (confirm(t('pipelineManager.deleteConfirm', { name: p.title || p.name }))) {
