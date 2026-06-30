@@ -376,36 +376,32 @@ export default function ChatTab({
                 const failed = msg.toolOk === false;
                 const hasOutput = msg.content && msg.content !== 'Done' && msg.content !== 'Failed';
                 return (
-                  <div key={i} className={`chat-tool-inline${failed ? ' chat-tool-failed' : ''}`}>
-                    <span className="chat-tool-inline-arrow">{failed ? '✗' : '↓'}</span>
-                    <span className="chat-tool-inline-name">{msg.toolName}</span>
-                    {msg.toolDuration !== undefined && (
-                      <span className="chat-tool-inline-dur">{msg.toolDuration}ms</span>
-                    )}
-                    <span className={`chat-tool-inline-status ${statusClass}`}>
-                      {msg.toolOk === undefined ? '...' : msg.toolOk ? '✓' : '✗'}
-                    </span>
-                    {hasOutput && (
-                      <div className={`chat-tool-error-block ${expandedToolErrors.has(i) ? 'expanded' : ''}`}>
-                        <div
-                          className="chat-tool-error-header"
-                          onClick={() => {
-                            setExpandedToolErrors(prev => {
-                              const next = new Set(prev);
-                              if (next.has(i)) { next.delete(i); } else { next.add(i); }
-                              return next;
-                            });
-                          }}
-                        >
-                          <span className="chat-tool-error-arrow">{expandedToolErrors.has(i) ? '▾' : '▸'}</span>
-                          <span className="chat-tool-error-label">{failed ? t('chat.errorDetail') : t('chat.output')}</span>
-                        </div>
-                        {expandedToolErrors.has(i) && (
-                          <div className="chat-tool-error-content">{msg.content}</div>
-                        )}
+                  <React.Fragment key={i}>
+                    <div
+                      className={`chat-tool-inline${hasOutput ? ' chat-tool-clickable' : ''}`}
+                      onClick={hasOutput ? () => {
+                        setExpandedToolErrors(prev => {
+                          const next = new Set(prev);
+                          if (next.has(i)) { next.delete(i); } else { next.add(i); }
+                          return next;
+                        });
+                      } : undefined}
+                    >
+                      <span className="chat-tool-inline-arrow">{failed ? '✗' : '↓'}</span>
+                      <span className="chat-tool-inline-name">{msg.toolName}</span>
+                      {msg.toolDuration !== undefined && (
+                        <span className="chat-tool-inline-dur">{msg.toolDuration}ms</span>
+                      )}
+                      <span className={`chat-tool-inline-status ${statusClass}`}>
+                        {msg.toolOk === undefined ? '...' : msg.toolOk ? '✓' : '✗'}
+                      </span>
+                    </div>
+                    {hasOutput && expandedToolErrors.has(i) && (
+                      <div className={failed ? 'chat-tool-error-content' : 'chat-tool-output-content'}>
+                        {msg.content}
                       </div>
                     )}
-                  </div>
+                  </React.Fragment>
                 );
               }
               if (msg.role === 'assistant') {

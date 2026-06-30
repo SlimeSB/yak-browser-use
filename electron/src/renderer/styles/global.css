@@ -2100,15 +2100,25 @@ body {
 
 .chat-tool-inline-arrow {
   color: var(--text-muted);
+  flex-shrink: 0;
 }
 
 .chat-tool-inline-name {
   font-weight: 500;
   color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
 }
 
 .chat-tool-inline-dur {
   color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.chat-tool-inline-status {
+  flex-shrink: 0;
 }
 
 .chat-tool-inline-status.ok {
@@ -2119,53 +2129,12 @@ body {
   color: var(--danger);
 }
 
-.chat-tool-failed {
-  flex-wrap: wrap;
-}
-
-.chat-tool-error {
-  width: 100%;
-  padding: 4px 8px;
-  margin-top: 2px;
-  margin-bottom: 4px;
-  font-family: var(--font-mono);
-  font-size: 12px;
-  color: var(--danger);
-  background: rgba(255, 68, 68, 0.06);
-  border: 1px solid rgba(255, 68, 68, 0.15);
-  border-radius: 4px;
-  white-space: pre-wrap;
-  word-break: break-all;
-}
-
-.chat-tool-error-block {
-  width: 100%;
-  margin-top: 2px;
-}
-
-.chat-tool-error-header {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  padding: 2px 0;
+.chat-tool-clickable {
   cursor: pointer;
-  font-size: 12px;
-  color: var(--danger);
-  user-select: none;
 }
 
-.chat-tool-error-header:hover {
+.chat-tool-clickable:hover {
   opacity: 0.8;
-}
-
-.chat-tool-error-arrow {
-  font-size: 10px;
-  width: 12px;
-  flex-shrink: 0;
-}
-
-.chat-tool-error-label {
-  font-size: 12px;
 }
 
 .chat-tool-error-content {
@@ -2182,6 +2151,20 @@ body {
   word-break: break-all;
   max-height: 300px;
   overflow-y: auto;
+}
+
+.chat-tool-output-content {
+  padding: 4px 8px;
+  margin-top: 2px;
+  margin-bottom: 4px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 
 .chat-typing {
