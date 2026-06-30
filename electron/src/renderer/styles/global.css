@@ -22,6 +22,7 @@
   --danger-bg: rgba(251, 113, 133, 0.08);
   --blue: #60a5fa;
   --blue-bg: rgba(96, 165, 250, 0.08);
+  --blue-bg-strong: rgba(96, 165, 250, 0.15);
   --purple: #a78bfa;
   --purple-bg: rgba(167, 139, 250, 0.08);
   --radius: 10px;
@@ -91,6 +92,7 @@
   --danger-bg: rgba(220, 38, 38, 0.06);
   --blue: #2563eb;
   --blue-bg: rgba(37, 99, 235, 0.06);
+  --blue-bg-strong: rgba(37, 99, 235, 0.15);
 }
 @keyframes fadeIn {
   from {
@@ -3180,6 +3182,7 @@ body {
 .tool-chips {
   display: flex;
   flex-direction: column;
+  align-items: flex-start;
   gap: 4px;
   margin-top: 8px;
 }
@@ -3190,17 +3193,20 @@ body {
 .tool-chip {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 2px 0;
+  gap: 5px;
+  padding: 3px 10px;
+  border-radius: 12px;
   font-size: var(--fs-xs);
   font-family: var(--font-mono);
-  line-height: 1.6;
-  color: var(--text-muted);
+  line-height: 1.5;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
   cursor: pointer;
-  transition: color var(--transition-fast);
+  transition: all 0.15s;
 }
 .tool-chip:hover {
-  color: var(--text-secondary);
+  border-color: var(--text-muted);
 }
 .tool-chip .icon {
   font-size: 12px;
@@ -3252,18 +3258,29 @@ body {
 .chat-think-toggle {
   display: inline-flex;
   align-items: center;
-  gap: 3px;
-  cursor: pointer;
+  gap: 4px;
+  padding: 0 4px 0 0;
+  border-radius: 2px;
   font-size: var(--fs-xs);
-  color: var(--text-muted);
-  padding: 2px 0;
-  transition: color var(--transition-fast);
+  font-family: var(--font-mono);
+  line-height: 1.5;
+  background: rgba(96, 165, 250, 0.06);
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.15s;
 }
 .chat-think-toggle:hover {
-  color: var(--text-secondary);
+  background: rgba(96, 165, 250, 0.1);
 }
 .chat-think-toggle .arrow {
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  background: var(--blue-bg-strong);
+  font-size: 10px;
   transition: transform .2s ease;
 }
 .chat-think-toggle.expanded .arrow {
