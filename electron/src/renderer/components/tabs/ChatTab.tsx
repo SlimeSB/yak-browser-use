@@ -21,6 +21,7 @@ export default function ChatTab() {
   const cancelChat = useChatStore(s => s.cancelChat);
   const resetChat = useChatStore(s => s.resetChat);
   const newSession = useChatStore(s => s.newSession);
+  const loadSessions = useChatStore(s => s.loadSessions);
   const archiveSession = useChatStore(s => s.archiveSession);
   const selectSession = useChatStore(s => s.selectSession);
   const toggleExpand = useChatStore(s => s.toggleExpand);
@@ -51,6 +52,10 @@ export default function ChatTab() {
 
   useEffect(() => { activePresetRef.current = activePreset; }, [activePreset]);
   useEffect(() => { connectedRef.current = connected; }, [connected]);
+
+  useEffect(() => {
+    loadSessions(activePreset);
+  }, []);
 
   const [splitRatio, setSplitRatio] = useState(() => {
     try {
@@ -262,7 +267,10 @@ export default function ChatTab() {
                 <div
                   key={s.session_id}
                   className={'tree-session' + (currentSessionId === s.session_id ? ' active' : '')}
-                  onClick={() => selectSession(s.session_id)}
+                  onClick={async () => {
+                    if (node.name !== activePreset) await toggleExpand(node.name);
+                    selectSession(s.session_id);
+                  }}
                 >
                   <span className={'tree-session-dot' + (currentSessionId === s.session_id ? ' active-dot' : '')}>
                     {currentSessionId === s.session_id ? '●' : '○'}
@@ -330,7 +338,7 @@ export default function ChatTab() {
           <div className="chat-messages" ref={scrollRef}>
             {messages.length === 0 && (
               <div className="chat-empty">
-                <div className="chat-empty-icon">C</div>
+                <div className="chat-empty-icon">💬</div>
                 <p>{t('chat.startPrompt')}</p>
                 <span className="chat-empty-hint">{t('chat.placeholder')}</span>
               </div>

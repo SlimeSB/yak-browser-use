@@ -29,6 +29,7 @@ interface ChatState {
   cancelChat: () => Promise<void>;
   resetChat: () => Promise<void>;
   setMessages: (msgs: ChatMessage[]) => void;
+  loadSessions: (pipelineName: string) => Promise<void>;
   newSession: () => Promise<void>;
   archiveSession: (sessionId: string) => Promise<void>;
   selectSession: (sessionId: string) => Promise<void>;
@@ -111,7 +112,7 @@ export const useChatStore = _create<ChatState>((set, get) => ({
   expandedNodes: new Set(['__chat__']),
   loadingSession: false,
   activePendingEdit: null,
-  selectTreeNodes: [],
+  selectTreeNodes: _buildTreeNodes([], {}, []),
   _streamStates: {},
   _processedEditIds: new Set(),
   _lastAssistantId: null,
@@ -155,6 +156,21 @@ export const useChatStore = _create<ChatState>((set, get) => ({
   },
 
   setMessages: (msgs) => set({ chatMessages: msgs }),
+
+  loadSessions: async (pipelineName) => {
+    const name = pipelineName || '__chat__';
+    try {
+      const r = await api.listSessions(name);
+      const sessionsList = r.sessions || [];
+      if (name === '__chat__' || !name) {
+        set({ chatSessions: sessionsList });
+      } else {
+        set((s) => ({ pipelineSessions: { ...s.pipelineSessions, [name]: sessionsList } }));
+      }
+    } catch (e) {
+      console.error('loadSessions failed: %s', String(e));
+    }
+  },
 
   newSession: async () => {
     const activePreset = usePipelineStore.getState().activePreset;
