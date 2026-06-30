@@ -191,9 +191,17 @@ _ALWAYS_FULL_ROLES = {"button", "link", "textbox", "combobox", "checkbox",
                        "menuitemcheckbox", "menuitemradio", "listbox",
                        "searchbox", "slider", "spinbutton", "treeitem"}
 
+_NON_INTERACTIVE_TAGS = frozenset({
+    "script", "style", "meta", "link", "br", "hr", "noscript",
+    "head", "title", "base", "template",
+    "html", "body",
+})
+
+_SKIP_CHILDREN_TAGS = frozenset({"svg", "canvas"})
+
 
 def _looks_like_container(node: dict) -> bool:
-    """Heuristic: does this node look like it contains interactive descendants?
+    """Heuristic: does this node look like it contains collected descendants?
 
     Returns True if:
       - The tag is a semantic container (ul/ol/table/nav/section etc.), OR
@@ -223,22 +231,12 @@ def _looks_like_container(node: dict) -> bool:
 
 
 def _is_interactive_progressive(tag: str, attrs: dict[str, str]) -> bool:
-    """Progressive mode interactive element detection (same as _is_interactive but
-    without the Vue/React heuristics — progressive catches everything from CDP DOM)."""
-    if tag in _ALWAYS_FULL_TAGS:
-        if tag == "a" and not attrs.get("href"):
-            return False
-        if tag == "input" and attrs.get("type", "").lower() == "hidden":
-            return False
-        return True
-    role = attrs.get("role", "").lower()
-    if role in _ALWAYS_FULL_ROLES:
-        return True
-    if attrs.get("onclick") or attrs.get("tabindex") or attrs.get("contenteditable"):
-        return True
-    if tag in ("div", "span", "li") and any(k.startswith("data-v-") or k.startswith("data-react-") for k in attrs):
-        return True
-    return False
+    """Blacklist-based: collect every element except non-interactive tags and input[type=hidden]."""
+    if tag in _NON_INTERACTIVE_TAGS:
+        return False
+    if tag == "input" and attrs.get("type", "").lower() == "hidden":
+        return False
+    return True
 
 
 def _node_attrs(node: dict) -> dict[str, str]:
@@ -306,8 +304,6 @@ class CollectState:
                 "whitelist_count": 0,
             }
 
-        current_cont = self._stack[-1] if self._stack else None
-
         if node.get("nodeType") == 1:
             attrs = _node_attrs(node)
             tag = node["nodeName"].lower()
@@ -373,8 +369,10 @@ class CollectState:
 
                 self.elements_all.append(el)
                 self._ref_map[ref] = el
-                # Increment ALL ancestor containers, not just the nearest one
+                # Increment ancestor containers (skip self when node is also a container)
                 for ancestor_key in self._stack:
+                    if ckey is not None and ancestor_key == ckey:
+                        continue
                     s = self.stats_map[ancestor_key]
                     s["total_descendants"] += 1
                     if el["_whitelist"]:
@@ -383,11 +381,13 @@ class CollectState:
         # nth-of-type is per-parent — save/restore counter at each level
         old_nth_counter = self._real_nth_counter
         self._real_nth_counter = {}
-        for child in node.get("children", []):
-            if child.get("nodeType") == 1:
-                ct = child.get("nodeName", "").lower()
-                self._real_nth_counter[ct] = self._real_nth_counter.get(ct, 0) + 1
-            self.walk(child, depth + 1)
+        current_tag = node.get("nodeName", "").lower() if node.get("nodeType") == 1 else ""
+        if current_tag not in _SKIP_CHILDREN_TAGS:
+            for child in node.get("children", []):
+                if child.get("nodeType") == 1:
+                    ct = child.get("nodeName", "").lower()
+                    self._real_nth_counter[ct] = self._real_nth_counter.get(ct, 0) + 1
+                self.walk(child, depth + 1)
         self._real_nth_counter = old_nth_counter
 
         if ckey and self._stack:

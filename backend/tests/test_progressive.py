@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import pytest
-from unittest.mock import MagicMock
 
 
 # ---------------------------------------------------------------------------
@@ -15,7 +14,6 @@ from yak_browser_use.cdp.playwright_bridge import (
     _build_selector_from_attrs_progressive,
     _build_selector_from_node_progressive,
     _classify_by_tag,
-    CONTAINER_DEPTH_RANGE,
     DENSITY_THRESHOLD,
     SHALLOW_QUOTA,
     MAX_LLM_ELEMENTS,
@@ -61,16 +59,20 @@ def test_node_attrs_odd_length():
     ("select", {}, True),
     ("textarea", {}, True),
     ("a", {"href": "https://example.com"}, True),
-    ("a", {}, False),
+    ("a", {}, True),
     ("div", {"role": "button"}, True),
     ("div", {"role": "textbox"}, True),
     ("div", {"role": "link"}, True),
     ("div", {"onclick": "handler()"}, True),
     ("div", {"tabindex": "0"}, True),
     ("div", {"contenteditable": "true"}, True),
-    ("div", {}, False),
-    ("span", {}, False),
-    ("li", {}, False),
+    ("div", {}, True),
+    ("span", {}, True),
+    ("li", {}, True),
+    ("script", {}, False),
+    ("style", {}, False),
+    ("html", {}, False),
+    ("body", {}, False),
 ])
 def test_is_interactive_progressive(tag, attrs, expected):
     assert _is_interactive_progressive(tag, attrs) == expected
@@ -143,7 +145,7 @@ def _make_cdp_node(node_type: int = 1, node_name: str = "div",
 def test_collect_state_captures_interactive():
     ref_map = {}
     state = CollectState(ref_map)
-    root = _make_cdp_node(children=[
+    root = _make_cdp_node(node_name="html", children=[
         _make_cdp_node(node_name="button", backend_node_id=1,
                        attributes=["data-testid", "btn1"]),
     ])
@@ -156,12 +158,12 @@ def test_collect_state_captures_interactive():
     assert state._ref_map["@p_1"] == el
 
 
-def test_collect_state_skips_non_interactive():
+def test_collect_state_skips_blacklisted():
     ref_map = {}
     state = CollectState(ref_map)
-    root = _make_cdp_node(children=[
-        _make_cdp_node(node_name="div", backend_node_id=1),
-        _make_cdp_node(node_name="span", backend_node_id=2),
+    root = _make_cdp_node(node_name="html", children=[
+        _make_cdp_node(node_name="script", backend_node_id=1),
+        _make_cdp_node(node_name="style", backend_node_id=2),
     ])
     state.walk(root)
     assert len(state.elements_all) == 0
@@ -170,7 +172,7 @@ def test_collect_state_skips_non_interactive():
 def test_collect_state_marks_whitelist():
     ref_map = {}
     state = CollectState(ref_map)
-    root = _make_cdp_node(children=[
+    root = _make_cdp_node(backend_node_id=99, children=[
         _make_cdp_node(node_name="button", backend_node_id=1),
         _make_cdp_node(node_name="div", backend_node_id=2,
                        attributes=["role", "button"]),
@@ -178,17 +180,20 @@ def test_collect_state_marks_whitelist():
                        attributes=["onclick", "fn()"]),
     ])
     state.walk(root)
-    assert state.elements_all[0]["_whitelist"] is True   # button tag
-    assert state.elements_all[1]["_whitelist"] is True   # role=button
-    assert state.elements_all[2]["_whitelist"] is False  # onclick only
+    assert len(state.elements_all) == 4
+    # root div is now captured (not in _NON_INTERACTIVE_TAGS)
+    assert state.elements_all[0]["_whitelist"] is False  # root div
+    assert state.elements_all[1]["_whitelist"] is True   # button tag
+    assert state.elements_all[2]["_whitelist"] is True   # role=button
+    assert state.elements_all[3]["_whitelist"] is False  # onclick only
 
 
 def test_collect_state_container_stats():
     ref_map = {}
     state = CollectState(ref_map)
-    # CDP DOM: #document(depth=0) > html(1) > head(2) + body(2) > div(3) > buttons(4)
+    # CDP DOM: #document(depth=0) > html(1) > body(2) > div(3) > buttons(4)
     # body at depth=2 is in range and is semantic → container
-    root = _make_cdp_node(node_name="#document", backend_node_id=0, children=[
+    root = _make_cdp_node(node_name="#document", node_type=9, backend_node_id=0, children=[
         _make_cdp_node(node_name="html", backend_node_id=98, children=[
             _make_cdp_node(node_name="body", backend_node_id=99, children=[
                 _make_cdp_node(node_name="div", backend_node_id=100,
@@ -203,12 +208,17 @@ def test_collect_state_container_stats():
     stats = state.stats_map
     div_container = [s for s in stats.values() if s["tag"] == "div"]
     assert len(div_container) == 1
-    # div aggregates all 3 buttons (ancestor inheritance)
+    # div collects 3 buttons (skips self as descendant)
     assert div_container[0]["total_descendants"] == 3
     # body at depth=2 also accumulates
     body_stats = [s for s in stats.values() if s["tag"] == "body"]
     assert len(body_stats) == 1
-    assert body_stats[0]["total_descendants"] == 3
+    # body: div element + 3 buttons = 4 descendants
+    assert body_stats[0]["total_descendants"] == 4
+    # body/div themselves become elements in elements_all
+    div_elements = [e for e in state.elements_all if e["tag"] == "div"]
+    assert len(div_elements) == 1
+    assert len(state.elements_all) == 4  # div + 3 buttons
 
 
 def test_collect_state_extracts_text():
@@ -242,7 +252,7 @@ def test_collect_state_skip_input_hidden():
     state = CollectState(ref_map)
     hidden = _make_cdp_node(node_name="input", backend_node_id=1,
                             attributes=["type", "hidden"])
-    root = _make_cdp_node(children=[hidden])
+    root = _make_cdp_node(node_name="html", children=[hidden])
     state.walk(root)
     assert len(state.elements_all) == 0
 
@@ -250,9 +260,42 @@ def test_collect_state_skip_input_hidden():
 def test_collect_state_empty_dom():
     ref_map = {}
     state = CollectState(ref_map)
-    state.walk(_make_cdp_node())
+    state.walk(_make_cdp_node(node_name="html"))
     assert state.elements_all == []
     assert state.stats_map == {}
+
+
+def test_collect_state_skips_svg_children():
+    ref_map = {}
+    state = CollectState(ref_map)
+    svg = _make_cdp_node(node_name="svg", backend_node_id=100, children=[
+        _make_cdp_node(node_name="path", backend_node_id=1),
+        _make_cdp_node(node_name="circle", backend_node_id=2),
+        _make_cdp_node(node_name="rect", backend_node_id=3),
+    ])
+    root = _make_cdp_node(node_name="html", children=[svg])
+    state.walk(root)
+    # svg itself is collected (not in _NON_INTERACTIVE_TAGS)
+    svg_elements = [e for e in state.elements_all if e["tag"] == "svg"]
+    assert len(svg_elements) == 1
+    # path/circle/rect children are NOT collected
+    assert len(state.elements_all) == 1
+
+
+def test_collect_state_skips_canvas_children():
+    ref_map = {}
+    state = CollectState(ref_map)
+    canvas = _make_cdp_node(node_name="canvas", backend_node_id=100, children=[
+        _make_cdp_node(node_name="div", backend_node_id=1),
+        _make_cdp_node(node_name="span", backend_node_id=2),
+    ])
+    root = _make_cdp_node(node_name="html", children=[canvas])
+    state.walk(root)
+    # canvas itself is collected
+    canvas_elements = [e for e in state.elements_all if e["tag"] == "canvas"]
+    assert len(canvas_elements) == 1
+    # div/span children are NOT collected
+    assert len(state.elements_all) == 1
 
 
 # ===================================================================
