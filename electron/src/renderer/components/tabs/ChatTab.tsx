@@ -344,7 +344,11 @@ export default function ChatTab() {
 
           <div className="chat-messages" ref={scrollRef}>
             {messages.length === 0 && (
-              <></>
+              <div className="chat-empty">
+                <div className="chat-empty-icon">💬</div>
+                <p>{t('chat.startPrompt')}</p>
+                <span className="chat-empty-hint">{t('chat.placeholder')}</span>
+              </div>
             )}
             {messages.map((msg, i) => {
               const thinkKey = `${msg.id! || i}_think`;
@@ -355,7 +359,7 @@ export default function ChatTab() {
                   {msg.role === 'assistant' && (
                     <>
                       <div className="chat-agent-label">{t('chat.title')}</div>
-                      <pre>{msg.content}</pre>
+                      <div className="chat-agent-bubble"><pre>{msg.content}</pre></div>
                       {msg.reasoning && (
                         <div className="chat-think">
                           <span className="chat-think-toggle"
