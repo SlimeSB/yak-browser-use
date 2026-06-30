@@ -28,6 +28,8 @@ export default function MonacoYamlEditor({
 
   const hasDiff = original !== undefined && modified !== undefined && original !== modified;
 
+  const _nonEmpty = (s: string) => s || '\n';
+
   useEffect(() => {
     if (!containerRef.current) return;
     disposedRef.current = false;
@@ -92,7 +94,7 @@ export default function MonacoYamlEditor({
         if (disposedRef.current) return;
         const text = modifiedModelRef.current?.getValue() ?? '';
         if (originalModelRef.current && text !== originalModelRef.current.getValue()) {
-          originalModelRef.current.setValue(text);
+          originalModelRef.current.setValue(_nonEmpty(text));
         }
         onChange?.(text);
       }, 300);
@@ -120,9 +122,9 @@ export default function MonacoYamlEditor({
     const currentValue = modifiedModelRef.current.getValue();
     if (!hasDiff && currentValue !== value) {
       applyingDiffRef.current = true;
-      modifiedModelRef.current.setValue(value);
+      modifiedModelRef.current.setValue(_nonEmpty(value));
       if (originalModelRef.current) {
-        originalModelRef.current.setValue(value);
+        originalModelRef.current.setValue(_nonEmpty(value));
       }
       applyingDiffRef.current = false;
     }
@@ -132,8 +134,8 @@ export default function MonacoYamlEditor({
     (orig: string, mod: string) => {
       if (!originalModelRef.current || !modifiedModelRef.current || disposedRef.current) return;
       applyingDiffRef.current = true;
-      originalModelRef.current.setValue(orig);
-      modifiedModelRef.current.setValue(mod);
+      originalModelRef.current.setValue(_nonEmpty(orig));
+      modifiedModelRef.current.setValue(_nonEmpty(mod));
       applyingDiffRef.current = false;
     },
     []
@@ -154,7 +156,7 @@ export default function MonacoYamlEditor({
       const currentText = modifiedModelRef.current?.getValue() ?? '';
       if (originalModelRef.current && originalModelRef.current.getValue() !== currentText) {
         applyingDiffRef.current = true;
-        originalModelRef.current.setValue(currentText);
+        originalModelRef.current.setValue(_nonEmpty(currentText));
         applyingDiffRef.current = false;
       }
     }

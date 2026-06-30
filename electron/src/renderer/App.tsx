@@ -594,7 +594,7 @@ export default function App() {
     if (!activePreset || activePreset === '__chat__') return;
     try {
       const resp = await api.getPipeline(activePreset);
-      if (resp.content) {
+      if (resp.content !== null && resp.content !== undefined) {
         setPipelineCache(prev => ({ ...prev, [activePreset]: resp.content }));
         setPipelineEditor(resp.content);
       }
