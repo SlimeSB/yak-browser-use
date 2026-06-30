@@ -863,21 +863,26 @@ def register_all_routes(app: FastAPI) -> None:
         logger.info("Chat message: %s (pipeline=%s)", message[:120], pipeline_name or "none")
         service = await _get_service()
 
-        session = service.get_session()
+        session = service.get_session(pipeline_name or None)
         if session is None:
-            session = service.create_session()
+            session = service.create_session(pipeline_name or "")
         session_id = session.session_id
         _turn_idx = (len(session.messages) if session else 0)
+        _stream_started_this_turn = False
 
         def _push(event: dict) -> None:
             service.events.push(event)
 
         def _on_stream_start() -> None:
-            nonlocal _turn_idx
-            _turn_idx += 1
+            nonlocal _turn_idx, _stream_started_this_turn
+            if not _stream_started_this_turn:
+                _turn_idx += 1
+                _stream_started_this_turn = True
             _push({"type": "chat.stream_start", "turn_index": _turn_idx})
 
         def _on_stream_end(has_tool_calls: bool) -> None:
+            nonlocal _stream_started_this_turn
+            _stream_started_this_turn = False
             _push({"type": "chat.stream_end", "has_tool_calls": has_tool_calls, "turn_index": _turn_idx})
 
         def _on_text_delta(text: str) -> None:

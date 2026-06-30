@@ -120,6 +120,7 @@ export default function App() {
   }, []);
 
   const switchPipeline = useCallback(async (pipelineName: string) => {
+    if (pipelineName === activePreset) return;
     setActivePreset(pipelineName);
     setChatMessages([]);
     setCurrentSessionId('');
@@ -145,20 +146,26 @@ export default function App() {
   }, []);
 
   const handleToggleExpand = useCallback(async (name: string) => {
-    // Switch to this pipeline if not active
     if (name !== activePreset) {
       await switchPipeline(name);
-    }
-    // Toggle expand
-    setExpandedNodes(prev => {
-      const next = new Set(prev);
-      if (next.has(name)) {
-        next.delete(name);
-      } else {
+      // Always expand when switching to a new pipeline (don't toggle)
+      setExpandedNodes(prev => {
+        const next = new Set(prev);
         next.add(name);
-      }
-      return next;
-    });
+        return next;
+      });
+    } else {
+      // Toggle expand/collapse for active pipeline
+      setExpandedNodes(prev => {
+        const next = new Set(prev);
+        if (next.has(name)) {
+          next.delete(name);
+        } else {
+          next.add(name);
+        }
+        return next;
+      });
+    }
     // Load sessions on first expand
     if (name !== '__chat__' && !pipelineSessions[name]) {
       await loadSessions(name);
@@ -206,6 +213,14 @@ export default function App() {
   useEffect(() => {
     setPendingEdits([]);
   }, [activePreset]);
+
+  // Debug: log chatMessages changes to help trace stale message issues
+  useEffect(() => {
+    const last = chatMessages[chatMessages.length - 1];
+    console.log('[chatMessages] len=%d last=%s',
+      chatMessages.length,
+      last ? `${last.role}:${(last.content || '').slice(0, 60)}` : 'EMPTY');
+  }, [chatMessages]);
 
   // Sync sessions when activePreset changes (e.g. from exec tab)
   useEffect(() => {
@@ -300,10 +315,18 @@ export default function App() {
               setChatMessages(prev => [...prev, { role: 'assistant', content: `[Error] ${event.message || ''}` }]);
             } else if (et === 'chat.stream_start') {
               const ti = event.turn_index as number;
-              if (!streamStatesRef.current[ti]) {
-                streamStatesRef.current[ti] = { accumulating: '', reasoningParts: [], complete: false };
-              }
-              setChatMessages(prev => [...prev, { role: 'assistant', content: '' }]);
+              console.log('[ws] stream_start turn=%d session=%s chatMessages.len=%d',
+                ti, event.session_id || '?', chatMessages.length);
+              // Always reset stream state (handles LLM retries)
+              streamStatesRef.current[ti] = { accumulating: '', reasoningParts: [], complete: false };
+              setChatMessages(prev => {
+                // Replace last empty/incomplete assistant message (LLM retry dedup)
+                const last = prev[prev.length - 1];
+                if (last && last.role === 'assistant' && !last.content) {
+                  return [...prev.slice(0, -1), { role: 'assistant', content: '' }];
+                }
+                return [...prev, { role: 'assistant', content: '' }];
+              });
             } else if (et === 'chat.text_chunk') {
               const ti = event.turn_index as number;
               const content = event.content as string || '';
@@ -841,6 +864,7 @@ export default function App() {
             setLoadingSession(true);
             try {
               const r = await api.newSession(activePreset);
+              console.log('[onNewSession] pipeline=%s newId=%s', activePreset, r.session_id);
               if (r.session_id) {
                 setCurrentSessionId(r.session_id);
                 setChatMessages([]);
@@ -881,6 +905,8 @@ export default function App() {
             setLoadingSession(true);
             try {
               const r = await api.getSessionData(activePreset, sessionId);
+              console.log('[onSelectSession] pipeline=%s session=%s msgs=%d',
+                activePreset, sessionId, r.session?.messages?.length || 0);
               if (r.session) {
                 setCurrentSessionId(sessionId);
                 setChatMessages(r.session.messages || []);

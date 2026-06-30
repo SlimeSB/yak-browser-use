@@ -357,11 +357,14 @@ def _build_assistant_message(response: object) -> dict:
     """Build an assistant message from an LLM response."""
     content = getattr(response, "content", "")
     tool_calls = getattr(response, "tool_calls", None)
+    thinking = getattr(response, "reasoning", None) or getattr(response, "thinking", None)
 
     msg: dict = {"role": "assistant"}
     msg["content"] = content
     if tool_calls:
         msg["tool_calls"] = tool_calls
+    if thinking:
+        msg["reasoning"] = thinking
     return msg
 
 

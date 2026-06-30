@@ -2006,7 +2006,7 @@ class PlaywrightBridge:
     # Element mapping
     # ------------------------------------------------------------------
 
-    def reset_ref_map(self) -> None:
+    async def reset_ref_map(self) -> None:
         self._ref_map = {}
         self._element_map = {}
         self._last_highlight_elements = []

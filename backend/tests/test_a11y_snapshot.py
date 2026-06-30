@@ -176,6 +176,9 @@ class MockBridge:
         self._cdp_session = MockCDPSession()
         self._context.new_cdp_session = AsyncMock(return_value=self._cdp_session)
 
+    async def _ensure_page(self) -> None:
+        pass
+
     async def _is_highlight_enabled(self) -> bool:
         return self._highlight_enabled
 

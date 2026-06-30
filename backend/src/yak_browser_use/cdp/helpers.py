@@ -51,8 +51,8 @@ class CDPHelpers:
     async def goto_url(self, url: str) -> dict:
         return await self._bridge.goto(url)
 
-    def reset_ref_map(self) -> None:
-        self._bridge.reset_ref_map()
+    async def reset_ref_map(self) -> None:
+        await self._bridge.reset_ref_map()
         self._ref_map = {}
 
     async def click_selector(self, selector: str, click_count: int = 1) -> dict:

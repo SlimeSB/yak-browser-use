@@ -47,6 +47,7 @@ export default function ChatTab({
   const { t } = useTranslation();
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
+  const sendingRef = useRef(false);
   const [sessionStatus, setSessionStatus] = useState<string>('idle');
   const [diffError, setDiffError] = useState('');
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -56,6 +57,11 @@ export default function ChatTab({
   const [expandedThinks, setExpandedThinks] = useState<Set<number>>(new Set());
   const [expandedToolErrors, setExpandedToolErrors] = useState<Set<number>>(new Set());
   const cancelledRef = useRef(false);
+  const activePresetRef = useRef(activePreset);
+  const connectedRef = useRef(connected);
+
+  useEffect(() => { activePresetRef.current = activePreset; }, [activePreset]);
+  useEffect(() => { connectedRef.current = connected; }, [connected]);
 
   const [splitRatio, setSplitRatio] = useState(() => {
     try {
@@ -117,16 +123,19 @@ export default function ChatTab({
 
   const handleSend = async () => {
     const text = input.trim();
-    if (!text || sending) return;
+    if (!text || sendingRef.current) return;
     setInput('');
     resetTextarea();
+    sendingRef.current = true;
     setSending(true);
     setSessionStatus('running');
 
     setMessages(prev => [...prev, { role: 'user', content: text }]);
 
     try {
-      const pipelineName = activePreset || undefined;
+      const pipelineName = activePresetRef.current || undefined;
+      console.log('[handleSend] pipeline=%s session=%s text=%s',
+        pipelineName, currentSessionId, text.slice(0, 60));
       const result = await api.chat(text, pipelineName);
       if (result.ok) {
         onRefreshPipeline();
@@ -139,6 +148,7 @@ export default function ChatTab({
       }
     } finally {
       cancelledRef.current = false;
+      sendingRef.current = false;
       setSending(false);
       setSessionStatus('idle');
     }
@@ -163,6 +173,7 @@ export default function ChatTab({
     } catch (e) {
       console.error('Chat cancel failed:', e);
     }
+    sendingRef.current = false;
     setSending(false);
     setSessionStatus('idle');
     setMessages(prev => [...prev, { role: 'system', content: t('chat.interrupted') }]);

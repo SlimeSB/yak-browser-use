@@ -34,7 +34,7 @@ class MockBridge:
     async def screenshot(self):
         return "base64string"
 
-    async def source(self):
+    async def source(self, strip_styles: bool = False, only_body: bool = False):
         return "<html></html>"
 
 
