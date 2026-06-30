@@ -1,6 +1,7 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
-import type { PipelineMeta, EventData } from '../../types';
+import { usePipelineStore } from '../../stores/pipelineStore';
+import { useConnectionStore } from '../../stores/connectionStore';
 import PresetSelectRow from '../PresetSelectRow';
 import ParamsPanel from '../ParamsPanel';
 import StageList from '../StageList';
@@ -8,42 +9,31 @@ import ProgressBar from '../ProgressBar';
 import EventLog from '../EventLog';
 import ResultTable from '../ResultTable';
 import SuggestionsPanel from '../SuggestionsPanel';
+import { useUiStore } from '../../stores/uiStore';
 
-interface ExecTabProps {
-  activePreset: string;
-  setActivePreset: (v: string) => void;
-  pipelines: PipelineMeta[];
-  loading: boolean;
-  connected: boolean;
-  currentRunId: string;
-  cancelling: boolean;
-  preset: PipelineMeta | undefined;
-  params: Record<string, string>;
-  pendingReview: {
-    extraOps: Array<{ type: string; value?: string; selector?: string }>;
-    reason: string;
-    guardLayer: string;
-    threadId: string;
-  } | null;
-  stages: string[];
-  events: EventData[];
-  result: Record<string, unknown> | null;
-  resultErrors: string[] | null;
-  onRun: () => void;
-  onParamChange: (key: string, value: string) => void;
-  onCancel: () => void;
-  onReviewApprove: (reason: string) => void;
-  onReviewReject: (reason: string) => void;
-  onTabChange: (tab: string) => void;
-}
-
-export default function ExecTab({
-  activePreset, setActivePreset, pipelines, loading, connected,
-  currentRunId, cancelling, preset, params, pendingReview,
-  stages, events, result, resultErrors,
-  onRun, onParamChange, onCancel, onReviewApprove, onReviewReject, onTabChange,
-}: ExecTabProps) {
+export default function ExecTab() {
   const { t } = useTranslation();
+  const activePreset = usePipelineStore(s => s.activePreset);
+  const pipelines = usePipelineStore(s => s.pipelines);
+  const loading = usePipelineStore(s => s.loading);
+  const connected = useConnectionStore(s => s.connected);
+  const currentRunId = usePipelineStore(s => s.currentRunId);
+  const cancelling = usePipelineStore(s => s.cancelling);
+  const preset = pipelines.find(p => p.name === activePreset);
+  const params = usePipelineStore(s => s.params);
+  const pendingReview = usePipelineStore(s => s.pendingReview);
+  const stages = preset?.stages ?? [];
+  const events = usePipelineStore(s => s.events);
+  const result = usePipelineStore(s => s.result);
+  const resultErrors = usePipelineStore(s => s.resultErrors);
+  const run = usePipelineStore(s => s.run);
+  const cancel = usePipelineStore(s => s.cancel);
+  const setActivePreset = usePipelineStore(s => s.setActivePreset);
+  const setParam = usePipelineStore(s => s.setParam);
+  const reviewApprove = usePipelineStore(s => s.reviewApprove);
+  const reviewReject = usePipelineStore(s => s.reviewReject);
+  const setActiveTab = useUiStore(s => s.setActiveTab);
+
   return (
     <div className="main-content">
       <div className="left-panel">
@@ -51,28 +41,28 @@ export default function ExecTab({
           activeId={activePreset}
           pipelines={pipelines}
           onSelect={setActivePreset}
-          onRun={onRun}
+          onRun={run}
           loading={loading}
           connected={connected}
         />
         {loading && currentRunId && (
           <div style={{ display: 'flex', gap: 6, justifyContent: 'center' }}>
-            <button className="btn btn-danger btn-sm" onClick={onCancel} disabled={cancelling}>
+            <button className="btn btn-danger btn-sm" onClick={cancel} disabled={cancelling}>
               {cancelling ? t('exec.cancel') + '...' : '⏹ ' + t('exec.cancel')}
             </button>
           </div>
         )}
         <div className="quick-actions">
-          <button className="qa-btn" onClick={() => onTabChange('agentmd')}>📄 {t('exec.generatePipeline')}</button>
-          <button className="qa-btn" onClick={() => onTabChange('params')}>⚙ {t('exec.manageParams')}</button>
-          <button className="qa-btn" onClick={() => onTabChange('pipelines')}>📦 {t('pipelineManager.title')}</button>
-          <button className="qa-btn" onClick={() => onTabChange('settings')}>⚙ {t('settingsTab.title')}</button>
+          <button className="qa-btn" onClick={() => setActiveTab('agentmd')}>📄 {t('exec.generatePipeline')}</button>
+          <button className="qa-btn" onClick={() => setActiveTab('params')}>⚙ {t('exec.manageParams')}</button>
+          <button className="qa-btn" onClick={() => setActiveTab('pipelines')}>📦 {t('pipelineManager.title')}</button>
+          <button className="qa-btn" onClick={() => setActiveTab('settings')}>⚙ {t('settingsTab.title')}</button>
         </div>
         {preset && (
           <ParamsPanel
             schema={preset.inputs}
             values={params}
-            onChange={onParamChange}
+            onChange={setParam}
           />
         )}
         {pendingReview && (
@@ -80,8 +70,8 @@ export default function ExecTab({
             extraOps={pendingReview.extraOps}
             reason={pendingReview.reason}
             guardLayer={pendingReview.guardLayer}
-            onApprove={onReviewApprove}
-            onReject={onReviewReject}
+            onApprove={reviewApprove}
+            onReject={reviewReject}
           />
         )}
       </div>

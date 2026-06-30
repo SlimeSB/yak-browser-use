@@ -1,14 +1,12 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
-import type { EventData } from '../types';
+import { usePipelineStore } from '../stores/pipelineStore';
+import { useConnectionStore } from '../stores/connectionStore';
 
-interface StatusBarProps {
-  events: EventData[];
-  connected: boolean;
-}
-
-export default function StatusBar({ events, connected }: StatusBarProps) {
+export default function StatusBar() {
   const { t } = useTranslation();
+  const events = usePipelineStore(s => s.events);
+  const connected = useConnectionStore(s => s.connected);
   const stepDone = events.filter(e => e.type === 'step_end').length;
   const stepTotal = events.filter(e => e.type === 'step_start').length;
   return (

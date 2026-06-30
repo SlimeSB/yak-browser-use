@@ -1,46 +1,38 @@
 import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { PipelineMeta, EventData } from '../../types';
+import { usePipelineStore } from '../../stores/pipelineStore';
 import EventLog from '../EventLog';
 import ResultTable from '../ResultTable';
 import DiffView from '../DiffView';
 
-interface LogTabProps {
-  currentRunId: string;
-  stepNames: string[];
-  getStepStatus: (name: string) => 'done' | 'current' | 'pending' | 'error' | 'review';
-  events: EventData[];
-  onClearEvents: () => void;
-  result: Record<string, unknown> | null;
-  resultErrors: string[] | null;
-  loading: boolean;
-  stepStarts: EventData[];
-  stepEnds: EventData[];
-  preset: PipelineMeta | undefined;
-  pendingReview: {
-    extraOps: Array<{ type: string; value?: string; selector?: string }>;
-    reason: string;
-    guardLayer: string;
-    threadId: string;
-  } | null;
-  onReviewApprove: (reason: string) => void;
-  onReviewReject: (reason: string) => void;
-}
-
-export default function LogTab({
-  currentRunId, stepNames, getStepStatus,
-  events, onClearEvents, result, resultErrors,
-  loading, stepStarts, stepEnds, preset,
-  pendingReview, onReviewApprove, onReviewReject,
-}: LogTabProps) {
+export default function LogTab() {
   const { t } = useTranslation();
-  const [logRejectReason, setLogRejectReason] = useState('');
-  const [showingLogReject, setShowingLogReject] = useState(false);
+  const currentRunId = usePipelineStore(s => s.currentRunId);
+  const events = usePipelineStore(s => s.events);
+  const onClearEvents = usePipelineStore(s => s.clearEvents);
+  const result = usePipelineStore(s => s.result);
+  const resultErrors = usePipelineStore(s => s.resultErrors);
+  const loading = usePipelineStore(s => s.loading);
+  const pendingReview = usePipelineStore(s => s.pendingReview);
+  const getStepStatus = usePipelineStore(s => s.getStepStatus);
+  const activePreset = usePipelineStore(s => s.activePreset);
+  const pipelines = usePipelineStore(s => s.pipelines);
 
-  const handleApprove = () => onReviewApprove('approved via log');
+  const preset = pipelines.find(p => p.name === activePreset);
+
+  const stageNames = events.filter(e => e.type === 'step_start').map(e => e.node_name);
+  // deduplicate while preserving order
+  const stepNames = [...new Set(stageNames)];
+  const stepStarts = events.filter(e => e.type === 'step_start');
+  const stepEnds = events.filter(e => e.type === 'step_end');
+
+  const reviewApprove = usePipelineStore(s => s.reviewApprove);
+  const reviewReject = usePipelineStore(s => s.reviewReject);
+
+  const handleApprove = () => reviewApprove('approved via log');
   const handleReject = () => {
     if (!logRejectReason.trim()) return;
-    onReviewReject(logRejectReason.trim());
+    reviewReject(logRejectReason.trim());
     setShowingLogReject(false);
     setLogRejectReason('');
   };
@@ -154,7 +146,6 @@ export default function LogTab({
           <div className="artifact-title">📊 {t('log.summary')}</div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, fontSize: 11 }}>
             <div><span style={{ color: 'var(--text-muted)' }}>{t('log.step')}s</span> {stepEnds.length}/{stepStarts.length}</div>
-            <div><span style={{ color: 'var(--text-muted)' }}>{t('preset.pipeline')}</span> {preset?.title || '—'}</div>
             <div><span style={{ color: 'var(--text-muted)' }}>{t('log.events')}</span> {events.length}</div>
             <div><span style={{ color: 'var(--text-muted)' }}>{t('log.status')}</span>{' '}
               {loading ? <span style={{ color: 'var(--primary)' }}>{t('log.running')}</span>

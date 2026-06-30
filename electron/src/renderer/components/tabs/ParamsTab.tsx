@@ -1,29 +1,25 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { useTranslation } from 'react-i18next';
+import { useCredentialStore } from '../../stores/credentialStore';
 
-interface ParamsTabProps {
-  credKeys: string[];
-  credKey: string;
-  onCredKeyChange: (v: string) => void;
-  credValue: string;
-  onCredValueChange: (v: string) => void;
-  onCredSet: () => void;
-  onCredDelete: (key: string) => void;
-}
-
-export default function ParamsTab({
-  credKeys, credKey, onCredKeyChange, credValue, onCredValueChange,
-  onCredSet, onCredDelete,
-}: ParamsTabProps) {
+export default function ParamsTab() {
   const { t } = useTranslation();
+  const credKeys = useCredentialStore(s => s.credKeys);
+  const credKey = useCredentialStore(s => s.credKey);
+  const credValue = useCredentialStore(s => s.credValue);
+  const setCredKey = useCredentialStore(s => s.setCredKey);
+  const setCredValue = useCredentialStore(s => s.setCredValue);
+  const addCredential = useCredentialStore(s => s.addCredential);
+  const removeCredential = useCredentialStore(s => s.removeCredential);
+
   return (
     <div className="cred-layout">
       <div className="cred-toolbar">
         <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)' }}>⚙ {t('paramsTab.title')}</span>
         <div style={{ flex: 1 }} />
-        <input className="input" style={{ width: 160 }} placeholder={t('paramsTab.key')} value={credKey} onChange={e => onCredKeyChange(e.target.value)} />
-        <input className="input" style={{ width: 200 }} type="password" placeholder={t('paramsTab.value')} value={credValue} onChange={e => onCredValueChange(e.target.value)} />
-        <button className="btn btn-primary btn-sm" onClick={onCredSet}>{t('paramsTab.add')}</button>
+        <input className="input" style={{ width: 160 }} placeholder={t('paramsTab.key')} value={credKey} onChange={e => setCredKey(e.target.value)} />
+        <input className="input" style={{ width: 200 }} type="password" placeholder={t('paramsTab.value')} value={credValue} onChange={e => setCredValue(e.target.value)} />
+        <button className="btn btn-primary btn-sm" onClick={addCredential}>{t('paramsTab.add')}</button>
       </div>
       <div className="cred-content">
         <div style={{ fontSize: 11, color: 'var(--text-muted)', textAlign: 'center', padding: '4px 20px 8px' }}>
@@ -38,7 +34,7 @@ export default function ParamsTab({
             <div key={k} className="cred-row">
               <span className="cred-key">{k}</span>
               <span className="cred-val">••••••••</span>
-              <button className="btn btn-danger btn-xs" onClick={() => onCredDelete(k)} title={t('paramsTab.delete')}>🗑</button>
+              <button className="btn btn-danger btn-xs" onClick={() => removeCredential(k)} title={t('paramsTab.delete')}>🗑</button>
             </div>
           ))
         )}

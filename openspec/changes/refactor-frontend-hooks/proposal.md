@@ -28,7 +28,7 @@
 **修改：**
 - `App.tsx` 从 1041 行压缩到 <100 行（只剩布局编排 + 零业务 state）
 - `ChatTab.tsx` — 删除全部 23 个 props（详见 ChatTab-render spec），内部直接 subscribe 对应 store；treeNodes 内部 useMemo 组装
-- `ExecTab.tsx` — 删除所有 props（15→0），内部 subscribe pipelineStore
+- `ExecTab.tsx` — 删除所有 props（20→0），内部 subscribe pipelineStore
 - `LogTab.tsx` — 删除所有 props（14→0），内部 subscribe pipelineStore
 - `PipelinesTab.tsx` — 删除所有 props（5→0），内部 subscribe pipelineStore + uiStore
 - `ParamsTab.tsx` — 删除所有 props（7→0），内部 subscribe credentialStore

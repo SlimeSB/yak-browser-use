@@ -3,17 +3,9 @@ import { useTranslation } from 'react-i18next';
 import i18n from '../../i18n';
 import type { PresetDefinition } from '../../types';
 import * as api from '../../apiClient';
-
-interface SettingsTabProps {
-  reviewMode: string;
-  onReviewModeChange: (mode: string) => void;
-  chatLayoutReversed: boolean;
-  onChatLayoutReversedChange: (v: boolean) => void;
-  theme: string;
-  onThemeChange: (t: 'dark' | 'light') => void;
-  highlightMode: string;
-  onHighlightModeChange: (mode: string) => void;
-}
+import { useUiStore } from '../../stores/uiStore';
+import { useConnectionStore } from '../../stores/connectionStore';
+import { usePipelineStore } from '../../stores/pipelineStore';
 
 interface ProviderForm {
   model: string;
@@ -21,13 +13,17 @@ interface ProviderForm {
   api_base: string;
 }
 
-export default function SettingsTab({
-  reviewMode, onReviewModeChange,
-  chatLayoutReversed, onChatLayoutReversedChange,
-  theme, onThemeChange,
-  highlightMode, onHighlightModeChange,
-}: SettingsTabProps) {
+export default function SettingsTab() {
   const { t } = useTranslation();
+  const theme = useUiStore(s => s.theme);
+  const setTheme = useUiStore(s => s.setTheme);
+  const chatLayoutReversed = useUiStore(s => s.chatLayoutReversed);
+  const setChatLayoutReversed = useUiStore(s => s.setChatLayoutReversed);
+  const highlightMode = useConnectionStore(s => s.highlightMode);
+  const setHighlightMode = useConnectionStore(s => s.setHighlightMode);
+  const reviewMode = usePipelineStore(s => s.reviewMode);
+  const setReviewMode = usePipelineStore(s => s.setReviewMode);
+
   const [providerConfig, setProviderConfig] = useState<ProviderForm>({ model: '', api_key: '', api_base: '' });
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -90,7 +86,6 @@ export default function SettingsTab({
   };
 
   const applyPreset = (preset: PresetDefinition) => {
-    // Set api_base, keep existing api_key, clear model so user picks one
     setProviderConfig(p => ({ ...p, api_base: preset.api_base, model: '' }));
     setActivePresetId(activePresetId === preset.id ? null : preset.id);
   };
@@ -114,11 +109,11 @@ export default function SettingsTab({
             <div style={{ display: 'flex', gap: 4 }}>
               <button
                 className={`btn btn-xs ${theme === 'dark' ? 'btn-primary' : 'btn-secondary'}`}
-                onClick={() => onThemeChange('dark')}
+                onClick={() => setTheme('dark')}
               >{t('settingsTab.dark')}</button>
               <button
                 className={`btn btn-xs ${theme === 'light' ? 'btn-primary' : 'btn-secondary'}`}
-                onClick={() => onThemeChange('light')}
+                onClick={() => setTheme('light')}
               >{t('settingsTab.light')}</button>
             </div>
           </div>
@@ -154,15 +149,15 @@ export default function SettingsTab({
             <div style={{ display: 'flex', gap: 4 }}>
               <button
                 className={`btn btn-xs ${reviewMode === 'human' ? 'btn-primary' : 'btn-secondary'}`}
-                onClick={() => onReviewModeChange('human')}
+                onClick={() => setReviewMode('human')}
               >{t('settingsTab.manual')}</button>
               <button
                 className={`btn btn-xs ${reviewMode === 'llm' ? 'btn-primary' : 'btn-secondary'}`}
-                onClick={() => onReviewModeChange('llm')}
+                onClick={() => setReviewMode('llm')}
               >{t('settingsTab.auto')}</button>
               <button
                 className={`btn btn-xs ${reviewMode === 'none' ? 'btn-primary' : 'btn-secondary'}`}
-                onClick={() => onReviewModeChange('none')}
+                onClick={() => setReviewMode('none')}
               >{t('settingsTab.none')}</button>
             </div>
           </div>
@@ -177,11 +172,11 @@ export default function SettingsTab({
             <div style={{ display: 'flex', gap: 4 }}>
               <button
                 className={`btn btn-xs ${!chatLayoutReversed ? 'btn-primary' : 'btn-secondary'}`}
-                onClick={() => onChatLayoutReversedChange(false)}
+                onClick={() => setChatLayoutReversed(false)}
               >{t('settingsTab.chatEditor')}</button>
               <button
                 className={`btn btn-xs ${chatLayoutReversed ? 'btn-primary' : 'btn-secondary'}`}
-                onClick={() => onChatLayoutReversedChange(true)}
+                onClick={() => setChatLayoutReversed(true)}
               >{t('settingsTab.editorChat')}</button>
             </div>
           </div>
@@ -198,15 +193,15 @@ export default function SettingsTab({
             <div style={{ display: 'flex', gap: 4 }}>
               <button
                 className={`btn btn-xs ${highlightMode === 'a11y' ? 'btn-primary' : 'btn-secondary'}`}
-                onClick={() => onHighlightModeChange('a11y')}
+                onClick={() => setHighlightMode('a11y')}
               >{t('settingsTab.a11y')}</button>
               <button
                 className={`btn btn-xs ${highlightMode === 'progressive' ? 'btn-primary' : 'btn-secondary'}`}
-                onClick={() => onHighlightModeChange('progressive')}
+                onClick={() => setHighlightMode('progressive')}
               >{t('settingsTab.progressive')}</button>
               <button
                 className={`btn btn-xs ${highlightMode === 'off' ? 'btn-primary' : 'btn-secondary'}`}
-                onClick={() => onHighlightModeChange('off')}
+                onClick={() => setHighlightMode('off')}
               >{t('settingsTab.highlightOff')}</button>
             </div>
           </div>
@@ -228,7 +223,6 @@ export default function SettingsTab({
               <div style={{ fontSize: 11, color: '#e81123' }}>✗ {presetsError}</div>
             )}
 
-            {/* Model dropdown — shown when a preset is active */}
             {activePreset && (
               <select className="set-input"
                 value={providerConfig.model}
