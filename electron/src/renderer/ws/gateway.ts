@@ -45,10 +45,9 @@ function dispatch(event: Record<string, unknown>) {
     return;
   }
 
-  // Step 1.5: pipeline.edit → both chatStore + pipelineStore
+  // Step 1.5: pipeline.edit → chatStore (handles PendingEdit tracking)
   if (et === 'pipeline.edit') {
     useChatStore.getState().handleWsEvent(event);
-    usePipelineStore.getState().handlePipelineEdit(event);
     return;
   }
 
@@ -60,7 +59,7 @@ function dispatch(event: Record<string, unknown>) {
 
   // Step 3: run_end → pipelineStore
   if (et === 'run_end') {
-    usePipelineStore.getState().handleRunEnd(event);
+    usePipelineStore.getState().handleRunEnd();
     return;
   }
 

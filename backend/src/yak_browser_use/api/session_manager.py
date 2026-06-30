@@ -156,6 +156,24 @@ class SessionManager:
             "pipeline_name": normalized,
         }
 
+    # ── Migration ───────────────────────────────────────────────────
+
+    def migrate_session(self, from_pipeline: str, to_pipeline: str) -> SessionState | None:
+        session = self._sessions.get(from_pipeline)
+        if session is None:
+            return None
+        session.pipeline_name = to_pipeline
+        self._persist_session(session)
+        self._sessions[to_pipeline] = session
+        self._sessions.pop(from_pipeline, None)
+        self._active_pipeline = to_pipeline
+        write_last_active(to_pipeline)
+        logger.info(
+            "Session %s migrated from %s to %s",
+            session.session_id, from_pipeline, to_pipeline,
+        )
+        return session
+
     # ── Persistence ─────────────────────────────────────────────────
 
     def persist_session(self, session: SessionState, context: str = "history") -> None:

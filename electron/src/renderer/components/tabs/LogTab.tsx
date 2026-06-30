@@ -37,6 +37,9 @@ export default function LogTab() {
     setLogRejectReason('');
   };
 
+  const [showingLogReject, setShowingLogReject] = useState(false);
+  const [logRejectReason, setLogRejectReason] = useState('');
+
   const diffLines = pendingReview ? [
     ...pendingReview.extraOps.map((op) => ({
       type: 'add' as const,

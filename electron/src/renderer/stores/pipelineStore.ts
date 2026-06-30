@@ -3,7 +3,9 @@ import * as api from '../apiClient';
 import type { PipelineMeta, EventData } from '../types';
 import { interpolateTemplate } from '../utils/interpolate';
 
-function _getStepStatus(events: EventData[], pendingReview: unknown, name: string): 'done' | 'current' | 'pending' | 'error' | 'review' {
+// ── Helpers ──────────────────────────────────────────────────
+
+function getStepStatus(events: EventData[], pendingReview: unknown, name: string): 'done' | 'current' | 'pending' | 'error' | 'review' {
   const hasStart = events.some(e => e.type === 'step_start' && e.node_name === name);
   const hasEnd = events.some(e => e.type === 'step_end' && e.node_name === name);
   const hasError = events.some(e => e.type === 'step_error' && e.node_name === name);
@@ -15,7 +17,9 @@ function _getStepStatus(events: EventData[], pendingReview: unknown, name: strin
   return 'pending';
 }
 
-interface PendingReviewData {
+// ── Types ────────────────────────────────────────────────────
+
+export interface PendingReviewData {
   extraOps: Array<{ type: string; value?: string; selector?: string }>;
   reason: string;
   guardLayer: string;
@@ -37,13 +41,13 @@ interface PipelineState {
   pendingReview: PendingReviewData | null;
   reviewMode: string;
   params: Record<string, string>;
+  // actions
   run: () => Promise<void>;
   cancel: () => Promise<void>;
   reviewApprove: (reason: string) => void;
   reviewReject: (reason: string) => void;
   addEvent: (type: string, node_name: string, data?: Record<string, unknown>) => void;
-  handleRunEnd: (event: Record<string, unknown>) => void;
-  handlePipelineEdit: (event: Record<string, unknown>) => void;
+  handleRunEnd: () => Promise<void>;
   refreshPipelines: () => Promise<void>;
   deletePipeline: (name: string) => Promise<void>;
   savePipeline: () => Promise<void>;
@@ -62,6 +66,8 @@ interface PipelineState {
   getStepStatus: (name: string) => 'done' | 'current' | 'pending' | 'error' | 'review';
 }
 
+// ── Store ────────────────────────────────────────────────────
+
 export const usePipelineStore = _create<PipelineState>((set, get) => ({
   pipelines: [],
   activePreset: '',
@@ -78,6 +84,43 @@ export const usePipelineStore = _create<PipelineState>((set, get) => ({
   reviewMode: 'none',
   params: {},
 
+  // ── Pipeline CRUD ─────────────────────────────────────────
+
+  refreshPipelines: async () => {
+    const r = await api.listPipelines();
+    set({ pipelines: r.pipelines });
+  },
+
+  deletePipeline: async (name) => {
+    const r = await api.deletePipeline(name);
+    if (r.ok) {
+      if (get().activePreset === name) {
+        set({ activePreset: '__chat__', pipelineEditor: '' });
+      }
+      await get().refreshPipelines();
+    } else {
+      window.alert((r as any).error || 'Delete failed');
+    }
+  },
+
+  savePipeline: async () => {
+    const { activePreset, pipelineEditor } = get();
+    if (!activePreset || activePreset === '__chat__' || !pipelineEditor.trim()) return;
+    try {
+      const r = await api.savePipeline(activePreset, pipelineEditor);
+      if (r.ok) {
+        set((st) => ({ pipelineCache: { ...st.pipelineCache, [activePreset]: pipelineEditor } }));
+        await get().refreshPipelines();
+      } else {
+        window.alert((r as any).error || 'Save failed');
+      }
+    } catch (e) {
+      window.alert(String(e));
+    }
+  },
+
+  // ── Run engine ────────────────────────────────────────────
+
   run: async () => {
     const s = get();
     const p = s.pipelines.find(t => t.name === s.activePreset);
@@ -85,12 +128,10 @@ export const usePipelineStore = _create<PipelineState>((set, get) => ({
 
     const missingKeys: string[] = [];
     for (const key of Object.keys(p.inputs)) {
-      if (!s.params[key]?.trim()) {
-        missingKeys.push(p.inputs[key]);
-      }
+      if (!s.params[key]?.trim()) missingKeys.push(p.inputs[key]);
     }
     if (missingKeys.length > 0) {
-      window.alert('Please fill in the following parameters: ' + missingKeys.join(', '));
+      window.alert('Please fill in: ' + missingKeys.join(', '));
       return;
     }
 
@@ -100,14 +141,16 @@ export const usePipelineStore = _create<PipelineState>((set, get) => ({
         const resp = await api.getPipeline(s.activePreset);
         if (resp.content) {
           pipelineContent = resp.content;
-          set((st) => ({ pipelineCache: { ...st.pipelineCache, [st.activePreset]: pipelineContent! }, pipelineEditor: pipelineContent }));
+          set((st) => ({
+            pipelineCache: { ...st.pipelineCache, [st.activePreset]: pipelineContent! },
+            pipelineEditor: pipelineContent,
+          }));
         } else {
           window.alert('Failed to load pipeline definition');
           return;
         }
       } catch (e) {
-        console.error('getPipeline failed in run: %s', String(e));
-        window.alert('Failed to load pipeline definition');
+        window.alert('Failed to load pipeline');
         return;
       }
     }
@@ -122,18 +165,14 @@ export const usePipelineStore = _create<PipelineState>((set, get) => ({
 
     try {
       get().addEvent('engine_start', 'pipeline', {});
-      const resp = await api.run(pipelineWithMode, s.params);
+      const resp = await api.runPipeline(pipelineWithMode, s.params);
       if (resp.run_id) set({ currentRunId: resp.run_id });
       if (resp.pipeline) set({ currentPipeline: resp.pipeline });
       if (resp.error) {
         get().addEvent('step_error', 'runner', { error: resp.error });
         set({ resultErrors: [resp.error] });
       } else if (resp.status === 'interrupted' && resp.data?.pending_review) {
-        const pr = resp.data.pending_review as {
-          extra_ops: Array<{ type: string; value?: string; selector?: string }>;
-          reason: string;
-          guard_layer: string;
-        };
+        const pr = resp.data.pending_review as { extra_ops: Array<{ type: string; value?: string; selector?: string }>; reason: string; guard_layer: string };
         set({
           pendingReview: {
             extraOps: pr.extra_ops || [],
@@ -149,9 +188,8 @@ export const usePipelineStore = _create<PipelineState>((set, get) => ({
         get().addEvent('engine_end', 'pipeline', { status: resp.status });
       }
     } catch (e) {
-      const msg = String(e);
-      get().addEvent('step_error', 'runner', { error: msg });
-      set({ resultErrors: [msg] });
+      get().addEvent('step_error', 'runner', { error: String(e) });
+      set({ resultErrors: [String(e)] });
     } finally {
       set({ loading: false });
     }
@@ -172,8 +210,7 @@ export const usePipelineStore = _create<PipelineState>((set, get) => ({
   },
 
   reviewApprove: (reason) => {
-    const { pendingReview } = get();
-    const pr = pendingReview;
+    const pr = get().pendingReview;
     set({ pendingReview: null });
     if (pr?.threadId) {
       api.reviewPipeline(pr.threadId, 'approve', reason).catch((e) => console.error('Review approve failed: %s', String(e)));
@@ -182,8 +219,7 @@ export const usePipelineStore = _create<PipelineState>((set, get) => ({
   },
 
   reviewReject: (reason) => {
-    const { pendingReview } = get();
-    const pr = pendingReview;
+    const pr = get().pendingReview;
     set({ pendingReview: null });
     if (pr?.threadId) {
       api.reviewPipeline(pr.threadId, 'reject', reason).catch((e) => console.error('Review reject failed: %s', String(e)));
@@ -191,53 +227,22 @@ export const usePipelineStore = _create<PipelineState>((set, get) => ({
     get().addEvent('resume', 'pipeline', { action: 'reject', reason });
   },
 
+  // ── Events ────────────────────────────────────────────────
+
   addEvent: (type, node_name, data = {}) => {
     set((st) => ({ events: [...st.events, { type, timestamp: new Date().toISOString(), node_name, data }] }));
   },
 
-  handleRunEnd: () => {
+  handleRunEnd: async () => {
     set({ loading: false, currentRunId: '', currentPipeline: '' });
   },
 
-  handlePipelineEdit: () => {
-    api.listPipelines().then(r => {
-      if (r.pipelines) set({ pipelines: r.pipelines });
-    }).catch(() => {});
+  getStepStatus: (name) => {
+    const s = get();
+    return getStepStatus(s.events, s.pendingReview, name);
   },
 
-  refreshPipelines: async () => {
-    const r = await api.listPipelines();
-    if (r.pipelines) set({ pipelines: r.pipelines });
-  },
-
-  deletePipeline: async (name) => {
-    const r = await api.deletePipeline(name);
-    if (r.ok) {
-      if (get().activePreset === name) {
-        // Switch to __chat__
-        set({ activePreset: '__chat__', pipelineEditor: '' });
-      }
-      get().refreshPipelines();
-    } else {
-      window.alert(r.error || 'Delete failed');
-    }
-  },
-
-  savePipeline: async () => {
-    const { activePreset, pipelineEditor } = get();
-    if (!activePreset || activePreset === '__chat__' || !pipelineEditor.trim()) return;
-    try {
-      const r = await api.savePipeline(activePreset, pipelineEditor);
-      if (r.ok) {
-        set((st) => ({ pipelineCache: { ...st.pipelineCache, [activePreset]: pipelineEditor } }));
-        get().refreshPipelines();
-      } else {
-        window.alert(r.error || 'Save failed');
-      }
-    } catch (e) {
-      window.alert(String(e));
-    }
-  },
+  // ── Simple setters ────────────────────────────────────────
 
   setActivePreset: (name) => set({ activePreset: name }),
   setReviewMode: (mode) => set({ reviewMode: mode }),
@@ -251,9 +256,4 @@ export const usePipelineStore = _create<PipelineState>((set, get) => ({
   setResultErrors: (e) => set({ resultErrors: e }),
   clearEvents: () => set({ events: [] }),
   setParam: (key, value) => set((st) => ({ params: { ...st.params, [key]: value } })),
-
-  getStepStatus: (name) => {
-    const s = get();
-    return _getStepStatus(s.events, s.pendingReview, name);
-  },
 }));

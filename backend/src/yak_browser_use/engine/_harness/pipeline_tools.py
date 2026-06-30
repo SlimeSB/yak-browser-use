@@ -276,6 +276,15 @@ async def pipeline_create(
         explanation=explanation,
     )
 
+    try:
+        service = getattr(engine_state, "_service", None)
+        if service is not None:
+            sessions_mgr = getattr(service, "sessions", None)
+            if sessions_mgr is not None and sessions_mgr.active_pipeline == "__chat__":
+                sessions_mgr.migrate_session("__chat__", safe_name)
+    except Exception:
+        logger.warning("pipeline_create: failed to migrate session", exc_info=True)
+
     return {"ok": True, "result": f"Pipeline '{safe_name}' created successfully"}
 
 

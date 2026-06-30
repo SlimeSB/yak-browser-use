@@ -4,6 +4,7 @@ import { usePipelineStore } from '../../stores/pipelineStore';
 import * as api from '../../apiClient';
 import VersionPanel from '../VersionPanel';
 import { useUiStore } from '../../stores/uiStore';
+import { copyToClipboard } from '../../utils/clipboard';
 
 export default function PipelinesTab() {
   const { t } = useTranslation();
@@ -47,16 +48,7 @@ export default function PipelinesTab() {
                 setActivePreset(p.name);
                 try {
                   const resp = await api.getPipeline(p.name);
-                  if (resp.content) {
-                    try { await navigator.clipboard.writeText(resp.content); } catch {
-                      const ta = document.createElement('textarea');
-                      ta.value = resp.content;
-                      ta.style.position = 'fixed'; ta.style.opacity = '0';
-                      document.body.appendChild(ta); ta.select();
-                      document.execCommand('copy');
-                      document.body.removeChild(ta);
-                    }
-                  }
+                  if (resp.content) await copyToClipboard(resp.content);
                 } catch (e) { window.alert('Copy failed: ' + String(e)); }
               }}>{t('pipelineManager.copy')}</button>
               <button className="btn btn-danger btn-xs" onClick={() => {

@@ -1,9 +1,6 @@
 import { _create } from './_factory';
 import * as api from '../apiClient';
 
-let connectGen = 0;
-let connectedSnapshot = false;
-
 interface ConnectionState {
   connected: boolean;
   wsUrl: string;
@@ -14,12 +11,16 @@ interface ConnectionState {
   restartDialog: { browserName: string } | null;
   restarting: boolean;
   highlightMode: string;
+  // internal
+  _connectGen: number;
+  // actions
   connect: (mode: 'user' | 'isolated', profile?: string) => Promise<void>;
   disconnect: () => Promise<void>;
   restartConfirm: () => Promise<void>;
   restartCancel: () => void;
   createProfile: (name: string) => Promise<void>;
   handleBrowserDisconnect: () => void;
+  _bumpGen: () => void;
   setConnectMode: (mode: 'user' | 'isolated') => void;
   setSelectedProfile: (profile: string) => void;
   setConnectionError: (err: string | null) => void;
@@ -40,35 +41,33 @@ export const useConnectionStore = _create<ConnectionState>((set, get) => ({
   restartDialog: null,
   restarting: false,
   highlightMode: loadHighlightMode(),
+  _connectGen: 0,
 
   connect: async (mode, profile) => {
-    const localGen = ++connectGen;
+    const localGen = ++get()._connectGen;
     set({ connectionError: null });
     try {
       const { highlightMode } = get();
       const resp = await api.connectBrowser(mode, profile, highlightMode);
-      if (localGen !== connectGen) return;
+      if (localGen !== get()._connectGen) return; // stale
       if (resp.needsRestart) {
         set({ restartDialog: { browserName: resp.browserName || 'Chrome' } });
         return;
       }
       if (resp.success) {
-        connectedSnapshot = true;
         set({ connected: true, wsUrl: resp.wsUrl || '', connectionError: null });
       } else {
-        connectedSnapshot = false;
         set({ connected: false, wsUrl: '', connectionError: resp.error || null });
       }
     } catch (e) {
-      if (localGen !== connectGen) return;
+      if (localGen !== get()._connectGen) return;
       console.error('Connect failed: %s', String(e));
       set({ connectionError: String(e) });
     }
   },
 
   disconnect: async () => {
-    try { await api.disconnectBrowser(); } catch (e) { console.error('Disconnect failed: %s', String(e)); }
-    connectedSnapshot = false;
+    try { await api.disconnectBrowser(); } catch { /* ok */ }
     set({ connected: false, wsUrl: '', connectionError: null });
   },
 
@@ -77,22 +76,18 @@ export const useConnectionStore = _create<ConnectionState>((set, get) => ({
     try {
       const resp = await api.restartBrowser();
       if (resp.success) {
-        connectedSnapshot = true;
         set({ connected: true, wsUrl: resp.wsUrl || '', connectionError: null });
       } else {
         set({ connectionError: resp.error || null });
       }
     } catch (e) {
-      console.error('Restart failed: %s', String(e));
       set({ connectionError: String(e) });
     } finally {
       set({ restarting: false });
     }
   },
 
-  restartCancel: () => {
-    set({ restartDialog: null });
-  },
+  restartCancel: () => set({ restartDialog: null }),
 
   createProfile: async (name) => {
     if (!name.trim()) return;
@@ -104,18 +99,19 @@ export const useConnectionStore = _create<ConnectionState>((set, get) => ({
           return { profiles: [...s.profiles, resp.profile_name], selectedProfile: resp.profile_name };
         });
       } else {
-        window.alert('Creation failed' + ': ' + (resp.error || 'Unknown error'));
+        window.alert('Creation failed: ' + (resp.error || 'Unknown'));
       }
     } catch (e) {
-      window.alert('Creation failed' + ': ' + String(e));
+      window.alert('Creation failed: ' + String(e));
     }
   },
 
   handleBrowserDisconnect: () => {
-    if (connectedSnapshot) connectGen++;
-    connectedSnapshot = false;
+    get()._bumpGen();
     set({ connected: false, wsUrl: '' });
   },
+
+  _bumpGen: () => set((s) => ({ _connectGen: s._connectGen + 1 })),
 
   setConnectMode: (mode) => set({ connectMode: mode }),
   setSelectedProfile: (profile) => set({ selectedProfile: profile }),
@@ -129,7 +125,6 @@ export const useConnectionStore = _create<ConnectionState>((set, get) => ({
 // Load profiles on module init
 api.listIsolatedProfiles().then(r => {
   if (r.profiles && r.profiles.length > 0) {
-    useConnectionStore.getState().setSelectedProfile(r.profiles[0]);
-    useConnectionStore.setState({ profiles: r.profiles });
+    useConnectionStore.setState({ profiles: r.profiles, selectedProfile: r.profiles[0] });
   }
 }).catch((e) => { console.error('listIsolatedProfiles failed: %s', String(e)); });

@@ -39,7 +39,6 @@ export default function App() {
   const setActiveTab = useUiStore(s => s.setActiveTab);
   const loading = usePipelineStore(s => s.loading);
   const pendingReview = usePipelineStore(s => s.pendingReview);
-  const initDoneRef = useRef(false);
   const sidebarRef = useRef<HTMLElement>(null);
 
   const measureAndSetWidth = useCallback(() => {
@@ -56,37 +55,38 @@ export default function App() {
 
   useEffect(() => { measureAndSetWidth(); }, [measureAndSetWidth, i18n.language]);
 
+  // ── Initialize app: load pipelines + sessions ───────────────
   useEffect(() => {
-    if (initDoneRef.current) return;
-    initDoneRef.current = true;
-    let cancelled = false;
-    (async () => {
-      const r = await api.listPipelines().catch((e) => {
-        console.error('listPipelines failed: %s', String(e));
-        return { pipelines: [] };
-      });
-      if (cancelled) return;
-      const chatList = await api.listSessions('__chat__').catch(() => ({ sessions: [] }));
-      const chatSessionsList = chatList.sessions || [];
-      useChatStore.setState({ chatSessions: chatSessionsList });
-      if (r.pipelines && r.pipelines.length > 0) {
-        usePipelineStore.setState({ pipelines: r.pipelines });
-        const initial = r.pipelines[0].name;
-        const list = await api.listSessions(initial).catch(() => ({ sessions: [] }));
-        const sessionsList = list.sessions || [];
-        if (sessionsList.length > 0) useChatStore.setState({ currentSessionId: sessionsList[0].session_id });
-        useChatStore.setState((s) => ({ pipelineSessions: { ...s.pipelineSessions, [initial]: sessionsList } }));
-        usePipelineStore.setState({ activePreset: initial });
+    const init = async () => {
+      const r = await api.listPipelines().catch(() => ({ pipelines: [] }));
+      usePipelineStore.setState({ pipelines: r.pipelines });
+
+      if (r.pipelines.length > 0) {
+        const first = r.pipelines[0].name;
+        usePipelineStore.getState().setActivePreset(first);
+        const sessResp = await api.listSessions(first).catch(() => ({ sessions: [] }));
+        const sessions = sessResp.sessions ?? [];
+        useChatStore.setState((s) => ({
+          pipelineSessions: { ...s.pipelineSessions, [first]: sessions },
+          currentSessionId: sessions[0]?.session_id ?? '',
+        }));
       } else {
-        if (chatSessionsList.length > 0) useChatStore.setState({ currentSessionId: chatSessionsList[0].session_id });
-        usePipelineStore.setState({ activePreset: '__chat__' });
+        usePipelineStore.getState().setActivePreset('__chat__');
+        const sessResp = await api.listSessions('__chat__').catch(() => ({ sessions: [] }));
+        const sessions = sessResp.sessions ?? [];
+        useChatStore.setState({
+          chatSessions: sessions,
+          currentSessionId: sessions[0]?.session_id ?? '',
+        });
       }
-    })();
-    return () => { cancelled = true; };
+    };
+    init();
   }, []);
 
+  // ── Load pipeline editor content when activePreset changes ──
   const activePreset = usePipelineStore(s => s.activePreset);
   const pipelineCache = usePipelineStore(s => s.pipelineCache);
+
   useEffect(() => {
     if (!activePreset || activePreset === '__chat__') {
       usePipelineStore.setState({ pipelineEditor: '' });
@@ -98,7 +98,10 @@ export default function App() {
     } else {
       api.getPipeline(activePreset).then(resp => {
         if (resp.content) {
-          usePipelineStore.setState((s) => ({ pipelineCache: { ...s.pipelineCache, [activePreset]: resp.content }, pipelineEditor: resp.content }));
+          usePipelineStore.setState((s) => ({
+            pipelineCache: { ...s.pipelineCache, [activePreset]: resp.content },
+            pipelineEditor: resp.content,
+          }));
         }
       }).catch((e) => { console.error('getPipeline failed: %s', String(e)); });
     }
@@ -111,7 +114,6 @@ export default function App() {
 
       <div className="app-body">
         <nav className="sidebar" ref={sidebarRef} onMouseEnter={measureAndSetWidth}>
-          {/* Group 1: Run & Chat */}
           {TABS.slice(0, 2).map(tab => (
             <button
               key={tab.id}
@@ -127,7 +129,6 @@ export default function App() {
 
           <div className="sidebar-divider" />
 
-          {/* Group 2: Browse & Manage */}
           {TABS.slice(2, 4).map(tab => (
             <button
               key={tab.id}
@@ -143,7 +144,6 @@ export default function App() {
 
           <div className="sidebar-group-gap" />
 
-          {/* Group 3: Config */}
           {TABS.slice(4).map(tab => (
             <button
               key={tab.id}
