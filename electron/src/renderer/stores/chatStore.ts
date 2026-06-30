@@ -219,7 +219,18 @@ export const useChatStore = _create<ChatState>((set, get) => ({
       const r = await api.getSessionData(activePreset, sessionId);
       console.log('[selectSession] pipeline=%s session=%s msgs=%d', activePreset, sessionId, r.session?.messages?.length || 0);
       if (r.session) {
-        set({ currentSessionId: sessionId, chatMessages: r.session.messages || [] });
+        const raw: Record<string, unknown>[] = (r.session.messages || []) as any;
+        const normalized: ChatMessage[] = raw.map((m) => ({
+          id: (m.id as string) || nextMsgId(),
+          role: (m.role as ChatMessage['role']) || 'assistant',
+          content: (m.content as string) || '',
+          reasoning: m.reasoning as string | undefined,
+          toolName: (m.toolName as string) || (m.name as string) || '',
+          toolCallId: (m.toolCallId as string) || (m.tool_call_id as string) || '',
+          toolOk: m.toolOk !== undefined ? (m.toolOk as boolean) : (m.ok !== undefined ? (m.ok as boolean) : (typeof m.content === 'string' && m.role === 'tool' ? !m.content.startsWith('Error executing ') : undefined)),
+          toolDuration: m.toolDuration !== undefined ? (m.toolDuration as number) : (m.duration_ms !== undefined ? (m.duration_ms as number) : undefined),
+        }));
+        set({ currentSessionId: sessionId, chatMessages: normalized });
       }
     } catch (e) { console.error('getSessionData failed: %s', String(e)); }
     finally { set({ loadingSession: false }); }

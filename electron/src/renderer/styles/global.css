@@ -3183,6 +3183,10 @@ body {
   gap: 4px;
   margin-top: 8px;
 }
+.tool-chip-wrapper {
+  display: flex;
+  flex-direction: column;
+}
 .tool-chip {
   display: inline-flex;
   align-items: center;
@@ -3192,6 +3196,11 @@ body {
   font-family: var(--font-mono);
   line-height: 1.6;
   color: var(--text-muted);
+  cursor: pointer;
+  transition: color var(--transition-fast);
+}
+.tool-chip:hover {
+  color: var(--text-secondary);
 }
 .tool-chip .icon {
   font-size: 12px;
@@ -3221,6 +3230,22 @@ body {
   color: var(--text-muted);
   font-size: 11px;
 }
+.tool-chip-body {
+  margin: 2px 0 4px 20px;
+  padding: 6px 8px;
+  background: rgba(96, 165, 250, 0.02);
+  border: 1px solid var(--border);
+  border-left: 2px solid var(--info);
+  border-radius: 0 6px 6px 0;
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+  white-space: pre-wrap;
+  word-break: break-word;
+  line-height: 1.5;
+  max-height: 300px;
+  overflow-y: auto;
+}
 .chat-think {
   margin: 3px 0;
 }
@@ -3236,6 +3261,13 @@ body {
 }
 .chat-think-toggle:hover {
   color: var(--text-secondary);
+}
+.chat-think-toggle .arrow {
+  display: inline-block;
+  transition: transform .2s ease;
+}
+.chat-think-toggle.expanded .arrow {
+  transform: rotate(90deg);
 }
 .chat-think-title {
   font-weight: var(--fw-medium);

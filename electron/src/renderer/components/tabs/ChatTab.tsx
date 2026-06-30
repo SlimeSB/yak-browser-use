@@ -48,6 +48,7 @@ export default function ChatTab() {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const draggingRef = useRef(false);
   const [expandedThinks, setExpandedThinks] = useState<Set<string>>(new Set());
+  const [expandedToolCalls, setExpandedToolCalls] = useState<Set<string>>(new Set());
   const cancelledRef = useRef(false);
   const activePresetRef = useRef(activePreset);
   const connectedRef = useRef(connected);
@@ -69,6 +70,13 @@ export default function ChatTab() {
         while (i + 1 < messages.length && messages[i + 1].role === 'tool') {
           tools.push(messages[i + 1]);
           i++;
+        }
+        if (!msg.content && !msg.reasoning && tools.length > 0 && result.length > 0) {
+          const prev = result[result.length - 1];
+          if (prev.role === 'assistant') {
+            prev.toolCalls = [...(prev.toolCalls || []), ...tools];
+            continue;
+          }
         }
         result.push({ ...msg, toolCalls: tools.length > 0 ? tools : undefined });
       } else {
@@ -371,6 +379,23 @@ export default function ChatTab() {
                   {msg.role === 'user' && <div className="chat-user-bubble"><pre>{msg.content}</pre></div>}
                   {msg.role === 'assistant' && (
                     <>
+                      {msg.reasoning && (
+                        <div className="chat-think">
+                          <span className={`chat-think-toggle${expandedThinks.has(thinkKey) ? ' expanded' : ''}`}
+                            onClick={() => setExpandedThinks(prev => {
+                              const next = new Set(prev);
+                              if (next.has(thinkKey)) next.delete(thinkKey); else next.add(thinkKey);
+                              return next;
+                            })}
+                          >
+                            <span className="arrow">▶</span>
+                            <span className="chat-think-title">{t('chat.think')}</span>
+                          </span>
+                          {expandedThinks.has(thinkKey) && (
+                            <pre className="chat-think-body">{msg.reasoning}</pre>
+                          )}
+                        </div>
+                      )}
                       {msg.content && (
                         <div className="chat-agent-content"><ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.content}</ReactMarkdown></div>
                       )}
@@ -380,32 +405,30 @@ export default function ChatTab() {
                             const isRunning = tc.toolOk === undefined;
                             const isOk = tc.toolOk === true;
                             const isErr = tc.toolOk === false;
+                            const toolKey = tc.toolCallId || `${i}-${j}`;
+                            const isExpanded = expandedToolCalls.has(toolKey);
                             return (
-                              <div key={j} className={`tool-chip ${isRunning ? 'status-running' : isOk ? 'status-ok' : 'status-err'}`}>
-                                <span className="icon">{isRunning ? '◌' : isOk ? '✓' : '✗'}</span>
-                                <span className="name">{tc.toolName || t('chat.title')}</span>
-                                {tc.toolDuration !== undefined && (
-                                  <><span className="sep">·</span><span className="duration">{tc.toolDuration}ms</span></>
+                              <div key={toolKey} className="tool-chip-wrapper">
+                                <div
+                                  className={`tool-chip ${isRunning ? 'status-running' : isOk ? 'status-ok' : 'status-err'}${isExpanded ? ' expanded' : ''}`}
+                                  onClick={() => setExpandedToolCalls(prev => {
+                                    const next = new Set(prev);
+                                    if (next.has(toolKey)) next.delete(toolKey); else next.add(toolKey);
+                                    return next;
+                                  })}
+                                >
+                                  <span className="icon">{isRunning ? '◌' : isOk ? '✓' : '✗'}</span>
+                                  <span className="name">{tc.toolName || t('chat.title')}</span>
+                                  {tc.toolDuration !== undefined && (
+                                    <><span className="sep">·</span><span className="duration">{tc.toolDuration}ms</span></>
+                                  )}
+                                </div>
+                                {isExpanded && tc.content && (
+                                  <pre className="tool-chip-body">{tc.content}</pre>
                                 )}
                               </div>
                             );
                           })}
-                        </div>
-                      )}
-                      {msg.reasoning && (
-                        <div className="chat-think">
-                          <span className="chat-think-toggle"
-                            onClick={() => setExpandedThinks(prev => {
-                              const next = new Set(prev);
-                              if (next.has(thinkKey)) next.delete(thinkKey); else next.add(thinkKey);
-                              return next;
-                            })}
-                          >
-                            ▶ <span className="chat-think-title">{t('chat.think')}</span>
-                          </span>
-                          {expandedThinks.has(thinkKey) && (
-                            <pre className="chat-think-body">{msg.reasoning}</pre>
-                          )}
                         </div>
                       )}
                     </>

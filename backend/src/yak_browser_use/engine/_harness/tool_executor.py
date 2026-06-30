@@ -103,7 +103,8 @@ async def execute_tool_calls_sequential(
             guard_result = guardrail_state.before_call(fn_name, fn_args)
             if guard_result is not True:
                 _append_tool_result(messages, tool_call_id, fn_name,
-                                    _format_guarded_result(str(guard_result)))
+                                    _format_guarded_result(str(guard_result)),
+                                    ok=False, duration_ms=0)
                 continue
 
         start = time.time()
@@ -148,7 +149,8 @@ async def execute_tool_calls_sequential(
             if warning:
                 result_text += f"\n\n{_format_tool_warning(warning)}"
 
-        _append_tool_result(messages, tool_call_id, fn_name, result_text)
+        _append_tool_result(messages, tool_call_id, fn_name, result_text,
+                            ok=ok, duration_ms=result_dict.get("duration_ms", int((time.time() - start) * 1000)))
 
         if result_dict.get("_pipeline_finish"):
             break
@@ -333,12 +335,17 @@ def _append_tool_result(
     tool_call_id: str,
     tool_name: str,
     content: str,
+    *,
+    ok: bool = True,
+    duration_ms: int = 0,
 ) -> None:
     messages.append({
         "role": "tool",
         "tool_call_id": tool_call_id,
         "name": tool_name,
         "content": content,
+        "ok": ok,
+        "duration_ms": duration_ms,
     })
 
 
