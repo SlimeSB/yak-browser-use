@@ -9,6 +9,8 @@ import time
 from pathlib import Path
 from typing import Any
 
+import shutil
+
 from fastapi import FastAPI, Query, WebSocket, WebSocketDisconnect
 from fastapi.responses import JSONResponse
 
@@ -222,7 +224,9 @@ def register_all_routes(app: FastAPI) -> None:
             finally:
                 if not _snapshot_cleaned and snapshot_path.exists():
                     try:
-                        snapshot_path.unlink()
+                        errors_dir = snapshot_path.parent / "_errors"
+                        errors_dir.mkdir(parents=True, exist_ok=True)
+                        shutil.move(str(snapshot_path), str(errors_dir / snapshot_path.name))
                     except Exception:
                         pass
         except APIError:

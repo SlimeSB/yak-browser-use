@@ -157,6 +157,15 @@ class _EngineState:
             except ValueError:
                 pass
 
+    # ── Test helpers  ───────────────────────────────────────────────
+
+    def reset_for_test(self) -> None:
+        """Reset all mutable state back to initial values for test isolation."""
+        self.current_state = "idle"
+        self.bridge = None
+        self._running_pipeline = None
+        self.ws_clients.clear()
+
     # ── Cleanup  ────────────────────────────────────────────────────
 
     async def cleanup(self) -> None:
