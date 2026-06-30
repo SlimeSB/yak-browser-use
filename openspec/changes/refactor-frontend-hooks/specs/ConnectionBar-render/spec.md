@@ -1,7 +1,7 @@
 ## ADDED Requirements
 
 ### Requirement: ConnectionBar 必须从 connectionStore 获取状态
-ConnectionBar MUST 删除以下 **10 个** props：`connected`、`wsUrl`、`connectionError`、`connectMode`、`selectedProfile`、`profiles`、`onConnect`、`onDisconnect`、`onModeChange`、`onProfileChange`、`onCreateProfile`，全部改为内部 `useConnectionStore(selector)`。
+ConnectionBar MUST 删除以下 **11 个** props：`connected`、`wsUrl`、`connectionError`、`connectMode`、`selectedProfile`、`profiles`、`onConnect`、`onDisconnect`、`onModeChange`、`onProfileChange`、`onCreateProfile`，全部改为内部 `useConnectionStore(selector)`。
 
 #### Scenario: 连接状态显示
 - **WHEN** 浏览器已连接

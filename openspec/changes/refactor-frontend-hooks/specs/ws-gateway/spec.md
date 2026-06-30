@@ -28,7 +28,8 @@
 
 ### Requirement: gateway 必须按严格顺序分派事件类型
 系统 MUST 在收到 WebSocket message 时按以下 if/else 链顺序判断，匹配一项后立即 return，不继续向下匹配：
-1. `event.type.startsWith('chat.') || event.type === 'pipeline.edit'` → `chatStore.handleWsEvent(event)`
+1. `event.type.startsWith('chat.')` → `chatStore.handleWsEvent(event)`（注意：`pipeline.edit` 不在此列，由步骤 1.5 处理）
+1.5. `event.type === 'pipeline.edit'` → `chatStore.handleWsEvent(event)` + `pipelineStore.handlePipelineEdit(event)`（顺序：先 chatStore 后 pipelineStore，两者都执行后 return）
 2. `event.type === 'chrome_disconnected'` → `connectionStore.handleBrowserDisconnect()`
 3. `event.type === 'run_end'` → `pipelineStore.handleRunEnd(event)`
 4. 默认 fallthrough → `pipelineStore.addEvent(event)`
@@ -62,12 +63,14 @@
 - **WHEN** chatStore 和 pipelineStore 各自 selector 订阅同一 event 触发的 cascade 更新
 - **THEN** gateway 的一次 dispatch MUST 只触发目标 store update，各自 selector 独立 re-render，不发生级联
 
-### Requirement: gateway 分派 action 名称必须精准对齐 store spec
+### Requirement: pipeline.edit 显式分派到两个 store
+`pipeline.edit` 事件 MUST 显式分派到 chatStore **和** pipelineStore（顺序：先 chatStore 后 pipelineStore），MUST NOT 由 chatStore 回调 pipelineStore。chatStore 负责管理 pendingEdits（编辑 diff 管理），pipelineStore 负责刷新 pipelines 缓存（`handlePipelineEdit` event action）。
 gateway.ts MUST 按以下固定名称调用 store action，MUST NOT 自行发明 action 名：
 
 | 事件模式 | store | action |
 |----------|-------|--------|
-| `chat.*` 或 `pipeline.edit` | chatStore | `handleWsEvent(event)` |
+| `chat.*` (不含 pipeline.edit) | chatStore | `handleWsEvent(event)` |
+| `pipeline.edit` | chatStore + pipelineStore | `handleWsEvent(event)` + `handlePipelineEdit(event)` |
 | `chrome_disconnected` | connectionStore | `handleBrowserDisconnect()` |
 | `run_end` | pipelineStore | `handleRunEnd(event)` |
 | 默认 | pipelineStore | `addEvent(event)` |

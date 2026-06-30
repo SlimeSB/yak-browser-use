@@ -6,6 +6,12 @@ SettingsTab MUST 删除以下 **8 个** props，全部改为内部 selector：
 | prop | 来源 store | selector |
 |------|-----------|----------|
 | `reviewMode`, `onReviewModeChange` | pipelineStore | `usePipelineStore(s => s.reviewMode)` + `usePipelineStore(s => s.setReviewMode)` |
+
+> **设计说明（E4）：** reviewMode 归入 pipelineStore 的理由：
+> - reviewMode 直接影响 pipelineStore.run() 的行为（前置插入 `review_mode: "..."`），run() 需要直接读取它
+> - 如果 reviewMode 放在 uiStore 或 connectionStore，run() 就需要跨 store 依赖，增加隐式耦合
+> - reviewMode 虽是设置，但它的消费场景是管道运行语义范畴（不是连接行为也不是 UI 布局偏好）
+> - 因此这是 "影响某 store 核心 action 的配置 MUST 与那个 store 同域" 原则的应用
 | `chatLayoutReversed`, `onChatLayoutReversedChange` | uiStore | `useUiStore(s => s.chatLayoutReversed)` + `useUiStore(s => s.setChatLayoutReversed)` |
 | `theme`, `onThemeChange` | uiStore | `useUiStore(s => s.theme)` + `useUiStore(s => s.setTheme)` |
 | `highlightMode`, `onHighlightModeChange` | connectionStore | `useConnectionStore(s => s.highlightMode)` + `useConnectionStore(s => s.setHighlightMode)` |

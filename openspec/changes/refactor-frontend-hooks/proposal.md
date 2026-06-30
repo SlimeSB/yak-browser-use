@@ -27,14 +27,14 @@
 
 **修改：**
 - `App.tsx` 从 1041 行压缩到 <100 行（只剩布局编排 + 零业务 state）
-- `ChatTab.tsx` — 删除全部 22 个 props，内部直接 subscribe 对应 store；treeNodes 内部 useMemo 组装
+- `ChatTab.tsx` — 删除全部 23 个 props（详见 ChatTab-render spec），内部直接 subscribe 对应 store；treeNodes 内部 useMemo 组装
 - `ExecTab.tsx` — 删除所有 props（15→0），内部 subscribe pipelineStore
 - `LogTab.tsx` — 删除所有 props（14→0），内部 subscribe pipelineStore
 - `PipelinesTab.tsx` — 删除所有 props（5→0），内部 subscribe pipelineStore + uiStore
 - `ParamsTab.tsx` — 删除所有 props（7→0），内部 subscribe credentialStore
 - `SettingsTab.tsx` — 删除所有 props（8→0），内部 subscribe connectionStore + uiStore
-- `ConnectionBar.tsx` — 删除所有 props（6→0），内部 subscribe connectionStore
-- `StatusBar.tsx` — 删除所有 props（2→0），内部 subscribe pipelineStore
+- `ConnectionBar.tsx` — 删除所有 props（10→0），内部 subscribe connectionStore
+- `StatusBar.tsx` — 删除所有 props（2→0），内部 subscribe pipelineStore + connectionStore
 - `main.tsx` — 在 `root.render()` 前调用 `initGateway()`
 
 **删除：**
@@ -55,7 +55,7 @@
 ### Modified Capabilities
 
 - `App.tsx-layout`: App 组件职责变化——从状态持有者变为纯布局渲染器，不再持有业务 state、不再传递 prop drill、不再内联 WebSocket handler。
-- `ChatTab-render`: ChatTab 从 props-driven（22 props）改为 store-driven，内部自主订阅 chatStore / connectionStore / pipelineStore；treeNodes 在 ChatTab 内部 useMemo 组装。
+- `ChatTab-render`: ChatTab 从 props-driven（23 props）改为 store-driven，内部自主订阅 chatStore / connectionStore / pipelineStore；treeNodes 在 ChatTab 内部 useMemo 组装。
 - `ExecTab-render`: ExecTab 从 props-driven 改为内部 subscribe pipelineStore。
 - `LogTab-render`: LogTab 从 props-driven 改为内部 subscribe pipelineStore。
 - `PipelinesTab-render`: PipelinesTab 从 props-driven（5 props）改为内部 subscribe pipelineStore + uiStore。

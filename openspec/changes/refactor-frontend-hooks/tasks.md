@@ -5,7 +5,7 @@
 - [ ] 1.3 把 App.tsx 中的 `interpolateTemplate` 函数移到 `utils/interpolate.ts`（纯字符串工具，不耦合 store）
 - [ ] 1.4 实现 `ws/gateway.ts`：封装 WebSocket 连接、重连（3s/5s 退避）、关闭生命周期；暴露 `initGateway()` 和 `getGateway()` 入口；dispatch 时严格按 if/else 链顺序判断：chat.* + pipeline.edit → chatStore / chrome_disconnected → connectionStore / run_end → pipelineStore / 默认 fallthrough → pipelineStore.addEvent
 - [ ] 1.5 修改 `main.tsx`：在 `root.render(<App />)` 之前加一行 `initGateway()`
-- [ ] 1.6 实现 `stores/uiStore.ts`：activeTab（默认 'exec'）、theme（localStorage）、chatLayoutReversed（localStorage）、sidebarCollapsed（localStorage）；每个 setX 同步 localStorage 写入；setTheme 同时 set `document.documentElement.setAttribute('data-theme', ...)`
+- [ ] 1.6 实现 `stores/uiStore.ts`：activeTab（默认 'exec'）、theme（localStorage）、chatLayoutReversed（localStorage）、sidebarCollapsed（localStorage）；每个 setX 同步 localStorage 写入；setTheme 同时 set `document.documentElement.setAttribute('data-theme', ...)`；**store 顶层 MUST 立即执行** `document.documentElement.setAttribute('data-theme', initialTheme)` 确保初始化时 DOM 同步
 - [ ] 1.7 实现 `stores/credentialStore.ts`：credKeys、credKey、credValue、setCredKey、setCredValue、addCredential、removeCredential action（调对应 api）
 
 ## 2. Connection Store + Browser 领域迁移
@@ -18,7 +18,7 @@
 
 ## 3. Pipeline Store + 执行领域迁移
 
-- [ ] 3.1 实现 `stores/pipelineStore.ts`：持有 pipelines、activePreset、pipelineCache、pipelineEditor、events、result、resultErrors、loading、currentRunId、currentPipeline、cancelling、pendingReview、reviewMode；其中 run action 内部 MUST 调用 `interpolateTemplate`（从 `utils/interpolate.ts` import）对 pipeline 内容做参数展开，review_mode 前置插入逻辑；提供 run / cancel / reviewApprove / reviewReject / addEvent / handleRunEnd / refreshPipelines / deletePipeline / savePipeline / setActivePreset / setReviewMode / setPendingReview / setLoading / setCancelling / setPipelineEditor / setCurrentPipeline / setCurrentRunId / setResultErrors / setResult / clearEvents action；内部 MUST 从 events 派生 stepNames、stepStarts、stepEnds、getStepStatus(name)（语义对齐 App.tsx:791-801 行）
+- [ ] 3.1 实现 `stores/pipelineStore.ts`：持有 pipelines、activePreset、pipelineCache、pipelineEditor、events、result、resultErrors、loading、currentRunId、currentPipeline、cancelling、pendingReview、reviewMode；其中 run action 内部 MUST 调用 `interpolateTemplate`（从 `utils/interpolate.ts` import）对 pipeline 内容做参数展开，review_mode 前置插入逻辑；提供 run / cancel / reviewApprove / reviewReject / addEvent / handleRunEnd / handlePipelineEdit / refreshPipelines / deletePipeline / savePipeline / setActivePreset / setReviewMode / setPendingReview / setLoading / setCancelling / setPipelineEditor / setCurrentPipeline / setCurrentRunId / setResult / setResultErrors / clearEvents action；handleRunEnd MUST 明确不触碰 result/resultErrors（保留到下次 run 或用户手动重置）；内部 MUST 从 events 派生 stepNames、stepStarts、stepEnds、getStepStatus(name)（语义对齐 App.tsx:791-801 行）
 - [ ] 3.2 gateway.ts 的 dispatch 路径 MUST 确保 run_end 在 fallthrough 之前被 if/else 命中
 - [ ] 3.3 App.tsx 删除所有管道相关的 useState/useCallback（handleRun/handleCancel/handleReview 等），改为从 `usePipelineStore` selector 读取
 - [ ] 3.4 ExecTab、LogTab、StatusBar、PipelinesTab 删除 props，改为内部 `usePipelineStore` selector；PipelinesTab 同时需要 `useUiStore` 提供 setActiveTab 能力
@@ -26,8 +26,8 @@
 
 ## 4. Chat Store + 聊天领域迁移
 
-- [ ] 4.1 实现 `stores/chatStore.ts`：持有 chatMessages、pendingEdits、activePendingEdit（selector: pendingEdits[0] ?? null）、processedEditIds（模块级 Set）、streamStates（模块级 Record 不放进 state）、currentSessionId、chatSessions、pipelineSessions、expandedNodes、loadingSession、selectTreeNodes（memoized selector）；提供 send / cancelChat / resetChat / newSession / archiveSession / selectSession / switchPipeline / toggleExpand / confirmEdit / revertEdit / handleWsEvent action
-- [ ] 4.2 chatStore.handleWsEvent 实现完整 8 种 chat.* 子类型 + pipeline.edit 类型处理：chat.tool_start/end/error/stream_start/text_chunk/think_chunk/tool_generated/stream_end，以及 pipeline.edit（pendingEdits 管理 + 触发 api.listPipelines 刷新）；每种 MUST 完全复制 App.tsx:309-452 行的语义
+- [ ] 4.1 实现 `stores/chatStore.ts`：持有 chatMessages、pendingEdits、activePendingEdit（selector: pendingEdits[0] ?? null）、processedEditIds（模块级 Set）、streamStates（模块级 Record 不放进 state）、currentSessionId、chatSessions、pipelineSessions、expandedNodes、loadingSession、selectTreeNodes（memoized selector）；提供 send / cancelChat / resetChat / setMessages / newSession / archiveSession / selectSession / switchPipeline / toggleExpand / confirmEdit / revertEdit / handleWsEvent action
+- [ ] 4.2 chatStore.handleWsEvent 实现完整 8 种 chat.* 子类型 + pipeline.edit 类型处理：chat.tool_start/end/error/stream_start/text_chunk/think_chunk/tool_generated/stream_end，gateway 分派 pipeline.edit 到 chatStore.handleWsEvent + pipelineStore.handlePipelineEdit；每种 MUST 完全复制 App.tsx:309-452 行的语义；追加消息时必须调用 nextMsgId() 生成 ID
 - [ ] 4.3 App.tsx 删除所有 chat 相关 useState/useRef/useCallback；删除内联 200 行 ws.onmessage handler
 - [ ] 4.4 ChatTab 删除所有 props，改为内部 chatStore + connectionStore + pipelineStore selector；treeNodes 计算从 store 数据 useMemo 得到
 - [ ] 4.5 `npm run build` 通过，手动验证：发送消息、流式响应、session 切换、pipeline edit confirm/review 流程工作正常
@@ -47,6 +47,4 @@
 - [ ] 6.3 检查 re-render 性能：React DevTools Profiler 录制聊天流式更新，对比迁移前后渲染次数无显著退化
 - [ ] 6.4 清理临时 debug 代码（如 `console.log('[chatMessages] ...')`、`streamStatesRef` 相关 console.log）
 
-## 7. 后端问题
 
-已单独归档到 `openspec/changes/refactor-frontend-hooks/backend-debt.md`，不阻塞本次前端重构。

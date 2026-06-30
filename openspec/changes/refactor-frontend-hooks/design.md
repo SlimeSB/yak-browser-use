@@ -128,7 +128,7 @@ on 路径分 4 个阶段，每阶段独立可 build、可验证：
 | streamStatesRef 异步更新导致 text_chunk 丢失 | 高 | 严格保持 zustand action 内的同步更新顺序，不引入 async |
 | 大量 re-render 影响聊天流式体验 | 中 | zustand selector 确保只有订阅特定字段的组件 re-render；messages 数组不可变拷贝保持原语义 |
 | 迁移期间两个 state 源并存导致不一致 | 中 | 每个 store 完全替换 App.tsx 同名字段后才移除 App 端的 useState |
-| ChatTab 内部 treeNodes 计算（跨 chatStore + pipelineStore）| 低 | ChatTab 用多个 selector + useMemo 组合 |
+| ChatTab selectTreeNodes 跨 store memo 组合（chatStore.sessions + pipelineStore.pipelines）| 低 | chatStore 暴露 selectTreeNodes selector，内部基于 chatSessions/pipelineSessions/pipelines 三字段 useMemo |
 
 ## ## 迁移计划
 
@@ -146,4 +146,31 @@ on 路径分 4 个阶段，每阶段独立可 build、可验证：
 - [x] interpolateTemplate 放哪里？**→ D8 决策：src/utils/interpolate.ts**
 - [x] chat.* 事件完整覆盖？**→ 8 种子类型全列（chatStore spec 已更新）**
 - [x] gateway 的 dispatch 顺序？**→ 严格 if/else 链（ws-gateway spec 已明确）**
-- [ ] 是否应该在 zustand接入 middleware（如 devtools / logger）以便后续调试？**→ 建议保留接入点但不强制，视需求定**
+- [x] 是否应该在 zustand 接入 middleware？**→ D13 决策：默认不接入；但 store create 调用 MUST 包装在 `_create()` 中，便于未来一行代码启用 devtools；详见 D13**
+- [x] 子组件 props 精确数量对齐？**→ proposal 30-37 行已统一：ChatTab=23 / ExecTab=15 / LogTab=14 / PipelinesTab=5 / ParamsTab=7 / SettingsTab=8 / ConnectionBar=10 / StatusBar=2
+- [x] Phase 5 任务分散问题？**→ D14 决策：design 表格保持高层视图，tasks.md 按可执行颗粒度展开
+
+### D13：zustand middleware 决策
+
+**结论：** 默认不接入 middleware。但 store 创建必须封装为：
+
+```typescript
+// stores/_factory.ts
+export const _create = <T>(fn: ...) => create(fn);  // 一行替换即可接入 devtools
+```
+
+**理由：** zustand devtools 对调试帮助显著，但 production bundle 应保持最小化。实现者在需要开发调试时可以用 `import { devtools } from 'zustand/middleware'` 包装 `_create`，无需修改各 store 文件。logger middleware 暂不引入。
+
+### D14：design 阶段表 vs tasks.md 颗粒度对齐
+
+**结论：** design.md 的 D5 阶段表是 **高层视图**（5 个 Phase），tasks.md 按 **可执行颗粒度** 展开（编号 1.1-6.4）。Phase 边界对应关系：
+
+| Phase | 对应 tasks |
+|-------|-----------|
+| Phase 1 骨架 | 1.1-1.7 |
+| Phase 2 connectionStore | 2.1-2.4 |
+| Phase 3 pipelineStore | 3.1-3.5 |
+| Phase 4 chatStore | 4.1-4.5 |
+| Phase 5 组件 props + App 收尾 | 2.3 + 3.4 + 4.4 + 5.1-5.5 |
+
+Phase 5 活动时间上跨越多个 task section 是因为 App.tsx props 删除依赖于对应 store 完成；这种"交叉依赖"在单次 PR 内是正常的。
