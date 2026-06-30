@@ -841,25 +841,27 @@ def register_all_routes(app: FastAPI) -> None:
         if session is None:
             session = service.create_session()
         session_id = session.session_id
-        turn_index = (len(session.messages) if session else 0) + 1
+        _turn_idx = (len(session.messages) if session else 0)
 
         def _push(event: dict) -> None:
             service.events.push(event)
 
         def _on_stream_start() -> None:
-            _push({"type": "chat.stream_start", "turn_index": turn_index})
+            nonlocal _turn_idx
+            _turn_idx += 1
+            _push({"type": "chat.stream_start", "turn_index": _turn_idx})
 
         def _on_stream_end(has_tool_calls: bool) -> None:
-            _push({"type": "chat.stream_end", "has_tool_calls": has_tool_calls, "turn_index": turn_index})
+            _push({"type": "chat.stream_end", "has_tool_calls": has_tool_calls, "turn_index": _turn_idx})
 
         def _on_text_delta(text: str) -> None:
-            _push({"type": "chat.text_chunk", "content": text, "turn_index": turn_index})
+            _push({"type": "chat.text_chunk", "content": text, "turn_index": _turn_idx})
 
         def _on_reasoning_delta(text: str) -> None:
-            _push({"type": "chat.think_chunk", "content": text, "turn_index": turn_index})
+            _push({"type": "chat.think_chunk", "content": text, "turn_index": _turn_idx})
 
         def _on_tool_generated(name: str) -> None:
-            _push({"type": "chat.tool_generated", "tool_name": name, "turn_index": turn_index})
+            _push({"type": "chat.tool_generated", "tool_name": name, "turn_index": _turn_idx})
 
         def _interrupt_check() -> bool:
             s = service.get_session()

@@ -161,7 +161,12 @@ class SessionStore:
         sessions = list(index.values())
         if not include_archived:
             sessions = [s for s in sessions if not s.get("archived")]
-        sessions.sort(key=lambda s: s.get("created_at", ""), reverse=True)
+        def _created_at_key(s: dict):
+            v = s.get("created_at", 0)
+            if isinstance(v, (int, float)):
+                return (0, v)
+            return (1, str(v))
+        sessions.sort(key=_created_at_key, reverse=True)
         return sessions
 
     def archive_session(self, session_id: str) -> bool:
