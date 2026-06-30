@@ -342,6 +342,41 @@ export default function ChatTab() {
     setSending(false);
   };
 
+  // Divider drag-to-resize
+  const dividerRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = dividerRef.current;
+    if (!el) return;
+    let dragging = false;
+    const onMouseDown = (e: MouseEvent) => {
+      e.preventDefault();
+      dragging = true;
+      document.body.style.cursor = 'col-resize';
+      document.body.style.userSelect = 'none';
+    };
+    const onMouseMove = (e: MouseEvent) => {
+      if (!dragging) return;
+      const parent = el.parentElement;
+      if (!parent) return;
+      const rect = parent.getBoundingClientRect();
+      const ratio = ((e.clientX - rect.left) / rect.width) * 100;
+      setSplitRatio(Math.min(80, Math.max(20, ratio)));
+    };
+    const onMouseUp = () => {
+      dragging = false;
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    };
+    el.addEventListener('mousedown', onMouseDown);
+    document.addEventListener('mousemove', onMouseMove);
+    document.addEventListener('mouseup', onMouseUp);
+    return () => {
+      el.removeEventListener('mousedown', onMouseDown);
+      document.removeEventListener('mousemove', onMouseMove);
+      document.removeEventListener('mouseup', onMouseUp);
+    };
+  }, []);
+
   return (
     <div className="chat-layout">
       <div className="chat-body" style={{ flexDirection: chatLayoutReversed ? 'row-reverse' : 'row' }}>
@@ -423,7 +458,7 @@ export default function ChatTab() {
           </div>
         </div>
 
-        <div className="chat-divider" />
+        <div className="chat-divider" ref={dividerRef} />
 
         <EditorPanel />
       </div>
