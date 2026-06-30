@@ -54,6 +54,13 @@ Typical scenarios:
 
 **注意：** 不先调用 `browser_wait_for_download` 直接 `read_data` 会导致文件不存在错误。
 
+### 验证码识别
+遇到页面出现验证码时使用 `captcha` 工具：
+- **文字验证码**：`captcha(type="ocr", dom_selector="img[alt*='验证码']")` — 自动从页面提取图片并识别文字
+- **滑块验证码**：`captcha(type="slide", dom_selector="滑块图片选择器", background_bytes="背景图 base64")` — 检测滑块缺口位置，返回 `target_x` / `target_y` 中心点坐标
+- **最佳实践**：优先传 `dom_selector`（自动从 CDP 提取图片），避免手动传递大段 base64 数据
+- `image_bytes` 支持纯 base64 或 `data:image/...;base64,` 前缀格式
+
 ### 工具间数据传递 (shared_store)
 工具通过 shared_store 传递数据，避免大数据绕经 LLM 上下文。shared_store 是一个单次会话内的运行时键值总线，支持两种引用语法：
 

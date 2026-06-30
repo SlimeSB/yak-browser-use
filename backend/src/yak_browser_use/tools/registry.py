@@ -713,7 +713,7 @@ def _build_registry_impl() -> None:
                 },
                 "image_bytes": {
                     "type": "string",
-                    "description": "验证码图片的 base64 编码数据（纯 base64 字符串，不带 data:image/... 前缀）"
+                    "description": "验证码图片的 base64 编码数据（支持纯 base64 或 data:image/...;base64, 前缀格式）"
                 },
                 "image_path": {
                     "type": "string",
@@ -721,7 +721,7 @@ def _build_registry_impl() -> None:
                 },
                 "background_bytes": {
                     "type": "string",
-                    "description": "仅 slide 模式需要：滑块背景图的 base64 编码数据"
+                    "description": "仅 slide 模式需要：滑块背景图的 base64 编码数据（支持纯 base64 或 data:image/...;base64, 前缀格式）"
                 }
             },
             "required": ["type"]

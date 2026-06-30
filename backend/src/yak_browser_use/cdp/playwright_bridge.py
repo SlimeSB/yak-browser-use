@@ -19,6 +19,7 @@ import asyncio
 import base64
 import json as _json
 import logging
+import re
 import uuid
 from pathlib import Path
 from typing import Any, Callable
@@ -1473,12 +1474,10 @@ class PlaywrightBridge:
         await self._ensure_page()
         html = await self._page.content()
         if only_body:
-            import re
             m = re.search(r"<body[^>]*>(.*)</body>", html, flags=re.DOTALL | re.IGNORECASE)
             if m:
                 html = m.group(1)
         if strip_styles:
-            import re
             html = re.sub(r"<(style|script)[^>]*>.*?</\1>", "", html, flags=re.DOTALL | re.IGNORECASE)
         return html
 

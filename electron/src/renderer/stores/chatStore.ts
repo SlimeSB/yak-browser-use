@@ -9,10 +9,8 @@ interface StreamState {
   reasoningParts: string[];
   toolAnnotation: string;
   complete: boolean;
+  assistantMsgId: string;
 }
-
-const streamStates: Record<number, StreamState> = {};
-const processedEditIds = new Set<string>();
 
 interface ChatState {
   chatMessages: ChatMessage[];
@@ -24,6 +22,9 @@ interface ChatState {
   loadingSession: boolean;
   activePendingEdit: PendingEdit | null;
   selectTreeNodes: TreeNode[];
+  _streamStates: Record<number, StreamState>;
+  _processedEditIds: Set<string>;
+  _lastAssistantId: string | null;
   send: (text: string) => Promise<void>;
   cancelChat: () => Promise<void>;
   resetChat: () => Promise<void>;
@@ -67,6 +68,40 @@ function _buildTreeNodes(chatSessions: SessionMeta[], pipelineSessions: Record<s
   return nodes;
 }
 
+type _SetFn = (partial: Partial<ChatState> | ((s: ChatState) => Partial<ChatState>)) => void;
+
+function _patchAssistantMsg(set: _SetFn, get: () => ChatState, updater: (msg: ChatMessage) => ChatMessage) {
+  const lastId = get()._lastAssistantId;
+  set((s) => {
+    const next = [...s.chatMessages];
+    if (lastId) {
+      const idx = next.findIndex(m => m.id === lastId);
+      if (idx >= 0 && next[idx].role === 'assistant') {
+        next[idx] = updater(next[idx]);
+        return { chatMessages: next };
+      }
+    }
+    for (let i = next.length - 1; i >= 0; i--) {
+      if (next[i].role === 'assistant') {
+        next[i] = updater(next[i]);
+        break;
+      }
+    }
+    return { chatMessages: next };
+  });
+}
+
+function _appendError(set: _SetFn, get: () => ChatState, errMsg: string) {
+  set((s) => {
+    const last = s.chatMessages[s.chatMessages.length - 1];
+    if (last && last.role === 'assistant' && !last.content) {
+      const msgs = s.chatMessages.slice(0, -1);
+      return { chatMessages: [...msgs, { id: nextMsgId(), role: 'assistant', content: errMsg }] };
+    }
+    return { chatMessages: [...s.chatMessages, { id: nextMsgId(), role: 'assistant', content: errMsg }] };
+  });
+}
+
 export const useChatStore = _create<ChatState>((set, get) => ({
   chatMessages: [],
   pendingEdits: [],
@@ -77,6 +112,9 @@ export const useChatStore = _create<ChatState>((set, get) => ({
   loadingSession: false,
   activePendingEdit: null,
   selectTreeNodes: [],
+  _streamStates: {},
+  _processedEditIds: new Set(),
+  _lastAssistantId: null,
 
   send: async (text) => {
     if (!text.trim()) return;
@@ -89,24 +127,10 @@ export const useChatStore = _create<ChatState>((set, get) => ({
       if (result.ok) {
         usePipelineStore.getState().refreshPipelines();
       } else {
-        set((s) => {
-          const last = s.chatMessages[s.chatMessages.length - 1];
-          if (last && last.role === 'assistant' && !last.content) {
-            const msgs = s.chatMessages.slice(0, -1);
-            return { chatMessages: [...msgs, { id: nextMsgId(), role: 'assistant', content: `Error: ${result.error ?? 'Unknown'}` }] };
-          }
-          return { chatMessages: [...s.chatMessages, { id: nextMsgId(), role: 'assistant', content: `Error: ${result.error ?? 'Unknown'}` }] };
-        });
+        _appendError(set, get, `Error: ${result.error ?? 'Unknown'}`);
       }
     } catch (e) {
-      set((s) => {
-        const last = s.chatMessages[s.chatMessages.length - 1];
-        if (last && last.role === 'assistant' && !last.content) {
-          const msgs = s.chatMessages.slice(0, -1);
-          return { chatMessages: [...msgs, { id: nextMsgId(), role: 'assistant', content: `Error: ${String(e)}` }] };
-        }
-        return { chatMessages: [...s.chatMessages, { id: nextMsgId(), role: 'assistant', content: `Error: ${String(e)}` }] };
-      });
+      _appendError(set, get, `Error: ${String(e)}`);
     }
   },
 
@@ -120,7 +144,13 @@ export const useChatStore = _create<ChatState>((set, get) => ({
   resetChat: async () => {
     try {
       const result = await api.chatReset();
-      if (result.ok) set({ chatMessages: [] });
+      if (result.ok) {
+        set({
+          chatMessages: [],
+          _streamStates: {},
+          _lastAssistantId: null,
+        });
+      }
     } catch (e) { console.error('Chat reset failed:', e); }
   },
 
@@ -224,7 +254,6 @@ export const useChatStore = _create<ChatState>((set, get) => ({
         return { expandedNodes: next };
       });
     }
-    // Load sessions on first expand
     if (name !== '__chat__') {
       const s = get();
       if (!s.pipelineSessions[name]) {
@@ -303,8 +332,14 @@ export const useChatStore = _create<ChatState>((set, get) => ({
     // ── chat.error ──
     if (et === 'chat.error') {
       const ti = event.turn_index as number;
-      if (ti != null && streamStates[ti]) {
-        streamStates[ti].complete = true;
+      if (ti != null) {
+        set((s) => {
+          const st = s._streamStates[ti];
+          if (st) {
+            return { _streamStates: { ...s._streamStates, [ti]: { ...st, complete: true } } };
+          }
+          return {};
+        });
       }
       set((s) => ({
         chatMessages: [...s.chatMessages, { id: nextMsgId(), role: 'assistant', content: `[Error] ${(event.message as string) || ''}` }],
@@ -315,18 +350,21 @@ export const useChatStore = _create<ChatState>((set, get) => ({
     // ── chat.stream_start ──
     if (et === 'chat.stream_start') {
       const ti = event.turn_index as number;
-      streamStates[ti] = { accumulating: '', reasoningParts: [], toolAnnotation: '', complete: false };
-      // Prune stale states (>20 turns old)
-      for (const k of Object.keys(streamStates)) {
-        const n = Number(k);
-        if (!isNaN(n) && n < ti - 20) delete streamStates[n];
-      }
+      const newId = nextMsgId();
       set((s) => {
-        const last = s.chatMessages[s.chatMessages.length - 1];
-        if (last && last.role === 'assistant' && !last.content) {
-          return { chatMessages: [...s.chatMessages.slice(0, -1), { id: nextMsgId(), role: 'assistant', content: '' }] };
+        const streamStates = { ...s._streamStates, [ti]: { accumulating: '', reasoningParts: [], toolAnnotation: '', complete: false, assistantMsgId: newId } };
+        for (const k of Object.keys(streamStates)) {
+          const n = Number(k);
+          if (!isNaN(n) && n < ti - 20) delete streamStates[n];
         }
-        return { chatMessages: [...s.chatMessages, { id: nextMsgId(), role: 'assistant', content: '' }] };
+        const last = s.chatMessages[s.chatMessages.length - 1];
+        let chatMessages: ChatMessage[];
+        if (last && last.role === 'assistant' && !last.content) {
+          chatMessages = [...s.chatMessages.slice(0, -1), { id: newId, role: 'assistant', content: '' }];
+        } else {
+          chatMessages = [...s.chatMessages, { id: newId, role: 'assistant', content: '' }];
+        }
+        return { _streamStates: streamStates, chatMessages, _lastAssistantId: newId };
       });
       return;
     }
@@ -335,19 +373,12 @@ export const useChatStore = _create<ChatState>((set, get) => ({
     if (et === 'chat.text_chunk') {
       const ti = event.turn_index as number;
       const content = (event.content as string) || '';
-      const st = streamStates[ti] || { accumulating: '', reasoningParts: [], toolAnnotation: '', complete: false };
-      streamStates[ti] = st;
-      st.accumulating += content;
-      set((s) => {
-        const next = [...s.chatMessages];
-        for (let i = next.length - 1; i >= 0; i--) {
-          if (next[i].role === 'assistant') {
-            next[i] = { ...next[i], content: st.toolAnnotation + st.accumulating };
-            break;
-          }
-        }
-        return { chatMessages: next };
-      });
+      const st = get()._streamStates[ti];
+      if (st) {
+        const newSt = { ...st, accumulating: st.accumulating + content };
+        set((s) => ({ _streamStates: { ...s._streamStates, [ti]: newSt } }));
+        _patchAssistantMsg(set, get, (msg) => ({ ...msg, content: newSt.toolAnnotation + newSt.accumulating }));
+      }
       return;
     }
 
@@ -355,19 +386,12 @@ export const useChatStore = _create<ChatState>((set, get) => ({
     if (et === 'chat.think_chunk') {
       const ti = event.turn_index as number;
       const content = (event.content as string) || '';
-      const st = streamStates[ti] || { accumulating: '', reasoningParts: [], toolAnnotation: '', complete: false };
-      streamStates[ti] = st;
-      st.reasoningParts.push(content);
-      set((s) => {
-        const next = [...s.chatMessages];
-        for (let i = next.length - 1; i >= 0; i--) {
-          if (next[i].role === 'assistant') {
-            next[i] = { ...next[i], reasoning: st.reasoningParts.join('') };
-            break;
-          }
-        }
-        return { chatMessages: next };
-      });
+      const st = get()._streamStates[ti];
+      if (st) {
+        const newSt = { ...st, reasoningParts: [...st.reasoningParts, content] };
+        set((s) => ({ _streamStates: { ...s._streamStates, [ti]: newSt } }));
+        _patchAssistantMsg(set, get, (msg) => ({ ...msg, reasoning: newSt.reasoningParts.join('') }));
+      }
       return;
     }
 
@@ -376,21 +400,15 @@ export const useChatStore = _create<ChatState>((set, get) => ({
       const toolName = (event.tool_name as string) || '';
       const ti = event.turn_index as number;
       if (ti != null) {
-        const st = streamStates[ti] || { accumulating: '', reasoningParts: [], toolAnnotation: '', complete: false };
-        streamStates[ti] = st;
-        st.toolAnnotation = '\n\n[Calling ' + toolName + '...]';
-      }
-      set((s) => {
-        const next = [...s.chatMessages];
-        for (let i = next.length - 1; i >= 0; i--) {
-          if (next[i].role === 'assistant') {
-            const existing = next[i].content;
-            const label = '[Calling ' + toolName + '...]';
-            next[i] = { ...next[i], content: existing ? existing + '\n\n' + label : label };
-            break;
-          }
+        const st = get()._streamStates[ti];
+        if (st) {
+          const newSt = { ...st, toolAnnotation: '\n\n[Calling ' + toolName + '...]' };
+          set((s) => ({ _streamStates: { ...s._streamStates, [ti]: newSt } }));
         }
-        return { chatMessages: next };
+      }
+      _patchAssistantMsg(set, get, (msg) => {
+        const label = '[Calling ' + toolName + '...]';
+        return { ...msg, content: msg.content ? msg.content + '\n\n' + label : label };
       });
       return;
     }
@@ -398,19 +416,13 @@ export const useChatStore = _create<ChatState>((set, get) => ({
     // ── chat.stream_end ──
     if (et === 'chat.stream_end') {
       const ti = event.turn_index as number;
-      const st = streamStates[ti];
+      const st = get()._streamStates[ti];
       if (st) {
-        st.complete = true;
-        set((s) => {
-          const next = [...s.chatMessages];
-          for (let i = next.length - 1; i >= 0; i--) {
-            if (next[i].role === 'assistant') {
-              next[i] = { ...next[i], content: st.toolAnnotation + (st.accumulating || next[i].content) };
-              break;
-            }
-          }
-          return { chatMessages: next };
-        });
+        set((s) => ({ _streamStates: { ...s._streamStates, [ti]: { ...st, complete: true } } }));
+        _patchAssistantMsg(set, get, (msg) => ({
+          ...msg,
+          content: st.toolAnnotation + (st.accumulating || msg.content),
+        }));
       }
       return;
     }
@@ -418,18 +430,20 @@ export const useChatStore = _create<ChatState>((set, get) => ({
     // ── pipeline.edit ──
     if (et === 'pipeline.edit') {
       const editId = event.edit_id as string;
-      if (editId && !processedEditIds.has(editId)) {
-        processedEditIds.add(editId);
+      const s = get();
+      if (editId && !s._processedEditIds.has(editId)) {
+        const newSet = new Set(s._processedEditIds);
+        newSet.add(editId);
         const edit: PendingEdit = {
           edit_id: editId,
           original: (event.original as string) || '',
           modified: (event.modified as string) || '',
           explanation: (event.explanation as string) || '',
         };
-        set((s) => ({ pendingEdits: [...s.pendingEdits, edit] }));
+        set((st) => ({ _processedEditIds: newSet, pendingEdits: [...st.pendingEdits, edit] }));
       } else if (editId) {
-        set((s) => ({
-          pendingEdits: s.pendingEdits.map(e =>
+        set((st) => ({
+          pendingEdits: st.pendingEdits.map(e =>
             e.edit_id === editId
               ? { ...e, modified: (event.modified as string) || e.modified, explanation: (event.explanation as string) || e.explanation }
               : e
@@ -443,9 +457,7 @@ export const useChatStore = _create<ChatState>((set, get) => ({
 
 let _lastTreeNodesKey = '';
 
-// Subscribe to changes to recompute selectTreeNodes and activePendingEdit
 useChatStore.subscribe((s) => {
-  // activePendingEdit — compare by edit_id to avoid reference inequality loops
   const active = s.pendingEdits.length > 0 ? s.pendingEdits[0] : null;
   const prevId = s.activePendingEdit?.edit_id ?? null;
   const nextId = active?.edit_id ?? null;
@@ -453,7 +465,6 @@ useChatStore.subscribe((s) => {
     useChatStore.setState({ activePendingEdit: active });
   }
 
-  // selectTreeNodes — only rebuild when session data actually changes
   const pipelines = usePipelineStore.getState().pipelines;
   const key = `${s.chatSessions.length}|${Object.keys(s.pipelineSessions).length}|${pipelines.length}`;
   if (key !== _lastTreeNodesKey) {

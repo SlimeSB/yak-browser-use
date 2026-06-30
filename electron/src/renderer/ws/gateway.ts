@@ -77,4 +77,23 @@ export function initGateway() {
   connect();
 }
 
-// HMR cleanup — vite type available via tsconfig "types": ["vite/client"]
+export function destroyGateway() {
+  _stopped = true;
+  clearTimeout(_reconnectTimer);
+  _reconnectScheduled = false;
+  if (_ws) {
+    _ws.onclose = null;
+    _ws.onerror = null;
+    _ws.close();
+    _ws = null;
+  }
+}
+
+// HMR cleanup
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const _importMeta = import.meta as any;
+if (_importMeta.hot) {
+  _importMeta.hot.dispose(() => {
+    destroyGateway();
+  });
+}
