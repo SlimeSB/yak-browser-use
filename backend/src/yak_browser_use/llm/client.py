@@ -99,6 +99,10 @@ class LLMClient:
     def get_client(self) -> AsyncOpenAI:
         return self._client
 
+    async def aclose(self) -> None:
+        """Close the underlying HTTP client session."""
+        await self._client.aclose()
+
     async def ainvoke(
         self,
         messages: list,

@@ -6,6 +6,7 @@ chains file_read → format_convert (if needed) → limit/offset truncation.
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 from yak_browser_use.utils.logging import get_logger
@@ -67,6 +68,10 @@ async def read_data(
             if pipeline:
                 tmp_abs.unlink(missing_ok=True)
             else:
+                try:
+                    os.rmdir(tmp_dir)
+                except OSError:
+                    pass
                 Path(tmp_rel).unlink(missing_ok=True)
     else:
         from yak_browser_use.tools.file_read import file_read

@@ -168,7 +168,7 @@ async def apply_field_mapping(
     for filepath in files:
         ext = filepath.suffix.lower()
         if ext == ".json":
-            all_records.extend(_load_json_records(filepath))
+            all_records.extend(load_json_records(filepath))
         elif ext == ".csv":
             with open(filepath, "r", encoding="utf-8-sig") as f:
                 reader = csv.DictReader(f)

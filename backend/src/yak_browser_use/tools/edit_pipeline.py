@@ -33,7 +33,12 @@ def _trim_oldest() -> None:
     """Remove the oldest edit from tracking dicts when they exceed MAX_DICT_SIZE."""
     while len(_checkpoints) > MAX_DICT_SIZE:
         oldest = next(iter(_checkpoints))
-        _checkpoints.pop(oldest, None)
+        cp = _checkpoints.pop(oldest, None)
+        if cp is not None and cp.exists():
+            try:
+                cp.unlink()
+            except OSError:
+                pass
         _processed_edits.discard(oldest)
         _edit_status.pop(oldest, None)
         _edit_pipelines.pop(oldest, None)

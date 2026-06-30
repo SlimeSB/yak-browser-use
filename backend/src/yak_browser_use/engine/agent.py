@@ -141,67 +141,68 @@ class StreamingLLMCall:
             create_kwargs["tools"] = tools
 
         self._streaming_active = True
-        if self._on_stream_start:
-            self._on_stream_start()
+        try:
+            if self._on_stream_start:
+                self._on_stream_start()
 
-        stream = await client.chat.completions.create(**create_kwargs)
+            stream = await client.chat.completions.create(**create_kwargs)
 
-        content_parts: list[str] = []
-        thinking_parts: list[str] = []
-        tool_calls_acc: dict[int, dict] = {}
-        tool_names_seen: set[str] = set()
-        last_chunk_usage = None
-        last_chunk_model = None
-        chunk_count = 0
+            content_parts: list[str] = []
+            thinking_parts: list[str] = []
+            tool_calls_acc: dict[int, dict] = {}
+            tool_names_seen: set[str] = set()
+            last_chunk_usage = None
+            last_chunk_model = None
+            chunk_count = 0
 
-        async for chunk in stream:
-            chunk_count += 1
-            if self._interrupt_check and chunk_count % 10 == 0 and self._interrupt_check():
-                break
-            if not chunk.choices:
-                continue
-            delta = chunk.choices[0].delta
+            async for chunk in stream:
+                chunk_count += 1
+                if self._interrupt_check and chunk_count % 10 == 0 and self._interrupt_check():
+                    break
+                if not chunk.choices:
+                    continue
+                delta = chunk.choices[0].delta
 
-            reasoning = getattr(delta, "reasoning_content", None) or ""
-            if reasoning:
-                thinking_parts.append(reasoning)
-                if self._on_reasoning_delta:
-                    self._on_reasoning_delta(reasoning)
+                reasoning = getattr(delta, "reasoning_content", None) or ""
+                if reasoning:
+                    thinking_parts.append(reasoning)
+                    if self._on_reasoning_delta:
+                        self._on_reasoning_delta(reasoning)
 
-            if delta.content:
-                content_parts.append(delta.content)
-                if self._on_text_delta:
-                    self._on_text_delta(delta.content)
+                if delta.content:
+                    content_parts.append(delta.content)
+                    if self._on_text_delta:
+                        self._on_text_delta(delta.content)
 
-            if delta.tool_calls:
-                self._accumulate_tool_calls(delta.tool_calls, tool_calls_acc, tool_names_seen)
+                if delta.tool_calls:
+                    self._accumulate_tool_calls(delta.tool_calls, tool_calls_acc, tool_names_seen)
 
-            last_chunk_usage = chunk.usage if getattr(chunk, "usage", None) else last_chunk_usage
-            last_chunk_model = getattr(chunk, "model", None) or last_chunk_model
+                last_chunk_usage = chunk.usage if getattr(chunk, "usage", None) else last_chunk_usage
+                last_chunk_model = getattr(chunk, "model", None) or last_chunk_model
 
-        content = "".join(content_parts)
-        thinking = "".join(thinking_parts)
+            content = "".join(content_parts)
+            thinking = "".join(thinking_parts)
 
-        sorted_tc = sorted(tool_calls_acc.items(), key=lambda x: x[0])
-        final_tool_calls = [tc for _, tc in sorted_tc]
+            sorted_tc = sorted(tool_calls_acc.items(), key=lambda x: x[0])
+            final_tool_calls = [tc for _, tc in sorted_tc]
 
-        if self._on_stream_end:
-            self._on_stream_end(bool(final_tool_calls))
+            if self._on_stream_end:
+                self._on_stream_end(bool(final_tool_calls))
 
-        usage_dict: dict | None = None
-        if last_chunk_usage is not None:
-            usage_dict = {
-                "prompt_tokens": getattr(last_chunk_usage, "prompt_tokens", None),
-                "completion_tokens": getattr(last_chunk_usage, "completion_tokens", None),
-                "total_tokens": getattr(last_chunk_usage, "total_tokens", None),
-            }
-        _log_streaming_response(
-            self._persist_id, self._turn_counter, create_kwargs,
-            content, thinking, final_tool_calls,
-            usage=usage_dict, model=last_chunk_model,
-        )
-
-        self._streaming_active = False
+            usage_dict: dict | None = None
+            if last_chunk_usage is not None:
+                usage_dict = {
+                    "prompt_tokens": getattr(last_chunk_usage, "prompt_tokens", None),
+                    "completion_tokens": getattr(last_chunk_usage, "completion_tokens", None),
+                    "total_tokens": getattr(last_chunk_usage, "total_tokens", None),
+                }
+            _log_streaming_response(
+                self._persist_id, self._turn_counter, create_kwargs,
+                content, thinking, final_tool_calls,
+                usage=usage_dict, model=last_chunk_model,
+            )
+        finally:
+            self._streaming_active = False
 
         resp = SimpleNamespace()
         resp.content = content

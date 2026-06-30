@@ -237,69 +237,74 @@ async def launch_isolated_chrome(
         except Exception:
             logger.debug("launch_isolated: failed to stop playwright instance", exc_info=True)
         _playwright_instance = None
+    try:
 
-    if exe and "msedge" in exe.lower():
-        logger.info("Launching Edge via subprocess with profile: %s", user_data_dir)
+        if exe and "msedge" in exe.lower():
+            logger.info("Launching Edge via subprocess with profile: %s", user_data_dir)
 
-        try:
-            _user_chrome_process = await asyncio.create_subprocess_exec(
-                exe,
-                f"--remote-debugging-port={port}",
-                f"--user-data-dir={user_data_dir}",
-                "--no-first-run",
-                "--no-default-browser-check",
-                "--remote-allow-origins=*",
-                "--force-renderer-accessibility",
-                f"--lang={_detect_lang()}",
-                stdout=asyncio.subprocess.DEVNULL,
-                stderr=asyncio.subprocess.DEVNULL,
-            )
-            if _user_chrome_process.pid:
-                _launched_pids.add(_user_chrome_process.pid)
-        except Exception as e:
-            raise RuntimeError(f"Failed to launch Edge: {e}") from e
-    else:
-        logger.info("No Edge detected, falling back to Playwright bundled Chromium")
-
-        try:
-            from playwright.async_api import async_playwright
-        except ImportError:
-            raise RuntimeError(
-                "Cannot find or launch Chrome. "
-                "Ensure Chrome is running, or install playwright "
-                "(`uv add playwright && playwright install chromium`)."
-            )
-
-        try:
-            _playwright_instance = await async_playwright().start()
-            _playwright_browser = await _playwright_instance.chromium.launch(
-                headless=False,
-                channel=None,
-                args=[
+            try:
+                _user_chrome_process = await asyncio.create_subprocess_exec(
+                    exe,
                     f"--remote-debugging-port={port}",
                     f"--user-data-dir={user_data_dir}",
+                    "--no-first-run",
+                    "--no-default-browser-check",
+                    "--remote-allow-origins=*",
                     "--force-renderer-accessibility",
                     f"--lang={_detect_lang()}",
-                ],
+                    stdout=asyncio.subprocess.DEVNULL,
+                    stderr=asyncio.subprocess.DEVNULL,
+                )
+                if _user_chrome_process.pid:
+                    _launched_pids.add(_user_chrome_process.pid)
+            except Exception as e:
+                raise RuntimeError(f"Failed to launch Edge: {e}") from e
+        else:
+            logger.info("No Edge detected, falling back to Playwright bundled Chromium")
+
+            try:
+                from playwright.async_api import async_playwright
+            except ImportError:
+                raise RuntimeError(
+                    "Cannot find or launch Chrome. "
+                    "Ensure Chrome is running, or install playwright "
+                    "(`uv add playwright && playwright install chromium`)."
+                )
+
+            try:
+                _playwright_instance = await async_playwright().start()
+                _playwright_browser = await _playwright_instance.chromium.launch(
+                    headless=False,
+                    channel=None,
+                    args=[
+                        f"--remote-debugging-port={port}",
+                        f"--user-data-dir={user_data_dir}",
+                        "--force-renderer-accessibility",
+                        f"--lang={_detect_lang()}",
+                    ],
+                )
+            except Exception as e:
+                raise RuntimeError(f"Failed to launch Playwright browser: {e}") from e
+
+        from .discover import _fetch_json
+
+        for i in range(30):
+            logger.debug("launch_isolated_chrome: retry %d/30", i + 1)
+            data = await _fetch_json(
+                f"http://127.0.0.1:{port}/json/version", timeout=2.0
             )
-        except Exception as e:
-            raise RuntimeError(f"Failed to launch Playwright browser: {e}") from e
+            if data and "webSocketDebuggerUrl" in data:
+                logger.info("launch_isolated_chrome: ready on port %d", port)
+                return data["webSocketDebuggerUrl"]
+            await asyncio.sleep(0.5)
 
-    from .discover import _fetch_json
-
-    for i in range(30):
-        logger.debug("launch_isolated_chrome: retry %d/30", i + 1)
-        data = await _fetch_json(
-            f"http://127.0.0.1:{port}/json/version", timeout=2.0
+        raise RuntimeError(
+            "Cannot obtain isolated browser WS URL (browser launch timed out)."
         )
-        if data and "webSocketDebuggerUrl" in data:
-            logger.info("launch_isolated_chrome: ready on port %d", port)
-            return data["webSocketDebuggerUrl"]
-        await asyncio.sleep(0.5)
+    except Exception:
+        await cleanup_isolated()
+        raise
 
-    raise RuntimeError(
-        "Cannot obtain isolated browser WS URL (browser launch timed out)."
-    )
 
 
 async def restart_user_chrome() -> str:

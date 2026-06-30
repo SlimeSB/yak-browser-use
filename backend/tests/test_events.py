@@ -52,7 +52,7 @@ class TestEventSink:
         sink = EventSink(tmp_path)
         sink.emit_error("step_1", "BROWSER_ERROR", "Page load timeout", "traceback...")
         events = _read_events(tmp_path)
-        assert events[0]["type"] == "error"
+        assert events[0]["type"] == "step_error"
         assert events[0]["code"] == "BROWSER_ERROR"
         assert events[0]["message"] == "Page load timeout"
         assert events[0]["stack"] == "traceback..."

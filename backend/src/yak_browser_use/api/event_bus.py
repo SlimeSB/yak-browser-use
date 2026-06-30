@@ -8,6 +8,7 @@ Routes events to:
 
 from __future__ import annotations
 
+import asyncio
 import time
 from typing import Any, Callable
 
@@ -48,8 +49,14 @@ class EventBus:
             except Exception:
                 logger.warning("Event callback failed for type=%s", event.get("type"), exc_info=True)
         if self._engine_state and hasattr(self._engine_state, "ws_clients"):
+            dead: list[asyncio.Queue] = []
             for q in self._engine_state.ws_clients:
                 try:
                     q.put_nowait(event)
                 except Exception:
+                    dead.append(q)
+            for q in dead:
+                try:
+                    self._engine_state.ws_clients.remove(q)
+                except ValueError:
                     pass

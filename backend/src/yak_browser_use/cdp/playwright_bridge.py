@@ -765,13 +765,13 @@ class PlaywrightBridge:
         self._process_watch_task: asyncio.Task | None = None
         self._disconnected: bool = False
         self._seen_pages: set[Page] = set()
+        self._background_tasks: set[asyncio.Task] = set()
 
     # ------------------------------------------------------------------
     # Lifecycle
     # ------------------------------------------------------------------
 
-    @staticmethod
-    def _schedule(coro):
+    def _schedule(self, coro):
         task = asyncio.ensure_future(coro)
 
         def _done(t: asyncio.Task) -> None:
@@ -781,7 +781,9 @@ class PlaywrightBridge:
             if exc:
                 logger.warning("_schedule: background task failed", exc_info=exc)
 
+        self._background_tasks.add(task)
         task.add_done_callback(_done)
+        task.add_done_callback(self._background_tasks.discard)
         return task
 
     async def wait_for_page_scan(self, timeout: float = 5.0) -> None:
@@ -839,6 +841,9 @@ class PlaywrightBridge:
         self._stop_event.set()
         self._disconnected = True
         self._seen_pages.clear()
+        for task in self._background_tasks:
+            task.cancel()
+        self._background_tasks.clear()
         self._stop_health_check()
         if self._process_watch_task is not None:
             self._process_watch_task.cancel()
@@ -888,6 +893,8 @@ class PlaywrightBridge:
 
         # 新标签页不要显示旧页面的高亮，先清空
         self._last_highlight_elements = []
+        self._ref_map.clear()
+        self._branch_index.clear()
         try:
             await page.evaluate("window.__ybu_last_elements = [];")
             await page.evaluate(_HIGHLIGHT_BOOTSTRAP)
@@ -970,6 +977,7 @@ class PlaywrightBridge:
         should fall back to ``page.on("download")`` + ``save_as()``).
         """
         path = self._resolve_download_path()
+        cdp_session = None
         try:
             cdp_session = await self._context.new_cdp_session(page)
             await cdp_session.send("Page.setDownloadBehavior", {
@@ -980,6 +988,9 @@ class PlaywrightBridge:
         except Exception:
             logger.warning("CDP setDownloadBehavior failed for page, will fall back to download event", exc_info=True)
             return False
+        finally:
+            if cdp_session is not None:
+                await cdp_session.detach()
 
     def _resolve_download_path(self, pipeline_name: str | None = None) -> Path:
         """Resolve the download directory for *pipeline_name* (or current).

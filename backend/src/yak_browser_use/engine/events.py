@@ -1,6 +1,7 @@
 """Event system — publishes pipeline events to files, WS clients, and logs."""
 from __future__ import annotations
 
+import asyncio
 import json
 import time
 from pathlib import Path
@@ -28,10 +29,16 @@ class EventSink:
                 f.write(line + "\n")
         except OSError:
             pass
+        dead: list[asyncio.Queue] = []
         for ws in self._ws_clients:
             try:
                 ws.put_nowait(event)
             except Exception:  # expected: queue full or client gone
+                dead.append(ws)
+        for ws in dead:
+            try:
+                self._ws_clients.remove(ws)
+            except ValueError:
                 pass
 
     def emit_run_start(self, pipeline_name: str, run_id: str, version: str) -> None:
@@ -52,10 +59,10 @@ class EventSink:
         })
 
     def emit_error(self, step: str, code: str, message: str, stack: str = "") -> None:
-        self._emit({"type": "error", "step": step, "code": code, "message": message, "stack": stack})
+        self._emit({"type": "step_error", "step": step, "code": code, "message": message, "stack": stack})
 
     def emit_log(self, step: str, message: str, level: str = "INFO") -> None:
         self._emit({"type": "log", "step": step, "message": message, "level": level})
 
     def close(self) -> None:
-        pass  # No cleanup needed currently
+        self._ws_clients.clear()

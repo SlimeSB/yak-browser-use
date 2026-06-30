@@ -85,8 +85,11 @@ def register_all_routes(app: FastAPI) -> None:
                 kwargs["base_url"] = api_base
 
             llm = LLMClient(**kwargs)
-            await llm.ainvoke([UserMessage(content="Say hello in one word.")])
-            return JSONResponse({"ok": True})
+            try:
+                await llm.ainvoke([UserMessage(content="Say hello in one word.")])
+                return JSONResponse({"ok": True})
+            finally:
+                await llm.aclose()
         except Exception as e:
             return JSONResponse({"ok": False, "error": str(e)})
 
@@ -164,54 +167,64 @@ def register_all_routes(app: FastAPI) -> None:
             snapshot_path = wm.versions_dir / f"snapshot_{ts}.pipeline.yaml"
             snapshot_path.write_text(pipeline_text, encoding="utf-8")
 
-            from yak_browser_use.compiler.parser import inject_params_to_pipeline
-            pipeline_text = inject_params_to_pipeline(pipeline_text, params)
-
-            parsed, steps = _prepare_steps(pipeline_text, snapshot_path)
-
-            if params:
-                for step in steps:
-                    if step.get("is_goal"):
-                        desc = step.get("goal_description", "") or step.get("description", "")
-                        extras = " | ".join(f"{k}={v}" for k, v in params.items())
-                        step["goal_description"] = f"{desc} (params: {extras})"
-
-            from yak_browser_use.engine._lifecycle.guardian import (
-                create_guardian_from_frontmatter,
-                inject_guardian_config_to_steps,
-            )
-            inject_guardian_config_to_steps(steps, parsed.frontmatter)
-            guardian = create_guardian_from_frontmatter(parsed.frontmatter)
-
-            from yak_browser_use.cdp.helpers import CDPHelpers
-            browser = CDPHelpers(engine_state.bridge)
-
+            _snapshot_cleaned = False
             try:
-                from yak_browser_use.engine.runner_preset import run_pipeline
-            except ImportError:
-                raise ServerError(
-                    "engine.runner_preset is not yet available — pipeline execution cannot start."
+                from yak_browser_use.compiler.parser import inject_params_to_pipeline
+                pipeline_text = inject_params_to_pipeline(pipeline_text, params)
+
+                parsed, steps = _prepare_steps(pipeline_text, snapshot_path)
+
+                if params:
+                    for step in steps:
+                        if step.get("is_goal"):
+                            desc = step.get("goal_description", "") or step.get("description", "")
+                            extras = " | ".join(f"{k}={v}" for k, v in params.items())
+                            step["goal_description"] = f"{desc} (params: {extras})"
+
+                from yak_browser_use.engine._lifecycle.guardian import (
+                    create_guardian_from_frontmatter,
+                    inject_guardian_config_to_steps,
+                )
+                inject_guardian_config_to_steps(steps, parsed.frontmatter)
+                guardian = create_guardian_from_frontmatter(parsed.frontmatter)
+
+                from yak_browser_use.cdp.helpers import CDPHelpers
+                browser = CDPHelpers(engine_state.bridge)
+
+                try:
+                    from yak_browser_use.engine.runner_preset import run_pipeline
+                except ImportError:
+                    raise ServerError(
+                        "engine.runner_preset is not yet available — pipeline execution cannot start."
+                    )
+
+                ctx = await run_pipeline(
+                    pipeline_name=parsed.name,
+                    steps=steps,
+                    cdp_helpers=browser,
+                    pipeline_path=snapshot_path,
+                    frontmatter=parsed.frontmatter,
+                    guardian=guardian,
+                    ws_clients=engine_state.ws_clients,
                 )
 
-            ctx = await run_pipeline(
-                pipeline_name=parsed.name,
-                steps=steps,
-                cdp_helpers=browser,
-                pipeline_path=snapshot_path,
-                frontmatter=parsed.frontmatter,
-                guardian=guardian,
-            )
-
-            status = "completed" if not ctx.errors else "failed"
-            first_error = ctx.errors[0].get("message", str(ctx.errors[0])) if ctx.errors else None
-            return JSONResponse({
-                "run_id": ctx.run_id,
-                "pipeline": ctx.pipeline_name,
-                "status": status,
-                "step_count": len(steps),
-                "errors": ctx.errors,
-                "error": first_error,
-            })
+                status = "completed" if not ctx.errors else "failed"
+                first_error = ctx.errors[0].get("message", str(ctx.errors[0])) if ctx.errors else None
+                _snapshot_cleaned = True
+                return JSONResponse({
+                    "run_id": ctx.run_id,
+                    "pipeline": ctx.pipeline_name,
+                    "status": status,
+                    "step_count": len(steps),
+                    "errors": ctx.errors,
+                    "error": first_error,
+                })
+            finally:
+                if not _snapshot_cleaned and snapshot_path.exists():
+                    try:
+                        snapshot_path.unlink()
+                    except Exception:
+                        pass
         except APIError:
             raise
         except Exception as exc:
@@ -333,9 +346,12 @@ def register_all_routes(app: FastAPI) -> None:
             return JSONResponse({"connected": True, "ws_url": actual_ws[:80]})
         except Exception as exc:
             logger.exception("Chrome connect failed")
-            # 清理可能已创建但未完成的路由的 bridge
             if engine_state.bridge:
                 await engine_state.disconnect_chrome()
+            # 如果 isolated Chrome 已启动但后续连接失败，杀掉孤进程
+            if mode == "isolated":
+                from yak_browser_use.cdp.launcher import cleanup_isolated
+                await cleanup_isolated()
             raise ServerError(str(exc))
 
     @app.get("/api/chrome/status")
@@ -700,32 +716,42 @@ def register_all_routes(app: FastAPI) -> None:
             snapshot_path = wm.versions_dir / f"snapshot_{ts}.pipeline.yaml"
             snapshot_path.write_text(pipeline_text, encoding="utf-8")
 
+            _snapshot_cleaned = False
             try:
-                from yak_browser_use.engine.runner_preset import run_pipeline
-            except ImportError:
-                raise ServerError("engine.runner_preset is not yet available")
+                try:
+                    from yak_browser_use.engine.runner_preset import run_pipeline
+                except ImportError:
+                    raise ServerError("engine.runner_preset is not yet available")
 
-            from yak_browser_use.cdp.helpers import CDPHelpers
-            browser = CDPHelpers(engine_state.bridge)
+                from yak_browser_use.cdp.helpers import CDPHelpers
+                browser = CDPHelpers(engine_state.bridge)
 
-            ctx = await run_pipeline(
-                pipeline_name=pipeline_name,
-                steps=steps,
-                cdp_helpers=browser,
-                pipeline_path=snapshot_path,
-                frontmatter=parsed.frontmatter,
-                resume_from_index=resume_from_index,
-                guardian=guardian,
-            )
+                ctx = await run_pipeline(
+                    pipeline_name=pipeline_name,
+                    steps=steps,
+                    cdp_helpers=browser,
+                    pipeline_path=snapshot_path,
+                    frontmatter=parsed.frontmatter,
+                    resume_from_index=resume_from_index,
+                    guardian=guardian,
+                    ws_clients=engine_state.ws_clients,
+                )
 
-            final_status = "completed" if not ctx.errors else "failed"
-            return JSONResponse({
-                "status": "restarted",
-                "run_id": ctx.run_id,
-                "pipeline": ctx.pipeline_name,
-                "resume_from_index": resume_from_index,
-                "pipeline_status": final_status,
-            })
+                final_status = "completed" if not ctx.errors else "failed"
+                _snapshot_cleaned = True
+                return JSONResponse({
+                    "status": "restarted",
+                    "run_id": ctx.run_id,
+                    "pipeline": ctx.pipeline_name,
+                    "resume_from_index": resume_from_index,
+                    "pipeline_status": final_status,
+                })
+            finally:
+                if not _snapshot_cleaned and snapshot_path.exists():
+                    try:
+                        snapshot_path.unlink()
+                    except Exception:
+                        pass
         except APIError:
             raise
         except Exception as exc:

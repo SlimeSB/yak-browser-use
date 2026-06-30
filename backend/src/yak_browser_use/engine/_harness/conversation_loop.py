@@ -231,6 +231,12 @@ class Agent:
                 logger.error("conversation_loop: unrecoverable error, stopping: %s", e)
                 self._emit(EVENT_ERROR, message=str(e))
                 self._state.interrupted = True
+            except asyncio.CancelledError:
+                raise
+            except Exception as e:
+                logger.exception("conversation_loop: unexpected error in tool execution: %s", e)
+                self._emit(EVENT_ERROR, message=str(e))
+                self._state.final_response = f"工具执行时发生意外错误: {e}"
         else:
             content = getattr(response, "content", None)
             final_response = content or ""

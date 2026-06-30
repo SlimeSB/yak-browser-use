@@ -37,6 +37,7 @@ class _EngineState:
         self._service: object | None = None
         self._service_lock = asyncio.Lock()
         self._connect_lock = asyncio.Lock()
+        self._bridge_lock = asyncio.Lock()
         self.pipeline_lock = asyncio.Lock()
 
     # ── Chrome connection  ──────────────────────────────────────────
@@ -59,15 +60,16 @@ class _EngineState:
             if self._running_pipeline is not None:
                 raise RuntimeError("A pipeline is currently running — cannot reconnect Chrome")
 
-            if self.bridge is not None:
-                logger.warning("Chrome already connected — disconnecting old bridge first")
-                old_bridge = self.bridge
-                self.bridge = None
-                self.current_state = "idle"
-                try:
-                    await old_bridge.stop()
-                except Exception:
-                    logger.debug("Failed to stop old bridge", exc_info=True)
+            async with self._bridge_lock:
+                if self.bridge is not None:
+                    logger.warning("Chrome already connected — disconnecting old bridge first")
+                    old_bridge = self.bridge
+                    self.bridge = None
+                    self.current_state = "idle"
+                    try:
+                        await old_bridge.stop()
+                    except Exception:
+                        logger.debug("Failed to stop old bridge", exc_info=True)
 
             self.current_state = "connecting"
 
@@ -85,19 +87,21 @@ class _EngineState:
             bridge_id = id(bridge)
             async def _on_bridge_disconnected() -> None:
                 """Bridge-specific disconnect callback — only clears state if this bridge is still current."""
-                if self.bridge is None or id(self.bridge) != bridge_id:
-                    return
-                logger.info("EngineState: processing bridge disconnect (bridge_id=%s)", bridge_id)
-                self.bridge = None
-                self.current_state = "idle"
-                await self.broadcast_event({
-                    "type": "chrome_disconnected",
-                    "reason": "browser_closed",
-                })
+                async with self._bridge_lock:
+                    if self.bridge is None or id(self.bridge) != bridge_id:
+                        return
+                    logger.info("EngineState: processing bridge disconnect (bridge_id=%s)", bridge_id)
+                    self.bridge = None
+                    self.current_state = "idle"
+                    await self.broadcast_event({
+                        "type": "chrome_disconnected",
+                        "reason": "browser_closed",
+                    })
 
             bridge._on_disconnect_cb = _on_bridge_disconnected
 
-            self.bridge = bridge
+            async with self._bridge_lock:
+                self.bridge = bridge
             self.current_state = "connected"
             logger.info("Chrome connected via %s ...", ws_url[:60])
             return ws_url
@@ -107,9 +111,10 @@ class _EngineState:
         if self._running_pipeline is not None:
             raise RuntimeError("A pipeline is currently running")
 
-        if self.bridge:
-            await self.bridge.stop()
-        self.bridge = None
+        async with self._bridge_lock:
+            if self.bridge:
+                await self.bridge.stop()
+            self.bridge = None
         self.current_state = "idle"
         logger.info("Chrome disconnected")
 
@@ -158,9 +163,10 @@ class _EngineState:
         """Gracefully shut down everything: bridge, pipeline, WS clients."""
         logger.info("EngineState: cleaning up …")
 
-        if self.bridge:
-            await self.bridge.stop()
-            self.bridge = None
+        async with self._bridge_lock:
+            if self.bridge:
+                await self.bridge.stop()
+                self.bridge = None
 
         self._running_pipeline = None
         self.ws_clients.clear()
