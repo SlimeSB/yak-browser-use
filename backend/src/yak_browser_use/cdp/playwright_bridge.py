@@ -1174,6 +1174,9 @@ class PlaywrightBridge:
                         document.querySelectorAll('[data-ybu-ref]').forEach(function(el) {
                             el.removeAttribute('data-ybu-ref');
                         });
+                        document.querySelectorAll('[data-ybu-prog-label]').forEach(function(el) {
+                            el.removeAttribute('data-ybu-prog-label');
+                        });
                         window.__ybu_last_elements = [];
                     })()
                 """)
@@ -1712,7 +1715,9 @@ class PlaywrightBridge:
         if highlight_on:
             await self._page.evaluate(
                 'document.querySelectorAll("[data-ybu-ref]")'
-                '.forEach(el => el.removeAttribute("data-ybu-ref"))'
+                '.forEach(el => el.removeAttribute("data-ybu-ref"));'
+                'document.querySelectorAll("[data-ybu-prog-label]")'
+                '.forEach(el => el.removeAttribute("data-ybu-prog-label"))'
             )
 
         name_counter: dict[str, int] = {}
@@ -1771,7 +1776,9 @@ class PlaywrightBridge:
         if highlight_on:
             await self._page.evaluate(
                 'document.querySelectorAll("[data-ybu-ref]")'
-                '.forEach(el => el.removeAttribute("data-ybu-ref"))'
+                '.forEach(el => el.removeAttribute("data-ybu-ref"));'
+                'document.querySelectorAll("[data-ybu-prog-label]")'
+                '.forEach(el => el.removeAttribute("data-ybu-prog-label"))'
             )
 
         cdp = await self._context.new_cdp_session(self._page)
