@@ -180,12 +180,16 @@ class ToolContext(CircuitBreakerMixin):
             self._fail_count += 1
             raise
 
-    async def source(self) -> str:
-        """Return the full serialized HTML of the current page."""
+    async def source(self, strip_styles: bool = False, only_body: bool = False) -> str:
+        """Return the full serialized HTML of the current page.
+
+        *strip_styles* removes ``<style>`` and ``<script>`` tags to reduce payload size.
+        *only_body* returns only the ``<body>`` content.
+        """
         self._check_domain()
         self._check_failures()
         try:
-            result = await self._bridge.source()
+            result = await self._bridge.source(strip_styles=strip_styles, only_body=only_body)
             self._fail_count = 0
             return result
         except Exception:

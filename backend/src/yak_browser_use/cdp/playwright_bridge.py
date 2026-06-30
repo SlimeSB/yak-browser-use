@@ -871,6 +871,22 @@ class PlaywrightBridge:
         """The currently active Playwright Page."""
         return self._page
 
+    async def _ensure_page(self) -> None:
+        """Guard: auto-start the bridge if _page is None, raise otherwise.
+
+        Called at the start of every method that uses ``self._page`` so that
+        a call before ``start()`` or after ``stop()`` gets a clear error
+        instead of ``NoneType can't be used in 'await' expression``.
+        """
+        if self._page is None:
+            if self._disconnected:
+                raise RuntimeError(
+                    "PlaywrightBridge is disconnected. Call await bridge.start() to reconnect."
+                )
+            raise RuntimeError(
+                "PlaywrightBridge._page is None. Call await bridge.start() before using browser operations."
+            )
+
     # ------------------------------------------------------------------
     # New-page highlight auto-injection
     # ------------------------------------------------------------------
@@ -1395,6 +1411,7 @@ class PlaywrightBridge:
     # ------------------------------------------------------------------
 
     async def goto(self, url: str) -> dict:
+        await self._ensure_page()
         # SSRF guard: only allow http/https
         if not url.startswith(("http://", "https://")):
             return {"ok": False, "error": f"URL scheme not allowed: {url.split(':')[0]}:// (only http/https)"}
@@ -1407,13 +1424,15 @@ class PlaywrightBridge:
         return {"url": url}
 
     async def click(self, selector: str, click_count: int = 1) -> dict:
+        await self._ensure_page()
         locator = self._page.locator(selector)
         try:
             if click_count > 1:
-                await locator.dblclick()
+                await locator.dblclick(timeout=5000)
             else:
-                await locator.click()
+                await locator.click(timeout=5000)
         except Exception:
+            await locator.wait_for(state="attached", timeout=3000)
             await locator.evaluate("el => el.click()")
         return {"selector": selector}
 
@@ -1425,9 +1444,10 @@ class PlaywrightBridge:
     # ------------------------------------------------------------------
 
     async def fill(self, selector: str, text: str) -> dict:
+        await self._ensure_page()
         locator = self._page.locator(selector)
         try:
-            await locator.fill(text)
+            await locator.fill(text, timeout=5000)
         except Exception:
             await locator.focus()
             await locator.fill("")
@@ -1435,6 +1455,7 @@ class PlaywrightBridge:
         return {"selector": selector}
 
     async def scroll(self, direction: str = "down", amount: int = 300) -> dict:
+        await self._ensure_page()
         if direction == "down":
             js = f"window.scrollBy(0, {amount});"
         elif direction == "up":
@@ -1448,10 +1469,21 @@ class PlaywrightBridge:
         await self._page.evaluate(js)
         return {"direction": direction, "amount": amount}
 
-    async def source(self) -> str:
-        return await self._page.content()
+    async def source(self, strip_styles: bool = False, only_body: bool = False) -> str:
+        await self._ensure_page()
+        html = await self._page.content()
+        if only_body:
+            import re
+            m = re.search(r"<body[^>]*>(.*)</body>", html, flags=re.DOTALL | re.IGNORECASE)
+            if m:
+                html = m.group(1)
+        if strip_styles:
+            import re
+            html = re.sub(r"<(style|script)[^>]*>.*?</\1>", "", html, flags=re.DOTALL | re.IGNORECASE)
+        return html
 
     async def evaluate(self, js: str) -> Any:
+        await self._ensure_page()
         return await self._page.evaluate(js)
 
     # ------------------------------------------------------------------
@@ -1459,19 +1491,23 @@ class PlaywrightBridge:
     # ------------------------------------------------------------------
 
     async def hover(self, selector: str) -> dict:
+        await self._ensure_page()
         await self._page.locator(selector).hover()
         return {"selector": selector}
 
     async def unhover(self, selector: str) -> dict:
         """Move mouse to (0,0) to unhover. ``selector`` is informational only."""
+        await self._ensure_page()
         await self._page.mouse.move(0, 0)
         return {"selector": selector}
 
     async def focus(self, selector: str) -> dict:
+        await self._ensure_page()
         await self._page.locator(selector).focus()
         return {"selector": selector}
 
     async def select(self, selector: str, value: str, mode: str = "value") -> dict:
+        await self._ensure_page()
         locator = self._page.locator(selector)
         if mode == "label":
             await locator.select_option(label=value)
@@ -1482,6 +1518,7 @@ class PlaywrightBridge:
         return {"selector": selector}
 
     async def clear(self, selector: str, mode: str = "js") -> dict:
+        await self._ensure_page()
         if mode == "pw":
             await self._page.locator(selector).clear()
         else:
@@ -1491,14 +1528,17 @@ class PlaywrightBridge:
         return {"selector": selector}
 
     async def keyboard_press(self, key: str) -> dict:
+        await self._ensure_page()
         await self._page.keyboard.press(key)
         return {"key": key}
 
     async def keyboard_type(self, text: str) -> dict:
+        await self._ensure_page()
         await self._page.keyboard.type(text)
         return {"text": text}
 
     async def navigate(self, action: str, hard: bool = False) -> dict:
+        await self._ensure_page()
         if action == "back":
             await self._page.go_back()
         elif action == "forward":
@@ -1512,6 +1552,7 @@ class PlaywrightBridge:
         return {"action": action}
 
     async def wait(self, mode: str = "time", **kwargs: Any) -> dict:
+        await self._ensure_page()
         if mode == "time":
             duration = kwargs.get("duration", 1000)
             await asyncio.sleep(duration / 1000.0)
@@ -1528,6 +1569,7 @@ class PlaywrightBridge:
     # ------------------------------------------------------------------
 
     async def tab_new(self, url: str = "about:blank") -> dict:
+        await self._ensure_page()
         if self._context is None:
             return {"ok": False, "error": "browser not connected"}
         new_page = await self._context.new_page()
@@ -1539,6 +1581,7 @@ class PlaywrightBridge:
         return {"targetId": page_id, "url": new_page.url}
 
     async def tab_switch(self, target_id: str) -> dict:
+        await self._ensure_page()
         if self._context is None:
             return {"ok": False, "error": "browser not connected"}
         for p in self._context.pages:
@@ -1559,6 +1602,7 @@ class PlaywrightBridge:
         raise ValueError(f"Tab not found: {target_id}")
 
     async def tab_close(self, target_id: str) -> dict:
+        await self._ensure_page()
         if self._context is None:
             return {"ok": False, "error": "browser not connected"}
         for p in self._context.pages:
@@ -1575,6 +1619,7 @@ class PlaywrightBridge:
         raise ValueError(f"Tab not found: {target_id}")
 
     async def tab_list(self) -> list[dict]:
+        await self._ensure_page()
         if self._context is None:
             return []
         result = []
@@ -1603,6 +1648,7 @@ class PlaywrightBridge:
     # ------------------------------------------------------------------
 
     async def copy_to_clipboard(self, selector: str) -> dict:
+        await self._ensure_page()
         text = await self._page.evaluate(
             f"(function() {{ var el = document.querySelector({_json.dumps(selector)}); return el ? (el.textContent || el.innerText || '') : ''; }})()"
         )
@@ -1615,6 +1661,7 @@ class PlaywrightBridge:
         or the "clipboard-read" permission. In headless/automated contexts this
         will often return an empty string.
         """
+        await self._ensure_page()
         text = await self._page.evaluate("() => navigator.clipboard?.readText() || ''")
         js = (
             f"(function() {{"
@@ -1634,9 +1681,11 @@ class PlaywrightBridge:
     # ------------------------------------------------------------------
 
     async def wait_for_network_idle(self) -> None:
+        await self._ensure_page()
         await self._page.wait_for_load_state("networkidle")
 
     async def wait_for_page_load(self) -> None:
+        await self._ensure_page()
         await self._page.wait_for_load_state("load")
 
     # ------------------------------------------------------------------
@@ -1644,6 +1693,7 @@ class PlaywrightBridge:
     # ------------------------------------------------------------------
 
     async def get_page_html(self, cached: bool = False) -> str:
+        await self._ensure_page()
         if cached and "raw_html" in self._element_map:
             return self._element_map.get("raw_html", "")
         html = await self._page.content()
@@ -1655,6 +1705,7 @@ class PlaywrightBridge:
     # ------------------------------------------------------------------
 
     async def screenshot(self) -> str:
+        await self._ensure_page()
         data = await self._page.screenshot(type="png", full_page=False)
         return base64.b64encode(data).decode("utf-8")
 
@@ -1675,6 +1726,7 @@ class PlaywrightBridge:
            since Playwright 1.48+).  Falls back to ``_progressive_snapshot()``
            if the CDP Accessibility domain is not supported.
         """
+        await self._ensure_page()
         # Enable Accessibility domain, then get the full AX tree via CDP
         try:
             cdp = await self._context.new_cdp_session(self._page)
@@ -1781,6 +1833,7 @@ class PlaywrightBridge:
         Phase 1: full-depth walk collecting every interactive element.
         Phase 2: density detection → shallow sampling for dense containers.
         """
+        await self._ensure_page()
         self._ref_map.clear()
 
         highlight_on = await self._is_highlight_enabled()
@@ -1902,6 +1955,7 @@ class PlaywrightBridge:
 
         Call before screenshot(image=True) — ensure_highlights() is fire-and-forget.
         """
+        await self._ensure_page()
         try:
             await self._page.wait_for_function(
                 "() => document.querySelector('.ybu-overlay-container') !== null || document.getElementById('ybu-highlights') !== null",
@@ -1921,11 +1975,13 @@ class PlaywrightBridge:
         The ``"ai"`` mode produces a LLM-optimized YAML-like tree of all interactive
         and semantic elements with their roles, accessible names, and hierarchy.
         """
+        await self._ensure_page()
         text = await self._page.aria_snapshot(mode="ai")
         return {"summary": text, "mode": "aria"}
 
 
     async def capture_snapshot(self) -> dict:
+        await self._ensure_page()
         result: dict = {}
         try:
             result["screenshot_base64"] = await self.screenshot()

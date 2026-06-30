@@ -204,12 +204,18 @@ async def execute_browser_op(
 
             elif op_type == "source":
                 cached = params.get("cached", False)
+                strip_styles = params.get("strip_styles", False)
+                only_body = params.get("only_body", False)
                 if hasattr(bridge, "get_page_html"):
                     html = await bridge.get_page_html(cached=cached)
                 else:
-                    html = await bridge.source()
+                    html = await bridge.source(strip_styles=strip_styles, only_body=only_body)
                 result["html"] = html
                 result["result"] = {"length": len(html)}
+                if strip_styles:
+                    result["result"]["stripped"] = True
+                if only_body:
+                    result["result"]["only_body"] = True
 
             elif op_type == "lookup_selector":
                 ref = params.get("ref", "")

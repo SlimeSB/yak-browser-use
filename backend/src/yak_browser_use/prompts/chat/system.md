@@ -73,7 +73,7 @@ When the user asks you to fill passwords, API keys, or other secrets:
 ## Guidelines
 - Prefer atomic browser_* tools for simple operations
 - For complex multi-step goals, use `todo` to break down the task, then execute with `browser_*` tools
-- If you're unsure about a selector, use `browser_source()` to inspect the page
+- If you're unsure about a selector, use `browser_snapshot(mode="a11y", query="关键词")` or `browser_lookup_selector(@e_XX)` — avoid `browser_source()` unless you absolutely need raw HTML (it can return 500KB+)
 - Report errors clearly and suggest next steps
 - If the user's instruction is ambiguous, ask for clarification
 

@@ -7,7 +7,7 @@ Prefer these tools for most operations:
 - `browser_fill(selector, text)` — fill an input field
 - `browser_snapshot(mode?, query?)` — 页面快照。推荐渐进式：aria（概览）→ a11y+query（精准）→ a11y（全量）
 - `browser_scroll(direction)` — scroll the page (up/down)
-- `browser_source(cached?)` — get the full page HTML source
+- `browser_source(cached?, strip_styles?, only_body?)` — get the full page HTML source (⚠️ heavy: may return 500KB+ HTML, prefer `browser_snapshot` or `browser_lookup_selector` instead. Only use when you need raw HTML that snapshots can't provide.)
 - `browser_eval_js(code)` — execute JavaScript on the page
 - `browser_lookup_selector(ref)` — get element details by @e_XXXXX reference
 

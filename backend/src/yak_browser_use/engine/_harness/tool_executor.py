@@ -464,9 +464,14 @@ def _apply_heavy_data_filter(
         html = result_dict.pop("html", "")
         if html:
             result_payload = {"length": len(html)}
+            if len(html) > 500_000:
+                result_payload["truncated"] = True
+                result_payload["note"] = (
+                    f"HTML 过大 ({len(html):,} 字节)，建议使用 strip_styles=true 或 only_body=true 缩减"
+                )
             if fn_args.get("cached"):
                 result_payload["cached"] = False
-                result_payload["note"] = "无缓存，已从 CDP 获取"
+                result_payload["note"] = result_payload.get("note", "") + " 无缓存，已从 CDP 获取"
             result_dict["result"] = result_payload
         return
 
