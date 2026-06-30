@@ -597,19 +597,21 @@ _HIGHLIGHT_BOOTSTRAP = """
             }
         }
 
+        // 滚动时先 RAF 节流更新已有 badge 位置（transform，不触发重新布局），
+        // 再防抖 300ms 后调 _ybu_render 让新滚入视野的元素出现。
+        // 这样连续滚动时 badge 不闪烁，滚动停止 300ms 后刷新 viewport。
+        var _scrollEndTimer = null;
         function _ybu_onScroll() {
-            if (!document.hidden) {
-                // Active tab: RAF-coalesced, one layout pass per frame
-                if (scrollRAF) return;
-                scrollRAF = requestAnimationFrame(function() {
-                    scrollRAF = null;
-                    _ybu_update_positions();
-                });
-            } else {
-                // Browser throttles RAF to ~1fps on hidden tabs.
-                // Update immediately so badges don't freeze during scroll.
+            if (scrollRAF) return;
+            scrollRAF = requestAnimationFrame(function() {
+                scrollRAF = null;
                 _ybu_update_positions();
-            }
+            });
+            if (_scrollEndTimer) clearTimeout(_scrollEndTimer);
+            _scrollEndTimer = setTimeout(function() {
+                _scrollEndTimer = null;
+                _ybu_render();
+            }, 300);
         }
 
         function _ybu_update_positions() {
@@ -771,7 +773,9 @@ class PlaywrightBridge:
                 self._bind_download_fallback(p)
 
         # 自动扫描当前页面，让开局就有高亮（不依赖 chat tool call）
-        await self._auto_scan()
+        # 注意：不 await，让 scan 在后台跑，否则 CDP getFullAXTree/DOM.getDocument
+        # 可能在页面未完全加载时阻塞 start() 数秒甚至无限期
+        self._schedule(self._auto_scan())
         self._start_highlight_guard()
         logger.info("PlaywrightBridge connected (pages: %d)", len(self._context.pages))
 
@@ -820,14 +824,19 @@ class PlaywrightBridge:
         try:
             page_id = str(uuid.uuid4())[:8]
             await page.evaluate("(id) => { window.__ybu_page_id = id }", page_id)
-            await page.wait_for_load_state("domcontentloaded")
-            if self._highlight_enabled:
-                if self._last_highlight_elements:
-                    elements_json = _json.dumps(self._last_highlight_elements)
-                    await page.evaluate(
-                        f"window.__ybu_last_elements = {elements_json};"
-                    )
-                await page.evaluate(_HIGHLIGHT_BOOTSTRAP)
+            await asyncio.wait_for(
+                page.wait_for_load_state("domcontentloaded"), timeout=5.0,
+            )
+        except asyncio.TimeoutError:
+            logger.debug("_on_new_page: wait_for_load_state timed out")
+        except Exception:
+            logger.debug("_on_new_page: wait_for_load_state failed", exc_info=True)
+
+        # 新标签页不要显示旧页面的高亮，先清空
+        self._last_highlight_elements = []
+        try:
+            await page.evaluate("window.__ybu_last_elements = [];")
+            await page.evaluate(_HIGHLIGHT_BOOTSTRAP)
         except Exception:
             logger.debug("_on_new_page highlight injection failed", exc_info=True)
 
@@ -837,9 +846,10 @@ class PlaywrightBridge:
         if not ok:
             self._bind_download_fallback(page)
 
-        # 新标签页自动设为活动页并扫描（让用户点链接后马上看到高亮）
+        # 新标签页自动设为活动页（让用户点链接后马上看到高亮）
         self._page = page
-        await self._auto_scan()
+        # 不 await 扫描，让 scan 在后台跑，否则 getFullAXTree 可能阻塞数秒
+        self._schedule(self._auto_scan())
 
     async def _on_page_closed(self, page: Page) -> None:
         """当页面被关闭时自动切换到其他可用页面。"""
@@ -1605,12 +1615,21 @@ class PlaywrightBridge:
             raise A11yNotAvailable(
                 f"CDP session not available: {exc}"
             ) from exc
+        CDP_TIMEOUT = 8.0
         try:
             try:
-                await cdp.send("Accessibility.enable")
+                await asyncio.wait_for(cdp.send("Accessibility.enable"), timeout=CDP_TIMEOUT)
+            except asyncio.TimeoutError:
+                logger.debug("a11y_snapshot: CDP Accessibility.enable timed out")
             except Exception:
                 logger.debug("a11y_snapshot: CDP Accessibility.enable failed", exc_info=True)
-            result = await cdp.send("Accessibility.getFullAXTree", {})
+            result = await asyncio.wait_for(
+                cdp.send("Accessibility.getFullAXTree", {}),
+                timeout=CDP_TIMEOUT,
+            )
+        except asyncio.TimeoutError:
+            logger.debug("a11y_snapshot: CDP getFullAXTree timed out")
+            raise A11yNotAvailable("CDP getFullAXTree timed out")
         except A11yNotAvailable:
             raise
         except Exception as exc:
@@ -1707,7 +1726,14 @@ class PlaywrightBridge:
 
         cdp = await self._context.new_cdp_session(self._page)
         try:
-            doc = await cdp.send("DOM.getDocument", {"depth": -1, "pierce": True})
+            CDP_TIMEOUT = 8.0
+            doc = await asyncio.wait_for(
+                cdp.send("DOM.getDocument", {"depth": -1, "pierce": True}),
+                timeout=CDP_TIMEOUT,
+            )
+        except asyncio.TimeoutError:
+            logger.debug("_progressive_snapshot: DOM.getDocument timed out")
+            return {"elements": [], "folded": [], "mode": "progressive"}
         finally:
             await cdp.detach()
 

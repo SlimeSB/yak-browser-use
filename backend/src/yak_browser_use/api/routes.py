@@ -330,6 +330,31 @@ def register_all_routes(app: FastAPI) -> None:
             except Exception:
                 logger.warning("Non-fatal: failed to inject initial highlights", exc_info=True)
 
+            # 存活探测：用户可能在连接过程中关闭了浏览器，此时 bridge 虽已创建
+            # 但 Playwright 的 disconnect 事件还在 asyncio 队列中未处理。
+            # 如果不检查就直接返回 success，前端会先收到 connected=true，
+            # 然后才收到 chrome_disconnected，造成"连接→断连→连接→断连"的闪烁。
+            # 
+            # 以下分三层检查：
+            #   1) bridge._disconnected — _on_browser_disconnected 已同步执行完
+            #   2) bridge.page is None  — _on_browser_disconnected 已清除 page
+            #   3) page.evaluate("1+1") — 浏览器虽然还在但即将断开
+            bridge = engine_state.bridge
+            if bridge is None or bridge._disconnected or bridge.page is None:
+                logger.warning("Browser already disconnected after bridge creation")
+                await engine_state.disconnect_chrome()
+                raise ServerError("Browser already disconnected after bridge creation")
+            try:
+                await asyncio.wait_for(bridge.page.evaluate("1+1"), timeout=5.0)
+            except asyncio.TimeoutError:
+                logger.warning("Browser health check timed out")
+                await engine_state.disconnect_chrome()
+                raise ServerError("Browser health check timed out")
+            except Exception:
+                logger.warning("Browser disconnected during connection setup")
+                await engine_state.disconnect_chrome()
+                raise ServerError("Browser disconnected during connection setup")
+
             return JSONResponse({"connected": True, "ws_url": actual_ws[:80]})
         except Exception as exc:
             logger.exception("Chrome connect failed")
@@ -445,6 +470,22 @@ def register_all_routes(app: FastAPI) -> None:
                 await _inject_initial_highlights()
             except Exception:
                 logger.warning("Non-fatal: failed to inject highlights after restart", exc_info=True)
+
+            bridge = engine_state.bridge
+            if bridge is None or bridge._disconnected or bridge.page is None:
+                logger.warning("Browser already disconnected after restart setup")
+                await engine_state.disconnect_chrome()
+                raise ServerError("Browser disconnected during restart setup")
+            try:
+                await asyncio.wait_for(bridge.page.evaluate("1+1"), timeout=5.0)
+            except asyncio.TimeoutError:
+                logger.warning("Browser health check timed out after restart")
+                await engine_state.disconnect_chrome()
+                raise ServerError("Browser health check timed out after restart")
+            except Exception:
+                logger.warning("Browser disconnected during restart setup")
+                await engine_state.disconnect_chrome()
+                raise ServerError("Browser disconnected during restart setup")
 
             return JSONResponse({"connected": True, "ws_url": actual_ws[:80]})
         except Exception as exc:

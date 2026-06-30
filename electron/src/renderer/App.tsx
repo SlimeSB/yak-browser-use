@@ -31,11 +31,8 @@ export default function App() {
   const [wsUrl, setWsUrl] = useState('');
   const [connectionError, setConnectionError] = useState<string | null>(null);
   const connectGenRef = useRef(0);
-  const connectedRef = useRef(false);
-
-  useEffect(() => {
-    connectedRef.current = connected;
-  }, [connected]);
+  const connectDebounceRef = useRef<ReturnType<typeof setTimeout>>();
+  const disconnectedRef = useRef(false);
 
   const [connectMode, setConnectMode] = useState<'user' | 'isolated'>('user');
   const [selectedProfile, setSelectedProfile] = useState(t('common.defaultTemp'));
@@ -261,7 +258,10 @@ export default function App() {
     const connect = async () => {
       if (stopped) return;
       try {
-        ws = await api.createWebSocket('/ws/events');
+        const newWs = await api.createWebSocket('/ws/events');
+        if (stopped) { newWs.close(); return; }
+        ws = newWs;
+        disconnectedRef.current = false;
         ws.onmessage = (ev) => {
           try {
             const event = JSON.parse(ev.data);
@@ -377,11 +377,17 @@ export default function App() {
             }
 
             if (et === 'chrome_disconnected') {
-              if (connectedRef.current) {
+              console.log('[DEBUG] chrome_disconnected received, gen=%s reason=%s disconnectedRef=%s',
+                connectGenRef.current, event.reason, disconnectedRef.current);
+              if (disconnectedRef.current) {
+                console.log('[DEBUG] chrome_disconnected already processed by another WS, skipping');
+              } else {
+                disconnectedRef.current = true;
+                clearTimeout(connectDebounceRef.current);
                 connectGenRef.current++;
+                setConnected(false);
+                setWsUrl('');
               }
-              setConnected(false);
-              setWsUrl('');
             } else if (et === 'run_end') {
               setLoading(false);
               setCurrentRunId('');
@@ -489,24 +495,41 @@ export default function App() {
   }, [activePreset, params, pipelines, pipelineCache, addEvent, reviewMode]);
 
   const handleConnect = useCallback(async (mode: 'user' | 'isolated', profile?: string) => {
+    disconnectedRef.current = false;
     const gen = ++connectGenRef.current;
+    console.log('[DEBUG] handleConnect called mode=%s gen=%s', mode, gen);
     setConnectionError(null);
     try {
       const resp = await api.connectBrowser(mode, profile, highlightMode);
-      if (gen !== connectGenRef.current) return;
+      if (gen !== connectGenRef.current) {
+        console.log('[DEBUG] handleConnect gen mismatch, dropping response gen=%s current=%s', gen, connectGenRef.current);
+        if (resp.success) {
+          api.disconnectBrowser().catch(() => {});
+        }
+        return;
+      }
       if (resp.needsRestart) {
         setRestartDialog({ browserName: resp.browserName || 'Chrome' });
         return;
       }
       if (resp.success) {
-        setConnected(true);
+        console.log('[DEBUG] handleConnect success, setting connected=true gen=%s', gen);
         setWsUrl(resp.wsUrl || '');
         setConnectionError(null);
+        clearTimeout(connectDebounceRef.current);
+        connectDebounceRef.current = setTimeout(() => {
+          if (gen === connectGenRef.current) {
+            setConnected(true);
+          }
+        }, 300);
       } else {
         setConnectionError(resp.error || t('connection.connectionFailed'));
       }
     } catch (e) {
-      if (gen !== connectGenRef.current) return;
+      if (gen !== connectGenRef.current) {
+        console.log('[DEBUG] handleConnect error gen mismatch, dropping gen=%s current=%s', gen, connectGenRef.current);
+        return;
+      }
       console.error('Connect failed: %s', String(e));
       setConnectionError(String(e));
     }
@@ -531,19 +554,39 @@ export default function App() {
   }, []);
 
   const handleRestartConfirm = useCallback(async () => {
+    disconnectedRef.current = false;
+    const gen = ++connectGenRef.current;
+    console.log('[DEBUG] handleRestartConfirm called gen=%s', gen);
     setRestartDialog(null);
     setRestarting(true);
     setConnectionError(null);
     try {
       const resp = await api.restartBrowser();
+      if (gen !== connectGenRef.current) {
+        console.log('[DEBUG] handleRestartConfirm gen mismatch, dropping response gen=%s current=%s', gen, connectGenRef.current);
+        if (resp.success) {
+          api.disconnectBrowser().catch(() => {});
+        }
+        return;
+      }
       if (resp.success) {
-        setConnected(true);
+        console.log('[DEBUG] handleRestartConfirm success, setting connected=true gen=%s', gen);
         setWsUrl(resp.wsUrl || '');
         setConnectionError(null);
+        clearTimeout(connectDebounceRef.current);
+        connectDebounceRef.current = setTimeout(() => {
+          if (gen === connectGenRef.current) {
+            setConnected(true);
+          }
+        }, 300);
       } else {
-        setConnectionError(resp.error || t('connection.restartFailed'));
+        setConnectionError(resp.error || 'Restart failed');
       }
     } catch (e) {
+      if (gen !== connectGenRef.current) {
+        console.log('[DEBUG] handleRestartConfirm error gen mismatch, dropping gen=%s current=%s', gen, connectGenRef.current);
+        return;
+      }
       console.error('Restart failed: %s', String(e));
       setConnectionError(String(e));
     } finally {
@@ -600,6 +643,7 @@ export default function App() {
   }, [refreshPipeline]);
 
   const handleDisconnect = useCallback(async () => {
+    console.log('[DEBUG] handleDisconnect called');
     try {
       await api.disconnectBrowser();
     } catch (e) {

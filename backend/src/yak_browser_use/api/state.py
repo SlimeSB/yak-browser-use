@@ -86,6 +86,12 @@ class _EngineState:
             async def _on_bridge_disconnected() -> None:
                 """Bridge-specific disconnect callback — only clears state if this bridge is still current."""
                 if self.bridge is None or id(self.bridge) != bridge_id:
+                    logger.debug(
+                        "EngineState: ignoring stale disconnect callback "
+                        "(bridge_id=%s, current_bridge=%s)",
+                        bridge_id,
+                        id(self.bridge) if self.bridge else None,
+                    )
                     return
                 logger.info("EngineState: processing bridge disconnect (bridge_id=%s)", bridge_id)
                 self.bridge = None
@@ -108,9 +114,14 @@ class _EngineState:
             raise RuntimeError("A pipeline is currently running")
 
         if self.bridge:
-            await self.bridge.stop()
-        self.bridge = None
-        self.current_state = "idle"
+            logger.info("EngineState: disconnecting Chrome (bridge_id=%s)", id(self.bridge))
+            old_bridge = self.bridge
+            self.bridge = None
+            self.current_state = "idle"
+            await old_bridge.stop()
+        else:
+            logger.debug("EngineState: disconnect_chrome called but no bridge")
+            self.current_state = "idle"
         logger.info("Chrome disconnected")
 
     @property
