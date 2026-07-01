@@ -205,7 +205,7 @@ async def execute_browser_op(
                         result["result"] = {"length": len(html), "selector": selector}
                 else:
                     cached = params.get("cached", False)
-                    strip_styles = params.get("strip_styles", False)
+                    strip_styles = params.get("strip_styles", True)
                     only_body = params.get("only_body", False)
                     if hasattr(bridge, "get_page_html"):
                         html = await bridge.get_page_html(cached=cached)

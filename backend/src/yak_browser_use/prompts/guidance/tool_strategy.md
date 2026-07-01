@@ -7,7 +7,7 @@ Prefer these tools for most operations:
 - `browser_fill(selector, text)` — fill an input field
 - `browser_snapshot(mode?, query?)` — 页面快照。推荐渐进式：aria（概览）→ a11y+query（精准）→ a11y（全量）
 - `browser_scroll(direction)` — scroll the page (up/down)
-- `browser_source(cached?, strip_styles?, only_body?)` — get the full page HTML source (⚠️ heavy: may return 500KB+ HTML, prefer `browser_snapshot` or `browser_lookup_selector` instead. Only use when you need raw HTML that snapshots can't provide.)
+- `browser_source(output_to, cached?, strip_styles?, only_body?)` — ⚠️ HEAVY: 获取完整页面 HTML 源码。**必须**提供 `output_to` 指定 shared_store 键名，HTML 写入 shared_store 不返回给 LLM。返回仅含 size 元信息。使用 `data_browse(key=<output_to>)` 分页浏览内容。优先使用 `browser_snapshot` 或 `browser_eval_js` 替代。
 - `browser_eval_js(code)` — execute JavaScript on the page
 - `browser_lookup_selector(ref)` — get element details by @e_XXXXX reference
 

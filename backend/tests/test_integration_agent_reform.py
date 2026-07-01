@@ -185,31 +185,6 @@ class TestSnapshotSimplifiedDegradedLifecycle:
         assert "降级" in result_dict["result"]
 
 
-# ── browser_source integration ──
-
-class TestBrowserSourceLifecycle:
-    def test_source_strips_html(self):
-        result_dict = {
-            "ok": True,
-            "result": {},
-            "html": "<html><body>page source</body></html>",
-        }
-        _apply_heavy_data_filter("browser_source", {}, result_dict)
-
-        assert "html" not in result_dict
-        assert result_dict["result"]["length"] == len("<html><body>page source</body></html>")
-
-    def test_source_cached_fallback(self):
-        result_dict = {
-            "ok": True,
-            "result": {},
-            "html": "<html>fresh</html>",
-        }
-        _apply_heavy_data_filter("browser_source", {"cached": True}, result_dict)
-
-        assert result_dict["result"]["cached"] is False
-        assert "无缓存" in result_dict["result"]["note"]
-
 # ── run_check integration ──
 
 class TestRunCheckIntegration:

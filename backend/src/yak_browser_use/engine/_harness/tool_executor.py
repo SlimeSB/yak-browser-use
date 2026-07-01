@@ -409,7 +409,7 @@ def _apply_heavy_data_filter(
     fn_args: dict,
     result_dict: dict,
 ) -> None:
-    """Extract heavy data from browser_snapshot/browser_source results.
+    """Extract heavy data from browser_snapshot results.
 
     Replaces result_dict["result"] with concise summaries.
     """
@@ -466,19 +466,4 @@ def _apply_heavy_data_filter(
             result_dict["result"] = "快照已获取（无摘要）"
             logger.warning("browser_snapshot: unknown mode '%s', using fallback", mode)
             return
-
-    if fn_name == "browser_source":
-        html = result_dict.pop("html", "")
-        if html:
-            result_payload = {"length": len(html)}
-            if len(html) > 500_000:
-                result_payload["truncated"] = True
-                result_payload["note"] = (
-                    f"HTML 过大 ({len(html):,} 字节)，建议使用 strip_styles=true 或 only_body=true 缩减"
-                )
-            if fn_args.get("cached"):
-                result_payload["cached"] = False
-                result_payload["note"] = result_payload.get("note", "") + " 无缓存，已从 CDP 获取"
-            result_dict["result"] = result_payload
-        return
 

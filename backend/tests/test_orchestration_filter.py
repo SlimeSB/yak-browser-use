@@ -8,16 +8,6 @@ from yak_browser_use.engine._harness.tool_executor import (
 
 
 class TestApplyHeavyDataFilter:
-    def test_source_cached_fallback(self):
-        result_dict = {
-            "ok": True,
-            "result": {},
-            "html": "<html>x</html>",
-        }
-        _apply_heavy_data_filter("browser_source", {"cached": True}, result_dict)
-        assert result_dict["result"]["cached"] is False
-        assert "无缓存" in result_dict["result"]["note"]
-
     def test_a11y_snapshot_filter(self):
         result_dict = {
             "ok": True,
@@ -73,16 +63,6 @@ class TestApplyHeavyDataFilter:
         }
         _apply_heavy_data_filter("browser_snapshot", {"mode": "simplified"}, result_dict)
         assert result_dict["result"] == "简化摘要"
-
-    def test_source_filter_strips_html(self):
-        result_dict = {
-            "ok": True,
-            "result": {},
-            "html": "<html>test</html>",
-        }
-        _apply_heavy_data_filter("browser_source", {}, result_dict)
-        assert "html" not in result_dict
-        assert result_dict["result"]["length"] == 17
 
     def test_non_snapshot_not_filtered(self):
         result_dict = {"ok": True, "result": {"url": "https://x.com"}}

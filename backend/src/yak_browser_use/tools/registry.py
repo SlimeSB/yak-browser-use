@@ -165,7 +165,7 @@ def _build_registry_impl() -> None:
     # ── browser_* tools ──────────────────────────────────────────────
 
     _BROWSER_OPS = [
-        "goto", "click", "fill", "snapshot", "scroll", "source",
+        "goto", "click", "fill", "snapshot", "scroll",
         "lookup_selector", "hover", "unhover", "focus", "select",
         "clear", "keyboard", "press_key", "type_text", "navigate", "wait",
         "tab", "copy", "paste",
@@ -434,6 +434,74 @@ def _build_registry_impl() -> None:
             return handler
 
         registry.register(f"browser_{op_type}", schema, _make_browser_handler(op_type))
+
+    # ── browser_source (registered separately — writes to shared_store) ──
+
+    async def _source_handler(args: dict, ctx: ToolContext) -> dict:
+        if ctx.cdp_helpers is None:
+            return {"ok": False, "error": "浏览器不可用 — 请确保 CDP 连接已建立"}
+        bridge = ctx.cdp_helpers.bridge if hasattr(ctx.cdp_helpers, "bridge") else ctx.cdp_helpers
+
+        output_to = args.get("output_to")
+        if not output_to or not isinstance(output_to, str):
+            return {
+                "ok": False,
+                "error": "browser_source requires a non-empty 'output_to' parameter — specify a shared_store key name (e.g. output_to=\"page_html\")",
+            }
+
+        result = await execute_browser_op("source", args, bridge)
+        if not result.get("ok"):
+            return result
+
+        html = result.pop("html", "")
+        if html and ctx.shared_store is not None:
+            ctx.shared_store[output_to] = html
+
+        size = len(html)
+        note = (
+            f"HTML 已写入 shared_store['{output_to}'] ({size:,} 字节)。"
+            f" 使用 data_browse(key=\"{output_to}\") 分页浏览内容，"
+            f" 或使用 browser_eval_js(code=...) 进行精准提取。"
+        )
+        if size > 100_000:
+            note += (
+                f" ⚠️ HTML 较大，建议优先使用 browser_snapshot 获取页面结构，"
+                f" 或使用 browser_eval_js 精准提取所需数据。"
+            )
+
+        return {
+            "ok": True,
+            "result": {
+                "output_to": output_to,
+                "size": size,
+                "note": note,
+            },
+        }
+
+    registry.register("browser_source", {
+        "description": (
+            "⚠️ HEAVY TOOL — 获取当前页面的完整 HTML 源代码。\n"
+            "【必须】提供 output_to 参数指定 shared_store 键名，HTML 将写入 shared_store 而非返回给 LLM。\n"
+            "返回结果仅含元信息（size/output_to/note），不含 HTML 原文。\n"
+            "使用 data_browse(key=output_to) 分页浏览存储的 HTML 内容。\n"
+            "【推荐替代】优先使用 browser_snapshot 获取页面结构（更轻量），"
+            "或使用 browser_eval_js 进行精准数据提取。"
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "output_to": {
+                    "type": "string",
+                    "description": "【必须】shared_store 键名，HTML 将写入 shared_store[output_to]，后续可通过 data_browse(key=...) 读取。",
+                },
+                "cached": {"type": "boolean", "description": "If true, read HTML from bridge cache instead of CDP. Falls back to CDP if no cache."},
+                "selector": {"type": "string", "description": "Optional CSS selector. When provided, returns outerHTML of the first matching element instead of full page source."},
+                "strip_styles": {"type": "boolean", "description": "Strip <style> and <script> tags from HTML (default: true)."},
+                "only_body": {"type": "boolean", "description": "Return only <body> content (default: false)."},
+            },
+            "required": ["output_to"],
+        },
+    }, _source_handler)
 
     # ── browser_eval_js (formerly eval_js) ──────────────────────────
 
