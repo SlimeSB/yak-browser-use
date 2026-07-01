@@ -202,7 +202,7 @@ interface MessageBubbleProps {
   toolCalls?: ChatMessage[];
 }
 
-function MessageBubble({ msg, toolCalls }: MessageBubbleProps) {
+const MessageBubble = React.memo(function MessageBubble({ msg, toolCalls }: MessageBubbleProps) {
   const { t } = useTranslation();
   const [thinkExpanded, setThinkExpanded] = useState(false);
 
@@ -217,7 +217,7 @@ function MessageBubble({ msg, toolCalls }: MessageBubbleProps) {
   // assistant
   return (
     <>
-      {msg.reasoning && (
+      {msg.reasoning && msg.content && !toolCalls && (
         <div className="chat-think">
           <span
             className={`chat-think-toggle${thinkExpanded ? ' expanded' : ''}`}
@@ -241,7 +241,7 @@ function MessageBubble({ msg, toolCalls }: MessageBubbleProps) {
       )}
     </>
   );
-}
+});
 
 // ── Main component ───────────────────────────────────────────
 
