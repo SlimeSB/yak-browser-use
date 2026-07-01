@@ -88,16 +88,28 @@ export const useChatStore = _create<ChatState>((set, get) => ({
 
   cancelChat: async () => {
     try { await api.chatCancel(); } catch { /* ok */ }
-    set((s) => ({
-      chatMessages: [...s.chatMessages, { id: nextMsgId(), role: 'system', content: 'Session interrupted' }],
-    }));
+    set((s) => {
+      const streamingMsgIds = new Set(s._streamingMsgIds);
+      const streamStates = { ...s._streamStates };
+      for (const k of Object.keys(streamStates)) {
+        const n = Number(k);
+        streamStates[n] = { ...streamStates[n], complete: true };
+        streamingMsgIds.delete(streamStates[n].assistantMsgId);
+      }
+      return {
+        _streamStates: streamStates,
+        _streamingMsgIds: streamingMsgIds,
+        _lastAssistantId: null,
+        chatMessages: [...s.chatMessages, { id: nextMsgId(), role: 'system', content: 'Session interrupted' }],
+      };
+    });
   },
 
   resetChat: async () => {
     try {
       const result = await api.chatReset();
       if (result.ok) {
-        set({ chatMessages: [], _streamStates: {}, _lastAssistantId: null, _streamingMsgIds: new Set() });
+        set({ chatMessages: [], _streamStates: {}, _lastAssistantId: null, _streamingMsgIds: new Set(), _processedEditIds: new Set() });
       }
     } catch (e) {
       console.error('Chat reset failed: %s', String(e));
@@ -176,6 +188,9 @@ export const useChatStore = _create<ChatState>((set, get) => ({
         set({
           currentSessionId: sessionId,
           chatMessages: raw.map(_normalizeMessage),
+          _streamStates: {},
+          _lastAssistantId: null,
+          _streamingMsgIds: new Set(),
         });
       }
     } catch (e) {
@@ -191,7 +206,7 @@ export const useChatStore = _create<ChatState>((set, get) => ({
     const prevPreset = currentPreset;
 
     usePipelineStore.getState().setActivePreset(pipelineName);
-    set({ chatMessages: [], currentSessionId: '' });
+    set({ chatMessages: [], currentSessionId: '', _streamStates: {}, _lastAssistantId: null, _streamingMsgIds: new Set() });
 
     try {
       const r = await api.switchSession(pipelineName);
@@ -200,6 +215,12 @@ export const useChatStore = _create<ChatState>((set, get) => ({
       if (list.length > 0) {
         set({ currentSessionId: list[0].session_id });
       }
+      // Expand the target node so its sessions are visible
+      set((s) => {
+        const next = new Set(s.expandedNodes);
+        next.add(pipelineName);
+        return { expandedNodes: next };
+      });
     } catch (e) {
       console.error('switchSession failed: %s', String(e));
       usePipelineStore.getState().setActivePreset(prevPreset);
@@ -409,12 +430,59 @@ function _handleChatEvent(set: SetFn, get: GetFn, event: Record<string, unknown>
             const streamingMsgIds = new Set(s._streamingMsgIds);
             if (st.assistantMsgId) streamingMsgIds.delete(st.assistantMsgId);
             return {
-              _streamStates: { ...s._streamStates, [ti]: { ...st, complete: true } },
+              _streamStates: _pruneStreamStates({ ...s._streamStates, [ti]: { ...st, complete: true } }, ti),
               _streamingMsgIds: streamingMsgIds,
-              chatMessages: [...s.chatMessages, { id: nextMsgId(), role: 'assistant', content: `[Error] ${(event.message as string) || ''}` }],
             };
           });
         }
+      } else {
+        // No turn_index: clean up ALL active streams to be safe
+        set((s) => {
+          const streamingMsgIds = new Set(s._streamingMsgIds);
+          const streamStates = { ...s._streamStates };
+          for (const k of Object.keys(streamStates)) {
+            const n = Number(k);
+            streamStates[n] = { ...streamStates[n], complete: true };
+            streamingMsgIds.delete(streamStates[n].assistantMsgId);
+          }
+          return { _streamStates: streamStates, _streamingMsgIds: streamingMsgIds };
+        });
+      }
+      set((s) => ({
+        chatMessages: [...s.chatMessages, { id: nextMsgId(), role: 'assistant', content: `❌ ${(event.message as string) || '未知错误'}` }],
+      }));
+      return;
+    }
+
+    case 'session.state': {
+      const status = event.status as string;
+      if (status === 'cancelled') {
+        set((s) => {
+          const streamStates = { ...s._streamStates };
+          const streamingMsgIds = new Set(s._streamingMsgIds);
+          const hadActiveStreams = Object.keys(streamStates).length > 0;
+          for (const k of Object.keys(streamStates)) {
+            const n = Number(k);
+            const st = streamStates[n];
+            streamStates[n] = { ...st, complete: true };
+            streamingMsgIds.delete(st.assistantMsgId);
+          }
+          const partial: Partial<ChatState> = {
+            _streamStates: streamStates,
+            _streamingMsgIds: streamingMsgIds,
+          };
+          // Only add a cancellation bubble when the server-side cancel
+          // reached us before cancelChat() had a chance to clean up
+          // locally.  If streams were already cleared, cancelChat()
+          // already appended its own "Session interrupted" message.
+          if (hadActiveStreams) {
+            partial.chatMessages = [...s.chatMessages, {
+              id: nextMsgId(), role: 'assistant',
+              content: '❌ 对话被中断（可能达到迭代上限或用户取消）',
+            }];
+          }
+          return partial;
+        });
       }
       return;
     }
@@ -423,11 +491,7 @@ function _handleChatEvent(set: SetFn, get: GetFn, event: Record<string, unknown>
       const ti = event.turn_index as number;
       const newId = nextMsgId();
       set((s) => {
-        const streamStates = { ...s._streamStates, [ti]: { accumulating: '', reasoningParts: [], toolAnnotation: '', complete: false, assistantMsgId: newId } };
-        for (const k of Object.keys(streamStates)) {
-          const n = Number(k);
-          if (!isNaN(n) && n < ti - 20) delete streamStates[n];
-        }
+        const streamStates = _pruneStreamStates({ ...s._streamStates, [ti]: { accumulating: '', reasoningParts: [], toolAnnotation: '', complete: false, assistantMsgId: newId } }, ti);
         const last = s.chatMessages[s.chatMessages.length - 1];
         let chatMessages: ChatMessage[];
         if (last && last.role === 'assistant' && !last.content) {
@@ -451,7 +515,7 @@ function _handleChatEvent(set: SetFn, get: GetFn, event: Record<string, unknown>
         const newContent = newSt.toolAnnotation + newSt.accumulating;
         const lastId = st.assistantMsgId;
         set((s) => {
-          const streamStates = { ...s._streamStates, [ti]: newSt };
+          const streamStates = _pruneStreamStates({ ...s._streamStates, [ti]: newSt }, ti);
           const next = [...s.chatMessages];
           let patched = false;
           if (lastId) {
@@ -591,4 +655,17 @@ function _handleChatEvent(set: SetFn, get: GetFn, event: Record<string, unknown>
       return;
     }
   }
+}
+
+// ── Helpers ──────────────────────────────────────────────────
+
+function _pruneStreamStates(states: Record<number, StreamState>, currentTurn: number): Record<number, StreamState> {
+  // NOTE: mutates the input object in-place.  All callers pass a fresh
+  // spread copy ({ ...s._streamStates, ... }) so no external state is
+  // affected, but this function does NOT produce a new object.
+  for (const k of Object.keys(states)) {
+    const n = Number(k);
+    if (!isNaN(n) && n < currentTurn - 20) delete states[n];
+  }
+  return states;
 }

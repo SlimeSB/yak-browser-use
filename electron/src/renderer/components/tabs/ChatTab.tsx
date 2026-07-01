@@ -66,10 +66,12 @@ function SessionTree() {
         parts.push(
           <div key={node.name} className="tree-node">
             <div
-              className={'tree-node-header' + (isActive ? ' active' : '')}
-              onClick={() => toggleExpand(node.name)}
+              className={'tree-node-header' + (isActive ? ' active' : '') + (node.isPipeline ? ' is-pipeline' : '')}
+              onClick={() => {
+                if (!node.isPipeline) toggleExpand(node.name);
+              }}
             >
-              <span className={'tree-node-arrow' + (isExpanded ? ' expanded' : '')}>{'>'}</span>
+              <span className={'tree-node-arrow' + (isExpanded ? ' expanded' : '')}>{node.isPipeline ? '' : '>'}</span>
               <span className="tree-node-label">{node.label}</span>
               <span className="tree-node-badge">({node.sessions.length})</span>
             </div>
@@ -279,10 +281,21 @@ export default function ChatTab() {
   const sendingRef = useRef(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const cancelledRef = useRef(false);
 
   // Auto-load sessions on mount
   useEffect(() => { loadSessions(activePreset); }, []);
+
+  // Expand all pipeline nodes by default
+  useEffect(() => {
+    const pipelineNames = pipelines.map(p => p.name);
+    const current = useChatStore.getState().expandedNodes;
+    const needsUpdate = pipelineNames.some(n => !current.has(n));
+    if (needsUpdate) {
+      const next = new Set(current);
+      for (const n of pipelineNames) next.add(n);
+      useChatStore.setState({ expandedNodes: next });
+    }
+  }, [pipelines]);
 
   // Merge assistant messages with their tool calls
   const mergedMessages = useMemo(() => {
@@ -327,6 +340,17 @@ export default function ChatTab() {
     return () => { if (rafId) cancelAnimationFrame(rafId); };
   }, [messages]);
 
+  // Force scroll to bottom when switching sessions
+  useEffect(() => {
+    if (!currentSessionId) return;
+    const el = scrollRef.current;
+    if (!el) return;
+    const timer = setTimeout(() => {
+      el.scrollTop = el.scrollHeight;
+    }, 50);
+    return () => clearTimeout(timer);
+  }, [currentSessionId]);
+
   // Split ratio
   const [splitRatio, setSplitRatio] = useState(() => {
     const n = readStorage('chat-split-ratio', 0);
@@ -345,17 +369,15 @@ export default function ChatTab() {
     const text = input.trim();
     if (!text || sendingRef.current) return;
     setInput('');
-    textareaRef.current!.style.height = '';
+    if (textareaRef.current) textareaRef.current.style.height = '';
     sendingRef.current = true;
     setSending(true);
     await send(text);
-    cancelledRef.current = false;
     sendingRef.current = false;
     setSending(false);
   };
 
   const handleCancel = async () => {
-    cancelledRef.current = true;
     await cancelChat();
     sendingRef.current = false;
     setSending(false);

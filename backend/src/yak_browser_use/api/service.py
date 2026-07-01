@@ -196,12 +196,17 @@ class Service:
                 return {"ok": False, "error": str(e)}
 
             finally:
-                self.events.chat_streaming = False
+                # Push session.state BEFORE clearing chat_streaming so that any
+                # chat.message event in the queue is still suppressed correctly.
                 self.events.push({
                     "type": "session.state",
                     "status": session.status,
                     "session_id": session.session_id,
                 })
+                # Small delay to let the WS drain the session.state event before
+                # we flip the flag — prevents a chat.message from sneaking through.
+                await asyncio.sleep(0.05)
+                self.events.chat_streaming = False
                 current_store.reset(_todo_token)
 
     # ── Pipeline management ─────────────────────────────────────────

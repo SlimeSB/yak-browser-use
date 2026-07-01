@@ -947,6 +947,11 @@ def register_all_routes(app: FastAPI) -> None:
         def _push(event: dict) -> None:
             service.events.push(event)
 
+        def _make_event(event_type: str, **extra: object) -> dict:
+            base: dict = {"type": event_type, "turn_index": _turn_idx, "session_id": session_id}
+            base.update(extra)
+            return base
+
         async def _flush_text_deltas() -> None:
             await asyncio.sleep(_DELTA_FLUSH_DELAY)
             nonlocal _delta_flush_task
@@ -955,7 +960,11 @@ def register_all_routes(app: FastAPI) -> None:
             _delta_buffer.clear()
             merged = "".join(bufs)
             if merged:
-                _push({"type": "chat.text_chunk", "content": merged, "turn_index": _turn_idx})
+                # Guard: don't push if session was cancelled while we were sleeping
+                cur = service.get_session(pipeline_name or None)
+                if cur is None or cur.status not in ("running", "idle"):
+                    return
+                _push(_make_event("chat.text_chunk", content=merged))
 
         async def _flush_reasoning_deltas() -> None:
             await asyncio.sleep(_REASONING_FLUSH_DELAY)
@@ -965,7 +974,10 @@ def register_all_routes(app: FastAPI) -> None:
             _reasoning_buffer.clear()
             merged = "".join(bufs)
             if merged:
-                _push({"type": "chat.think_chunk", "content": merged, "turn_index": _turn_idx})
+                cur = service.get_session(pipeline_name or None)
+                if cur is None or cur.status not in ("running", "idle"):
+                    return
+                _push(_make_event("chat.think_chunk", content=merged))
 
         def _on_stream_start() -> None:
             nonlocal _turn_idx, _stream_started_this_turn, _delta_flush_task, _reasoning_flush_task
@@ -980,7 +992,7 @@ def register_all_routes(app: FastAPI) -> None:
                 _reasoning_flush_task.cancel()
             _reasoning_buffer.clear()
             _reasoning_flush_task = None
-            _push({"type": "chat.stream_start", "turn_index": _turn_idx})
+            _push(_make_event("chat.stream_start"))
 
         def _on_stream_end(has_tool_calls: bool) -> None:
             nonlocal _stream_started_this_turn, _delta_flush_task, _reasoning_flush_task
@@ -993,7 +1005,7 @@ def register_all_routes(app: FastAPI) -> None:
                 _reasoning_flush_task.cancel()
             _reasoning_buffer.clear()
             _reasoning_flush_task = None
-            _push({"type": "chat.stream_end", "has_tool_calls": has_tool_calls, "turn_index": _turn_idx})
+            _push(_make_event("chat.stream_end", has_tool_calls=has_tool_calls))
 
         def _on_text_delta(text: str) -> None:
             nonlocal _delta_flush_task
@@ -1008,7 +1020,7 @@ def register_all_routes(app: FastAPI) -> None:
                 _reasoning_flush_task = asyncio.create_task(_flush_reasoning_deltas())
 
         def _on_tool_generated(name: str) -> None:
-            _push({"type": "chat.tool_generated", "tool_name": name, "turn_index": _turn_idx})
+            _push(_make_event("chat.tool_generated", tool_name=name))
 
         def _interrupt_check() -> bool:
             s = service.get_session()

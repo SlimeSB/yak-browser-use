@@ -11,6 +11,22 @@ from yak_browser_use.utils.logging import get_logger
 
 logger = get_logger(__name__)
 
+_cached_llm: object | None = None
+
+
+def _get_cached_llm() -> object:
+    """Return a cached LLM client instance (created once per process).
+
+    NOTE: The cache does NOT react to runtime config changes
+    (e.g. user updating the API key via Settings).  A process
+    restart is required to pick up new provider config.
+    """
+    global _cached_llm
+    if _cached_llm is None:
+        from yak_browser_use.utils.browser import create_llm
+        _cached_llm = create_llm()
+    return _cached_llm
+
 
 class StreamingLLMCall:
     """Callable class wrapping LLM streaming/non-streaming call logic.
@@ -46,8 +62,7 @@ class StreamingLLMCall:
         self._on_tool_generated = on_tool_generated
         self._interrupt_check = interrupt_check
 
-        from yak_browser_use.utils.browser import create_llm
-        self._llm = create_llm()
+        self._llm = _get_cached_llm()
 
         self._streaming = any(cb is not None for cb in [
             on_text_delta, on_reasoning_delta,
@@ -157,7 +172,11 @@ class StreamingLLMCall:
 
             async for chunk in stream:
                 chunk_count += 1
-                if self._interrupt_check and chunk_count % 10 == 0 and self._interrupt_check():
+                if self._interrupt_check and chunk_count % 3 == 0 and self._interrupt_check():
+                    try:
+                        stream.close()
+                    except Exception:
+                        pass
                     break
                 if not chunk.choices:
                     continue

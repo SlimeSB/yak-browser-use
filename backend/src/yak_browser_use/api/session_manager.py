@@ -96,16 +96,19 @@ class SessionManager:
         return self.create_session(self._active_pipeline)
 
     def cancel_session(self) -> SessionState | None:
-        """Cancel the active session."""
+        """Cancel the active session and purge it from the active cache."""
         session = self._sessions.get(self._active_pipeline)
         if session:
             session.status = "cancelled"
+            self._persist_session(session)
             if self._on_event:
                 self._on_event({
                     "type": "session.state",
                     "status": "cancelled",
                     "session_id": session.session_id,
                 })
+            # Remove from active sessions so it doesn't bleed into future events
+            self._sessions.pop(self._active_pipeline, None)
         return session
 
     def switch_session(self, pipeline_name: str) -> list[dict]:
