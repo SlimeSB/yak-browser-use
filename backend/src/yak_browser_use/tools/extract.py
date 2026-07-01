@@ -259,20 +259,10 @@ async def extract_list(
     logger.debug("extract_list: target=%s, poll_seconds=%s", params.get("selector", "auto"), poll_seconds)
 
     # Use custom JS or the generic extract
-    if params.get("selector"):
-        custom_js = f"""() => {{
-            const clean = (v) => (v || '').replace(/\\s+/g, ' ').trim();
-            const items = Array.from(document.querySelectorAll('{params["selector"]}'));
-            const attr = '{params.get("attribute", "")}';
-            return items.filter(el => {{
-                const rect = el.getBoundingClientRect();
-                return rect.width > 0 && rect.height > 0;
-            }}).map(el => ({{
-                text: clean(el.textContent || ''),
-                href: el.querySelector('a') ? el.querySelector('a').getAttribute('href') || '' : '',
-                attr: attr ? el.getAttribute(attr) || '' : ''
-            }}));
-        }}"""
+    selector = params.get("selector")
+    if selector:
+        from yak_browser_use.tools.extract_fields import _build_list_selector_js_with_attr
+        custom_js = _build_list_selector_js_with_attr(selector, params.get("attribute", ""))
         result = await cdp_helpers.evaluate(custom_js)
     else:
         result = await cdp_helpers.evaluate(EXTRACT_LIST_JS)
@@ -306,22 +296,8 @@ async def extract_details(
     logger.debug("extract_details: target=%s, poll_seconds=%s", params.get("selector", "auto"), poll_seconds)
 
     if params.get("selector"):
-        custom_js = f"""() => {{
-            const clean = (v) => (v || '').replace(/\\s+/g, ' ').trim();
-            const container = document.querySelector('{params["selector"]}');
-            if (!container) return {{ text: '', details: [] }};
-            const pairs = [];
-            const rows = container.querySelectorAll('tr');
-            if (rows.length > 0) {{
-                Array.from(rows).forEach(tr => {{
-                    const cells = tr.querySelectorAll('th, td');
-                    if (cells.length >= 2) {{
-                        pairs.push({{ label: clean(cells[0].textContent || ''), value: clean(cells[1].textContent || '') }});
-                    }}
-                }});
-            }}
-            return {{ text: clean(container.textContent || ''), details: pairs }};
-        }}"""
+        from yak_browser_use.tools.extract_fields import _build_details_container_js
+        custom_js = _build_details_container_js(params["selector"])
         result = await cdp_helpers.evaluate(custom_js)
     else:
         result = await cdp_helpers.evaluate(EXTRACT_DETAILS_JS)

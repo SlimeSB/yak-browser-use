@@ -58,6 +58,23 @@ async def test_failure_does_not_modify_store():
 
 
 @pytest.mark.asyncio
+async def test_validate_path_failure_returns_warning():
+    with patch("yak_browser_use.tools.format_convert.format_convert", new_callable=AsyncMock) as mock_fc:
+        mock_fc.return_value = {"ok": True, "result": "已转换", "target": "../evil.csv"}
+        with patch("yak_browser_use.tools._path_utils.validate_path") as mock_vp:
+            mock_vp.side_effect = ValueError("路径穿越被拒绝")
+            ctx = ToolContext(shared_store={})
+            result = await _format_convert_handler(
+                {"source": "data.json", "target": "../evil.csv", "output_to": "csv_path"},
+                ctx,
+            )
+            assert result["ok"] is True
+            assert "_output_to" not in result
+            assert "_output_to_warning" in result
+            assert "csv_path" not in ctx.shared_store
+
+
+@pytest.mark.asyncio
 async def test_no_output_to_does_not_modify_store():
     with patch("yak_browser_use.tools.format_convert.format_convert", new_callable=AsyncMock) as mock_fc:
         mock_fc.return_value = {"ok": True, "result": "已转换", "target": "data.json"}

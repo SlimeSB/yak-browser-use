@@ -31,6 +31,29 @@ def _build_selector_js(selector: str) -> str:
 }}"""
 
 
+def _build_list_selector_js_with_attr(selector: str, attribute: str = "") -> str:
+    """Generate JS to extract items under a custom CSS selector with optional attribute.
+
+    Each matched element returns {text, href, attr}.  Used by both pipeline and
+    chat extract_list when a selector is provided.
+    """
+    safe = _safe_selector(selector)
+    attr_js = ""
+    if attribute:
+        attr_js = f",\n        attr: el.getAttribute({json.dumps(attribute)}) || ''"
+    return f"""() => {{
+    const clean = (v) => (v || '').replace(/\\s+/g, ' ').trim();
+    const items = Array.from(document.querySelectorAll('{safe}'));
+    return items.filter(el => {{
+        const rect = el.getBoundingClientRect();
+        return rect.width > 0 && rect.height > 0;
+    }}).map(el => ({{
+        text: clean(el.textContent || ''),
+        href: el.querySelector('a') ? el.querySelector('a').getAttribute('href') || '' : ''{attr_js}
+    }}));
+}}"""
+
+
 def _build_field_extraction_js(selector: str, fields: dict) -> str:
     """Generate JS to extract items with custom field mappings.
 
@@ -42,9 +65,9 @@ def _build_field_extraction_js(selector: str, fields: dict) -> str:
     field_entries = []
     for key, expr in fields.items():
         if expr.startswith("@"):
-            attr = _safe_selector(expr[1:])
+            attr = expr[1:]
             field_entries.append(
-                f"    {json.dumps(key)}: el.getAttribute('{attr}') || ''"
+                f"    {json.dumps(key)}: el.getAttribute({json.dumps(attr)}) || ''"
             )
         else:
             sub_sel = _safe_selector(expr)
@@ -119,6 +142,31 @@ def _build_table_selector_js(selector: str) -> str:
         }};
     }}
     return null;
+}}"""
+
+
+def _build_details_container_js(selector: str) -> str:
+    """Generate JS to extract key-value pairs from a detail container (pipeline mode).
+
+    Only handles tr > th/td pairs within the scoped container.  Simpler than
+    the chat-mode ``_build_details_selector_js`` which also handles li/dt/dd.
+    """
+    safe = _safe_selector(selector)
+    return f"""() => {{
+    const clean = (v) => (v || '').replace(/\\s+/g, ' ').trim();
+    const container = document.querySelector('{safe}');
+    if (!container) return {{ text: '', details: [] }};
+    const pairs = [];
+    const rows = container.querySelectorAll('tr');
+    if (rows.length > 0) {{
+        Array.from(rows).forEach(tr => {{
+            const cells = tr.querySelectorAll('th, td');
+            if (cells.length >= 2) {{
+                pairs.push({{ label: clean(cells[0].textContent || ''), value: clean(cells[1].textContent || '') }});
+            }}
+        }});
+    }}
+    return {{ text: clean(container.textContent || ''), details: pairs }};
 }}"""
 
 

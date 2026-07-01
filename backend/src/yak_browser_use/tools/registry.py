@@ -14,6 +14,11 @@ from yak_browser_use.utils.logging import get_logger
 
 logger = get_logger(__name__)
 
+# Truncation limits for chat-mode extract tools.
+# shared_store always holds the full data; only the LLM-facing response is truncated.
+LIST_TRUNC_LIMIT = 50
+TABLE_TRUNC_LIMIT = 100
+
 
 def _auto_csv(data: Any) -> str:
     """Convert a list of dicts to CSV text with auto-extracted headers."""
@@ -821,6 +826,9 @@ def _build_registry_impl() -> None:
         fields = args.get("fields", None)
         output_to = args.get("output_to", None)
 
+        if fields is not None and not isinstance(fields, dict):
+            return {"ok": False, "error": "fields 参数必须是 object 类型（如 {\"title\": \"h3\"}）"}
+
         if fields and not selector:
             return {"ok": False, "error": "fields 参数需要同时提供 selector"}
 
@@ -840,9 +848,9 @@ def _build_registry_impl() -> None:
             items = []
 
         full_data = items
-        truncated = len(items) > 50
+        truncated = len(items) > LIST_TRUNC_LIMIT
         if truncated:
-            items = items[:50]
+            items = items[:LIST_TRUNC_LIMIT]
 
         result: dict = {"ok": True, "items": items, "count": len(items)}
         if truncated:
@@ -892,11 +900,10 @@ def _build_registry_impl() -> None:
             result = {"headers": [], "rows": []}
 
         full_rows = result.get("rows", [])
-        truncated = len(full_rows) > 100
-        if truncated:
-            result["rows"] = full_rows[:100]
+        truncated = len(full_rows) > TABLE_TRUNC_LIMIT
+        display_rows = full_rows[:TABLE_TRUNC_LIMIT] if truncated else full_rows
 
-        ret: dict = {"ok": True, "headers": result.get("headers", []), "rows": result.get("rows", [])}
+        ret: dict = {"ok": True, "headers": result.get("headers", []), "rows": display_rows}
         if truncated:
             ret["_truncated"] = True
             ret["total_rows"] = len(full_rows)
@@ -1099,8 +1106,8 @@ async def _format_convert_handler(args: dict, ctx: ToolContext) -> dict:
             abs_path = str(validate_path(target, pipeline=ctx.pipeline_name or None))
             ctx.shared_store[output_to] = abs_path
             result["_output_to"] = output_to
-        except ValueError:
-            pass
+        except ValueError as e:
+            result["_output_to_warning"] = f"路径解析失败，未存入 shared_store: {e}"
     return result
 
 

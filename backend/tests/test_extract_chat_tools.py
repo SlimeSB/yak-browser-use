@@ -5,7 +5,14 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from yak_browser_use.tools.extract_fields import (
+    _build_list_selector_js_with_attr,
+    _build_details_container_js,
+    _safe_selector,
+)
 from yak_browser_use.tools.registry import (
+    LIST_TRUNC_LIMIT,
+    TABLE_TRUNC_LIMIT,
     ToolContext,
     build_registry,
     registry,
@@ -79,6 +86,17 @@ class TestBrowserExtractList:
         )
         assert result["ok"] is False
         assert "selector" in result["error"]
+
+    @pytest.mark.asyncio
+    async def test_fields_type_error_returns_error(self):
+        ctx = _make_ctx()
+        result = await registry.dispatch(
+            "browser_extract_list",
+            {"selector": ".item", "fields": "h3"},
+            ctx,
+        )
+        assert result["ok"] is False
+        assert "object" in result["error"]
 
     @pytest.mark.asyncio
     async def test_fields_with_output_to(self):
@@ -288,3 +306,29 @@ class TestBrowserExtractDetails:
         result = await registry.dispatch("browser_extract_details", {}, ctx)
         assert result["ok"] is False
         assert "浏览器" in result["error"]
+
+
+class TestTruncationLimits:
+    def test_limits_are_module_constants(self):
+        assert LIST_TRUNC_LIMIT == 50
+        assert TABLE_TRUNC_LIMIT == 100
+
+
+class TestSharedBuilders:
+    def test_build_list_selector_js_with_attr_no_attr(self):
+        js = _build_list_selector_js_with_attr(".item")
+        assert ".item" in js
+        assert "querySelector" in js
+        assert "getAttribute" not in js or "href" in js
+
+    def test_build_list_selector_js_with_attr_has_attr(self):
+        js = _build_list_selector_js_with_attr(".item", "data-id")
+        assert "data-id" in js
+
+    def test_build_details_container_js(self):
+        js = _build_details_container_js("#product")
+        assert "#product" in js
+        assert "querySelectorAll('tr')" in js
+
+    def test_safe_selector_escapes_single_quote(self):
+        assert _safe_selector("div[data-name='test']") == "div[data-name=\\'test\\']"
