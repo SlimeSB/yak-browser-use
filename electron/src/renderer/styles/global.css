@@ -407,6 +407,7 @@ body {
   z-index: 10;
   width: 58px;
   overflow: hidden;
+  position: relative;
   transition: width 0.28s cubic-bezier(0.4, 0, 0.2, 1);
   --sidebar-expanded: 180px;
 }
@@ -448,19 +449,6 @@ body {
 .sidebar-btn:hover .sidebar-icon-wrap {
   color: var(--text);
 }
-.sidebar-btn::before {
-  content: "";
-  position: absolute;
-  left: -6px;
-  top: 50%;
-  transform: translateY(-50%) scaleY(0);
-  width: 3px;
-  height: 24px;
-  border-radius: 0 3px 3px 0;
-  background: var(--primary);
-  transition: transform 0.18s cubic-bezier(0.4, 0, 0.2, 1);
-  opacity: 0;
-}
 .sidebar-btn:hover {
   background: var(--bg-hover);
   color: var(--text);
@@ -473,12 +461,19 @@ body {
   background: var(--primary-hover-bg);
   filter: brightness(1.15);
 }
-.sidebar-btn.active::before {
-  transform: translateY(-50%) scaleY(1);
-  opacity: 1;
-}
 .sidebar-btn.active .sidebar-icon-wrap {
   color: var(--primary);
+}
+.sidebar-indicator {
+  position: absolute;
+  left: 0;
+  width: 3px;
+  height: 24px;
+  border-radius: 0 3px 3px 0;
+  background: var(--primary);
+  transition: top 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+  pointer-events: none;
+  z-index: 1;
 }
 .sidebar-icon-wrap svg {
   display: block;

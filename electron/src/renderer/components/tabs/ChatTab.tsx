@@ -4,6 +4,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { useChatStore } from '../../stores/chatStore';
 import type { ChatMessage, TreeNode } from '../../types';
+import { useConnectionStore } from '../../stores/connectionStore';
 import { usePipelineStore } from '../../stores/pipelineStore';
 import { useUiStore } from '../../stores/uiStore';
 import MonacoYamlEditor from '../editor/MonacoYamlEditor';
@@ -253,6 +254,7 @@ export default function ChatTab() {
   const activePreset = usePipelineStore(s => s.activePreset);
   const loadingSession = useChatStore(s => s.loadingSession);
 
+  const browserConnected = useConnectionStore(s => s.connected);
   const send = useChatStore(s => s.send);
   const cancelChat = useChatStore(s => s.cancelChat);
   const resetChat = useChatStore(s => s.resetChat);
@@ -447,14 +449,14 @@ export default function ChatTab() {
               value={input}
               onChange={e => { setInput(e.target.value); autoResize(); }}
               onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); } }}
-              placeholder={t('chat.placeholder')}
+              placeholder={browserConnected ? t('chat.placeholder') : t('chat.placeholderDisconnected')}
               rows={1}
-              disabled={sending}
+              disabled={!browserConnected || sending}
             />
             <button
               className={`btn btn-sm ${sending ? 'btn-danger' : 'btn-primary'}`}
               onClick={sending ? handleCancel : handleSend}
-              disabled={!input.trim() && !sending}
+              disabled={!browserConnected || (!input.trim() && !sending)}
               style={{ flexShrink: 0 }}
             >
               {sending ? t('chat.stop') : t('chat.send')}

@@ -2,6 +2,7 @@ import { _create } from './_factory';
 import * as api from '../apiClient';
 import type { ChatMessage, SessionMeta, PendingEdit } from '../types';
 import { nextMsgId } from '../types';
+import { useConnectionStore } from './connectionStore';
 import { usePipelineStore } from './pipelineStore';
 
 // ── Types ────────────────────────────────────────────────────
@@ -63,6 +64,10 @@ export const useChatStore = _create<ChatState>((set, get) => ({
 
   send: async (text) => {
     if (!text.trim()) return;
+    if (!useConnectionStore.getState().connected) {
+      _appendError(set, get, 'Please connect to a browser first.');
+      return;
+    }
     const msgId = nextMsgId();
     set((s) => ({ chatMessages: [...s.chatMessages, { id: msgId, role: 'user', content: text }] }));
 

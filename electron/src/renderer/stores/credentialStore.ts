@@ -9,6 +9,7 @@ interface CredentialState {
   setCredValue: (value: string) => void;
   addCredential: () => Promise<void>;
   removeCredential: (key: string) => Promise<void>;
+  refreshCredentials: () => Promise<void>;
 }
 
 export const useCredentialStore = _create<CredentialState>((set, get) => ({
@@ -17,16 +18,21 @@ export const useCredentialStore = _create<CredentialState>((set, get) => ({
   credValue: '',
   setCredKey: (key) => set({ credKey: key }),
   setCredValue: (value) => set({ credValue: value }),
-  addCredential: async () => {
-    const { credKey, credValue } = get();
-    if (!credKey.trim() || !credValue.trim()) return;
-    await api.setCredential(credKey.trim(), credValue);
-    set({ credKey: '', credValue: '' });
+  refreshCredentials: async () => {
     const r = await api.listCredentials();
     if (r.params) set({ credKeys: r.params });
   },
+  addCredential: async () => {
+    const { credKey, credValue } = get();
+    if (!credKey.trim() || !credValue.trim()) return;
+    const r = await api.setCredential(credKey.trim(), credValue);
+    if (!r.set) return;
+    set({ credKey: '', credValue: '' });
+    await get().refreshCredentials();
+  },
   removeCredential: async (key) => {
+    if (!key.trim()) return;
     await api.deleteCredential(key);
-    set((s) => ({ credKeys: s.credKeys.filter(k => k !== key) }));
+    await get().refreshCredentials();
   },
 }));

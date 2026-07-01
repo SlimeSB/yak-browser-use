@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useCallback } from 'react';
+import React, { useEffect, useRef, useCallback, useState, useLayoutEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import './styles/global.css';
 import * as api from './apiClient';
@@ -107,6 +107,16 @@ export default function App() {
     }
   }, [activePreset, pipelineCache]);
 
+  // ── Sidebar active indicator ────────────────────────────────
+  const [indicatorTop, setIndicatorTop] = useState(10);
+  useLayoutEffect(() => {
+    const el = sidebarRef.current;
+    if (!el) return;
+    const activeBtn = el.querySelector<HTMLElement>('.sidebar-btn.active');
+    if (!activeBtn) return;
+    setIndicatorTop(activeBtn.offsetTop + (activeBtn.offsetHeight - 24) / 2);
+  }, [activeTab]);
+
   return (
     <div className="app-container">
       <TitleBar />
@@ -155,6 +165,8 @@ export default function App() {
               <span className="sidebar-label">{t(tab.label)}</span>
             </button>
           ))}
+
+          <div className="sidebar-indicator" style={{ top: indicatorTop }} />
         </nav>
 
         <div className="sidebar-content">

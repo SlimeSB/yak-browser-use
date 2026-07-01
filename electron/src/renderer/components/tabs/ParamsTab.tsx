@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useCredentialStore } from '../../stores/credentialStore';
 
@@ -11,6 +11,9 @@ export default function ParamsTab() {
   const setCredValue = useCredentialStore(s => s.setCredValue);
   const addCredential = useCredentialStore(s => s.addCredential);
   const removeCredential = useCredentialStore(s => s.removeCredential);
+  const refreshCredentials = useCredentialStore(s => s.refreshCredentials);
+
+  useEffect(() => { refreshCredentials(); }, [refreshCredentials]);
 
   return (
     <div className="cred-layout">
