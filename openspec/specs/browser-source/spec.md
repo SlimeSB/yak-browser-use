@@ -1,4 +1,4 @@
-## MODIFIED Requirements
+## Requirements
 
 ### Requirement: browser_source 底层实现
 `browser_source` 工具的底层实现 MUST 从 CDP 方法改为 Playwright `page.content()`。
