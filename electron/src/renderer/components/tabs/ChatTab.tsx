@@ -71,7 +71,7 @@ function SessionTree() {
                 if (!node.isPipeline) toggleExpand(node.name);
               }}
             >
-              <span className={'tree-node-arrow' + (isExpanded ? ' expanded' : '')}>{node.isPipeline ? '' : '>'}</span>
+              <span className="tree-node-arrow">{node.isPipeline ? '' : '>'}</span>
               <span className="tree-node-label">{node.label}</span>
               <span className="tree-node-badge">({node.sessions.length})</span>
             </div>

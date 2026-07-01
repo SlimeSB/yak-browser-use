@@ -1926,27 +1926,7 @@ body {
   border-color: var(--primary);
   box-shadow: 0 0 0 2px var(--primary-bg);
 }
-.quick-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-}
-.qa-btn {
-  padding: 4px 10px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  background: transparent;
-  color: var(--text-muted);
-  font-size: var(--fs-xs);
-  font-family: inherit;
-  cursor: pointer;
-  transition: all var(--transition-fast);
-}
-.qa-btn:hover {
-  background: var(--bg-hover);
-  color: var(--text-secondary);
-  border-color: var(--text-muted);
-}
+
 .exec-toolbar {
   display: flex;
   align-items: center;
@@ -2664,25 +2644,16 @@ body {
   transition: all var(--transition-fast);
   border-left: 2px solid transparent;
 }
-.tree-node-header:hover {
-  background: var(--bg-hover);
-  color: var(--text);
-}
-.tree-node-header.active {
+
+.tree-node-header.active,
+.tree-node-header.is-pipeline {
   background: var(--bg-subtle);
   color: var(--text);
   border-left-color: var(--blue);
   font-weight: var(--fw-semibold);
 }
 .tree-node-arrow {
-  font-size: var(--fs-xs);
-  width: 12px;
-  flex-shrink: 0;
-  color: var(--text-muted);
-  transition: transform var(--transition-fast);
-}
-.tree-node-arrow.expanded {
-  transform: rotate(90deg);
+  display: none;
 }
 .tree-node-icon {
   font-size: var(--fs-base);
