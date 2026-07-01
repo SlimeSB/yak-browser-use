@@ -123,8 +123,8 @@ def _resolve_template_string(s: str, store: dict, errors: list[str]) -> Any:
             return match.group(0)
         if isinstance(value, str):
             return value
-        errors.append(path)
-        return match.group(0)
+        import json
+        return json.dumps(value, ensure_ascii=False)
 
     return _TEMPLATE_PATTERN.sub(_replacer, s)
 

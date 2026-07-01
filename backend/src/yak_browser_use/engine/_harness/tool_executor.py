@@ -237,7 +237,7 @@ async def _execute_single_tool_call(
 
             # ── Write to shared_store if 'bind' specified ────────
             if source_key and shared_store is not None:
-                shared_store[source_key] = result
+                shared_store[source_key] = result.get("result", result) if result.get("ok") else result
 
             prepend_resolve_errors(result, resolve_errors)
 

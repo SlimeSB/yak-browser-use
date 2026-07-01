@@ -72,6 +72,8 @@ class PipelineStore:
         """Convert YAML format [{goto: "url"}] → internal format [{type: "goto", value: "url"}]."""
         result: list[dict] = []
         for op in ops:
+            if not op:
+                continue
             if "type" in op:
                 result.append({k: v for k, v in op.items()})
                 continue
@@ -87,8 +89,6 @@ class PipelineStore:
                         entry[k] = v
                 result.append(entry)
                 break
-            else:
-                result.append({})
         return result
 
     # ── 2.4 _to_yaml_ops ──

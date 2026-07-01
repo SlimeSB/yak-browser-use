@@ -45,12 +45,13 @@ export const useConnectionStore = _create<ConnectionState>((set, get) => ({
   highlightMode: loadHighlightMode(),
   _connectGen: 0,
 
-  connect: async (mode, profile) => {
+  connect: async (mode, profile?) => {
     const localGen = ++get()._connectGen;
     set({ connectionError: null });
     try {
-      const { highlightMode } = get();
-      const resp = await api.connectBrowser(mode, profile, highlightMode);
+      const { highlightMode, profiles } = get();
+      const effectiveProfile = profile || (profiles.length > 0 ? profiles[0] : undefined);
+      const resp = await api.connectBrowser(mode, effectiveProfile, highlightMode);
       if (localGen !== get()._connectGen) return; // stale
       if (resp.needsRestart) {
         set({ restartDialog: { browserName: resp.browserName || 'Chrome' } });
