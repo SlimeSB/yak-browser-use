@@ -22,7 +22,7 @@ class TestDataKeysHandler:
         })
         result = await _data_keys_handler({}, ctx)
         assert result["ok"] is True
-        keys = {k["name"]: k for k in result["keys"]}
+        keys = {k["name"]: k for k in result["result"]}
         assert keys["elements"] == {"name": "elements", "type": "list", "size": 2}
         assert keys["config"] == {"name": "config", "type": "dict", "size": 1}
         assert keys["title"] == {"name": "title", "type": "str", "size": 11}
@@ -33,7 +33,7 @@ class TestDataKeysHandler:
         ctx = ToolContext(shared_store={})
         result = await _data_keys_handler({}, ctx)
         assert result["ok"] is True
-        assert result["keys"] == []
+        assert result["result"] == []
 
     @pytest.mark.asyncio
     async def test_none_store(self):
@@ -54,33 +54,33 @@ class TestDataBrowseHandler:
         })
         result = await _data_browse_handler({"key": "elements"}, ctx)
         assert result["ok"] is True
-        assert result["key"] == "elements"
-        assert result["total"] == 2
-        assert result["offset"] == 0
-        assert result["limit"] == 20
-        assert len(result["items"]) == 2
-        assert "@e_0" in result["items"][0]
-        assert "button" in result["items"][0]
+        assert result["result"]["key"] == "elements"
+        assert result["result"]["total"] == 2
+        assert result["result"]["offset"] == 0
+        assert result["result"]["limit"] == 20
+        assert len(result["result"]["items"]) == 2
+        assert "@e_0" in result["result"]["items"][0]
+        assert "button" in result["result"]["items"][0]
 
     @pytest.mark.asyncio
     async def test_browse_string(self):
         ctx = ToolContext(shared_store={"html": "hello world foo bar baz"})
         result = await _data_browse_handler({"key": "html", "limit": 5}, ctx)
         assert result["ok"] is True
-        assert result["preview"] == "hello"
-        assert result["total"] == 23
-        assert result["offset"] == 0
-        assert result["limit"] == 5
+        assert result["result"]["preview"] == "hello"
+        assert result["result"]["total"] == 23
+        assert result["result"]["offset"] == 0
+        assert result["result"]["limit"] == 5
 
     @pytest.mark.asyncio
     async def test_browse_dict(self):
         ctx = ToolContext(shared_store={"cfg": {"a": 1, "b": 2}})
         result = await _data_browse_handler({"key": "cfg"}, ctx)
         assert result["ok"] is True
-        assert "keys" in result
-        assert "a" in result["keys"]
-        assert "b" in result["keys"]
-        assert "preview" in result
+        assert "keys" in result["result"]
+        assert "a" in result["result"]["keys"]
+        assert "b" in result["result"]["keys"]
+        assert "preview" in result["result"]
 
     @pytest.mark.asyncio
     async def test_key_not_found(self):
@@ -94,8 +94,8 @@ class TestDataBrowseHandler:
         ctx = ToolContext(shared_store={"elements": [{"ref": "e1"}]})
         result = await _data_browse_handler({"key": "elements", "offset": 100}, ctx)
         assert result["ok"] is True
-        assert result["items"] == []
-        assert result["total"] == 1
+        assert result["result"]["items"] == []
+        assert result["result"]["total"] == 1
 
     @pytest.mark.asyncio
     async def test_none_store(self):
@@ -109,36 +109,36 @@ class TestDataBrowseHandler:
         ctx = ToolContext(shared_store={"items": list(range(200))})
         result = await _data_browse_handler({"key": "items", "limit": 999}, ctx)
         assert result["ok"] is True
-        assert result["limit"] == 100
-        assert len(result["items"]) == 100
+        assert result["result"]["limit"] == 100
+        assert len(result["result"]["items"]) == 100
 
     @pytest.mark.asyncio
     async def test_browse_non_element_list(self):
         ctx = ToolContext(shared_store={"nums": [1, 2, 3]})
         result = await _data_browse_handler({"key": "nums"}, ctx)
         assert result["ok"] is True
-        assert len(result["items"]) == 3
+        assert len(result["result"]["items"]) == 3
 
     @pytest.mark.asyncio
     async def test_negative_offset_clamped_to_zero(self):
         ctx = ToolContext(shared_store={"elements": [{"ref": "e1"}, {"ref": "e2"}]})
         result = await _data_browse_handler({"key": "elements", "offset": -5}, ctx)
         assert result["ok"] is True
-        assert result["offset"] == 0
-        assert len(result["items"]) == 2
+        assert result["result"]["offset"] == 0
+        assert len(result["result"]["items"]) == 2
 
     @pytest.mark.asyncio
     async def test_zero_limit_clamped_to_one(self):
         ctx = ToolContext(shared_store={"elements": [{"ref": "e1"}, {"ref": "e2"}]})
         result = await _data_browse_handler({"key": "elements", "limit": 0}, ctx)
         assert result["ok"] is True
-        assert result["limit"] == 1
-        assert len(result["items"]) == 1
+        assert result["result"]["limit"] == 1
+        assert len(result["result"]["items"]) == 1
 
     @pytest.mark.asyncio
     async def test_negative_limit_clamped_to_one(self):
         ctx = ToolContext(shared_store={"elements": [{"ref": "e1"}, {"ref": "e2"}]})
         result = await _data_browse_handler({"key": "elements", "limit": -10}, ctx)
         assert result["ok"] is True
-        assert result["limit"] == 1
-        assert len(result["items"]) == 1
+        assert result["result"]["limit"] == 1
+        assert len(result["result"]["items"]) == 1

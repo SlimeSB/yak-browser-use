@@ -524,7 +524,23 @@ def _build_registry_impl() -> None:
                 return {"ok": True, "result": f"return_format=csv requires array result, got {type(result).__name__}"}
             return {"ok": True, "result": result}
         except Exception as e:
-            return {"ok": False, "error": str(e)}
+            err_str = str(e)
+            # Catch Playwright wrapping issues: browser_eval_js executes code in () => { ... } wrapper,
+            # so top-level `return` statements are illegal.
+            if "Illegal return statement" in err_str:
+                return {
+                    "ok": False,
+                    "error": err_str,
+                    "_hint": (
+                        "browser_eval_js 将代码包在 () => { ... } 中执行。不要在代码顶层使用 return 语句，"
+                        "直接写表达式即可。示例：\n"
+                        "  ✅ code='document.querySelectorAll(\"a\").length'\n"
+                        "  ✅ code='Array.from(document.querySelectorAll(\".item\")).map(el => el.textContent)'\n"
+                        "  ❌ code='return document.querySelectorAll(\"a\").length'\n"
+                        "如果是在写多行函数体，用箭头函数：code='() => { const x = 1; return x + 2; }'"
+                    ),
+                }
+            return {"ok": False, "error": err_str}
 
     registry.register("browser_eval_js", {
         "description": "[需 CDP] 在浏览器当前页面执行任意 JavaScript 代码并返回结果。支持 output_to 将结果存入 shared_store，支持 return_format 控制返回格式。",
@@ -556,7 +572,7 @@ def _build_registry_impl() -> None:
                 "properties": {
                     "pipeline_name": {"type": "string", "description": "Name of the pipeline preset to modify."},
                     "step_name": {"type": "string", "description": "Name of the step to update."},
-                    "updates": {"type": "object", "description": "Fields to update on the step. Supported keys: browser_ops (list of single-key dicts), tool_name (string), goal_description (string), description (string), depends_on (list of strings), check (dict)."},
+                    "updates": {"type": "object", "description": "Fields to update on the step. Supported keys: browser_ops (list of single-key dicts), tool_name (string), goal_description (string), description (string), depends_on (list of strings), check (dict — 验收检查，传 {} 跳过。支持 url_contains/element_exists/text_contains/element_visible)。"},
                     "explanation": {"type": "string", "description": "Human-readable explanation of what was changed and why."},
                 },
                 "required": ["pipeline_name", "step_name", "updates"],
@@ -574,7 +590,7 @@ def _build_registry_impl() -> None:
                     "tool_name": {"type": "string", "description": "Name of a custom tool to invoke. Mutually exclusive with browser_ops and goal_description."},
                     "goal_description": {"type": "string", "description": "High-level goal description for this step. Mutually exclusive with browser_ops and tool_name."},
                     "depends_on": {"type": "array", "description": "List of step names this step depends on.", "items": {"type": "string"}},
-                    "check": {"type": "object", "description": "Programmatic check conditions for this step. Use {} to skip verification. Supported keys: url_contains, element_exists, text_contains, element_visible."},
+                    "check": {"type": "object", "description": "步骤执行后的验收检查条件。执行时机：步骤完成（status='completed'）后立即执行。所有条件必须全部通过才算通过。失败后果：状态变为 'failed'，pipeline 停止。支持的条件键：url_contains（当前 URL 包含指定字符串）、element_exists（CSS selector 在 DOM 中存在）、text_contains（页面文本包含指定字符串）、element_visible（CSS selector 可见）。不执行检查时传 {}（空对象）。"},
                     "after": {"type": "string", "description": "Name of the step to insert after. Omit to append."},
                     "heading": {"type": "boolean", "description": "Set to true to create an outline placeholder step without browser_ops, tool_name, or goal_description."},
                     "explanation": {"type": "string", "description": "Human-readable explanation of what was changed and why."},
@@ -848,7 +864,7 @@ def _build_registry_impl() -> None:
         },
     }, _captcha_handler)
 
-    # ── data_keys / data_browse ───────────────────────────────────────
+    # ── data_keys / data_browse / data_peek ─────────────────────────────
 
     registry.register("data_keys", {
         "description": "列出 shared_store 中所有 key，返回每个 key 的名称、类型（list/dict/str/other）和大小（元素数或字符数）。",
@@ -870,6 +886,18 @@ def _build_registry_impl() -> None:
             "required": ["key"],
         },
     }, _data_browse_handler)
+
+    registry.register("data_peek", {
+        "description": "轻量预览 shared_store 中指定 key 的前几条记录。比 data_browse 更轻量——直接返回原始数据的预览 JSON，适合快速查看提取结果。",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "key": {"type": "string", "description": "要预览的 key 名称。"},
+                "limit": {"type": "integer", "description": "预览条数（默认 5，最大 20）"},
+            },
+            "required": ["key"],
+        },
+    }, _data_peek_handler)
 
     # ── browser_extract_* tools (chat-mode data extraction) ──────────────
 
@@ -924,7 +952,7 @@ def _build_registry_impl() -> None:
         if truncated:
             items = items[:LIST_TRUNC_LIMIT]
 
-        result: dict = {"ok": True, "items": items, "count": len(items)}
+        result: dict = {"ok": True, "result": {"items": items, "count": len(items)}}
         if truncated:
             result["_truncated"] = True
             result["total"] = len(full_data)
@@ -939,6 +967,21 @@ def _build_registry_impl() -> None:
         if output_to and ctx.shared_store is not None:
             ctx.shared_store[output_to] = full_data
             result["_output_to"] = output_to
+            # Top-level fields for agent visibility
+            result["key"] = output_to
+            result["count"] = len(full_data)
+            if fields:
+                result["fields"] = list(fields.keys())
+            storage_note = (
+                f"完整数据已存入 shared_store['{output_to}']，共 {len(full_data)} 条。"
+                f"可用 data_keys 查看所有 key，或用 data_browse(key='{output_to}') 浏览。"
+            )
+            # Don't overwrite diagnostic note when no items were found
+            result["_note"] = (
+                result["_note"] + " " + storage_note
+                if result.get("_note")
+                else storage_note
+            )
 
         return result
 
@@ -947,12 +990,12 @@ def _build_registry_impl() -> None:
         "parameters": {
             "type": "object",
             "properties": {
-                "selector": {"type": "string", "description": "可选，CSS selector 定位列表容器。省略时自动检测常见列表结构。"},
-                "output_to": {"type": "string", "description": "可选，将完整提取结果存入 shared_store 的变量名。"},
+                "selector": {"type": "string", "description": "可选，CSS selector 定位列表容器。省略时自动检测常见列表结构。使用 fields 字段映射时需要同时提供 selector。"},
+                "output_to": {"type": "string", "description": "可选，将完整提取结果存入 shared_store 的变量名，后续可通过 data_keys 查看或 data_browse 浏览。"},
                 "wait_seconds": {"type": "number", "description": "可选，提取前等待秒数（SPA 页面建议 2-3 秒，默认 0 不等待）。"},
                 "fields": {
                     "type": "object",
-                    "description": "可选，字段映射字典。key 为输出字段名，value 为 CSS selector（如 'h3'）或 '@attr' 获取属性。需要同时提供 selector。",
+                    "description": "可选，字段映射字典。key 为输出字段名，value 为 CSS selector 或 '@属性名' 获取 HTML 属性。需要同时提供 selector。示例：{\"title\": \"h3\", \"url\": \"@href\", \"views\": \".plays\"}",
                     "additionalProperties": {"type": "string"},
                 },
             },
@@ -991,15 +1034,22 @@ def _build_registry_impl() -> None:
         if output_to and ctx.shared_store is not None:
             ctx.shared_store[output_to] = {"headers": result.get("headers", []), "rows": full_rows}
             ret["_output_to"] = output_to
+            # Top-level fields for agent visibility
+            ret["key"] = output_to
+            ret["row_count"] = len(full_rows)
+            ret["_note"] = (
+                f"完整表数据已存入 shared_store['{output_to}']，共 {len(full_rows)} 行。"
+                f"可用 data_keys 查看所有 key，或用 data_browse(key='{output_to}') 浏览。"
+            )
 
         return ret
 
     registry.register("browser_extract_table", {
-        "description": "[需 CDP] 从当前页面提取表格数据（headers + rows）。支持自定义 CSS selector。结果可选存入 shared_store。",
+        "description": "[需 CDP] 从当前页面提取表格数据（headers + rows）。支持自定义 CSS selector。结果可选存入 shared_store，存入后可通过 data_keys 查看或 data_browse 浏览。",
         "parameters": {
             "type": "object",
             "properties": {
-                "output_to": {"type": "string", "description": "可选，将完整提取结果存入 shared_store 的变量名。"},
+                "output_to": {"type": "string", "description": "可选，将完整提取结果存入 shared_store 的变量名，后续可通过 data_keys 查看或 data_browse 浏览。"},
                 "selector": {"type": "string", "description": "可选，CSS selector 定位表格容器。省略时自动检测常见表格结构。"},
             },
         },
@@ -1030,15 +1080,23 @@ def _build_registry_impl() -> None:
         if output_to and ctx.shared_store is not None:
             ctx.shared_store[output_to] = result
             ret["_output_to"] = output_to
+            # Top-level fields for agent visibility
+            ret["key"] = output_to
+            detail_count = len(result.get("details", []))
+            ret["detail_count"] = detail_count
+            ret["_note"] = (
+                f"完整详情数据已存入 shared_store['{output_to}']，共 {detail_count} 个字段。"
+                f"可用 data_keys 查看所有 key，或用 data_browse(key='{output_to}') 浏览。"
+            )
 
         return ret
 
     registry.register("browser_extract_details", {
-        "description": "[需 CDP] 从当前页面提取结构化详情（key-value 对）。支持自定义 CSS selector 限定容器。结果可选存入 shared_store。",
+        "description": "[需 CDP] 从当前页面提取结构化详情（key-value 对）。支持自定义 CSS selector 限定容器。结果可选存入 shared_store，存入后可通过 data_keys 查看或 data_browse 浏览。",
         "parameters": {
             "type": "object",
             "properties": {
-                "output_to": {"type": "string", "description": "可选，将完整提取结果存入 shared_store 的变量名。"},
+                "output_to": {"type": "string", "description": "可选，将完整提取结果存入 shared_store 的变量名，后续可通过 data_keys 查看或 data_browse 浏览。"},
                 "selector": {"type": "string", "description": "可选，CSS selector 定位详情容器。省略时自动检测常见详情结构。"},
             },
         },
@@ -1251,7 +1309,7 @@ async def _data_keys_handler(args: dict, ctx: ToolContext) -> dict:
             typ = "other"
             size = 0
         keys.append({"name": name, "type": typ, "size": size})
-    return {"ok": True, "keys": keys}
+    return {"ok": True, "result": keys}
 
 
 async def _data_browse_handler(args: dict, ctx: ToolContext) -> dict:
@@ -1276,18 +1334,68 @@ async def _data_browse_handler(args: dict, ctx: ToolContext) -> dict:
                 if "\n" in line:
                     line = line.rsplit("\n", 1)[-1]
                 items.append(line)
-            return {"ok": True, "key": key, "offset": offset, "limit": limit, "total": total, "items": items}
+            return {"ok": True, "result": {"key": key, "offset": offset, "limit": limit, "total": total, "items": items}}
         items = [repr(x) for x in page]
-        return {"ok": True, "key": key, "offset": offset, "limit": limit, "total": total, "items": items}
+        return {"ok": True, "result": {"key": key, "offset": offset, "limit": limit, "total": total, "items": items}}
     elif isinstance(value, str):
         total = len(value)
         preview = value[offset:offset + limit]
-        return {"ok": True, "key": key, "offset": offset, "limit": limit, "total": total, "preview": preview}
+        return {"ok": True, "result": {"key": key, "offset": offset, "limit": limit, "total": total, "preview": preview}}
     elif isinstance(value, dict):
         ks = list(value.keys())
         preview = repr(value)[:limit] if limit else repr(value)
-        return {"ok": True, "key": key, "keys": ks, "preview": preview}
-    return {"ok": True, "key": key, "offset": offset, "limit": limit, "value": repr(value)[:limit]}
+        return {"ok": True, "result": {"key": key, "keys": ks, "preview": preview}}
+    return {"ok": True, "result": {"key": key, "offset": offset, "limit": limit, "value": repr(value)[:limit]}}
+
+
+async def _data_peek_handler(args: dict, ctx: ToolContext) -> dict:
+    """Lightweight preview of the first N records in a shared_store key."""
+    ss = ctx.shared_store
+    if ss is None:
+        return {"ok": False, "error": "shared_store 不可用"}
+    key = args.get("key", "")
+    if key not in ss:
+        return {"ok": False, "error": f"key '{key}' 不存在"}
+    value = ss[key]
+    limit = max(min(args.get("limit", 5), 20), 1)
+
+    if isinstance(value, list):
+        preview = value[:limit]
+        return {
+            "ok": True,
+            "result": {
+                "key": key, "type": "list", "total": len(value),
+                "preview": preview, "limit": limit,
+            },
+        }
+    elif isinstance(value, dict):
+        keys_list = list(value.keys())
+        preview_keys = keys_list[:limit]
+        preview = {k: value[k] for k in preview_keys}
+        return {
+            "ok": True,
+            "result": {
+                "key": key, "type": "dict", "total": len(value),
+                "keys": keys_list[:20],
+                "preview": preview, "limit": limit,
+            },
+        }
+    elif isinstance(value, str):
+        preview = value[:500]
+        return {
+            "ok": True,
+            "result": {
+                "key": key, "type": "str", "total": len(value),
+                "preview": preview,
+            },
+        }
+    return {
+        "ok": True,
+        "result": {
+            "key": key, "type": type(value).__name__,
+            "preview": repr(value)[:500],
+        },
+    }
 
 
 

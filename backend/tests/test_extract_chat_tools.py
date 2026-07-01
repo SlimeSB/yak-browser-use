@@ -43,8 +43,8 @@ class TestBrowserExtractList:
         ]
         result = await registry.dispatch("browser_extract_list", {}, ctx)
         assert result["ok"] is True
-        assert len(result["items"]) == 2
-        assert result["items"][0]["text"] == "Item 1"
+        assert len(result["result"]["items"]) == 2
+        assert result["result"]["items"][0]["text"] == "Item 1"
 
     @pytest.mark.asyncio
     async def test_custom_selector(self):
@@ -56,7 +56,7 @@ class TestBrowserExtractList:
             "browser_extract_list", {"selector": ".bili-video-card"}, ctx
         )
         assert result["ok"] is True
-        assert len(result["items"]) == 1
+        assert len(result["result"]["items"]) == 1
         # Verify the JS contains the escaped selector
         call_js = ctx.cdp_helpers.bridge.evaluate.call_args[0][0]
         assert ".bili-video-card" in call_js
@@ -73,8 +73,8 @@ class TestBrowserExtractList:
             ctx,
         )
         assert result["ok"] is True
-        assert result["items"][0]["title"] == "Title 1"
-        assert result["items"][0]["link"] == "https://example.com/1"
+        assert result["result"]["items"][0]["title"] == "Title 1"
+        assert result["result"]["items"][0]["link"] == "https://example.com/1"
 
     @pytest.mark.asyncio
     async def test_fields_without_selector_returns_error(self):
@@ -111,7 +111,11 @@ class TestBrowserExtractList:
         assert result["ok"] is True
         assert result["_output_to"] == "data"
         assert len(ctx.shared_store["data"]) == 60
-        assert len(result["items"]) == 50
+        assert len(result["result"]["items"]) == 50
+        # New output_to enrichments
+        assert result["key"] == "data"
+        assert result["count"] == 60
+        assert result["fields"] == ["title"]
 
     @pytest.mark.asyncio
     async def test_evaluate_returns_null(self):
@@ -119,8 +123,8 @@ class TestBrowserExtractList:
         ctx.cdp_helpers.bridge.evaluate.return_value = None
         result = await registry.dispatch("browser_extract_list", {}, ctx)
         assert result["ok"] is True
-        assert result["items"] == []
-        assert result["count"] == 0
+        assert result["result"]["items"] == []
+        assert result["result"]["count"] == 0
 
     @pytest.mark.asyncio
     async def test_output_to_stores_full_data(self):
@@ -146,8 +150,9 @@ class TestBrowserExtractList:
         assert result["ok"] is True
         assert result["_truncated"] is True
         assert result["total"] == 60
-        assert result["count"] == 50
-        assert len(result["items"]) == 50
+        assert result["count"] == 60  # top-level count (full data) when output_to is set
+        assert result["key"] == "videos"
+        assert len(result["result"]["items"]) == 50
 
     @pytest.mark.asyncio
     async def test_truncation_without_output_to(self):
@@ -158,7 +163,7 @@ class TestBrowserExtractList:
         assert result["ok"] is True
         assert result["_truncated"] is True
         assert result["total"] == 60
-        assert len(result["items"]) == 50
+        assert len(result["result"]["items"]) == 50
 
     @pytest.mark.asyncio
     async def test_selector_with_single_quote_escaped(self):
