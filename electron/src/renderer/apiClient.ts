@@ -193,19 +193,31 @@ export function createIsolatedProfile(name: string) {
   );
 }
 
-export function connectBrowser(mode: string, profileName?: string, highlightMode?: string) {
-  return apiFetch<{ success: boolean; wsUrl?: string; error?: string | null; needsRestart?: boolean; browserName?: string }>(
+export async function connectBrowser(mode: string, profileName?: string, highlightMode?: string) {
+  const data = await apiFetch<{ connected?: boolean; ws_url?: string; error?: string | null; needs_restart?: boolean; browser_name?: string }>(
     '/api/chrome/connect',
     { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mode, profile_name: profileName, highlight_mode: highlightMode || 'a11y' }) }
   );
+  return {
+    success: data.connected ?? false,
+    wsUrl: data.ws_url ?? '',
+    error: data.error ?? null,
+    needsRestart: data.needs_restart ?? false,
+    browserName: data.browser_name ?? '',
+  };
 }
 
-export function restartBrowser() {
-  return apiFetch<{ success: boolean; wsUrl?: string; error?: string | null }>('/api/chrome/restart', { method: 'POST' });
+export async function restartBrowser() {
+  const data = await apiFetch<{ connected?: boolean; ws_url?: string; error?: string | null }>('/api/chrome/restart', { method: 'POST' });
+  return {
+    success: data.connected ?? false,
+    wsUrl: data.ws_url ?? '',
+    error: data.error ?? null,
+  };
 }
 
 export function disconnectBrowser() {
-  return apiFetch<{ success: boolean }>('/api/chrome/disconnect', { method: 'POST' });
+  return apiFetch<{ disconnected?: boolean }>('/api/chrome/disconnect', { method: 'POST' });
 }
 
 // ── Credentials ──────────────────────────────────────────────
