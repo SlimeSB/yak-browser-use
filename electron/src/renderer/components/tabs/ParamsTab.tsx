@@ -17,19 +17,19 @@ export default function ParamsTab() {
 
   return (
     <div className="cred-layout">
-      <div className="cred-toolbar">
-        <span style={{ fontSize: 'var(--fs-sm)', fontWeight: 'var(--fw-semibold)', color: 'var(--text-secondary)' }}>{t('paramsTab.title')}</span>
-        <div style={{ flex: 1 }} />
+      <div className="tab-toolbar">
+        <span className="tab-toolbar-title">{t('paramsTab.title')}</span>
+        <span className="tab-toolbar-spacer" />
         <input className="input" style={{ width: 160 }} placeholder={t('paramsTab.key')} value={credKey} onChange={e => setCredKey(e.target.value)} />
         <input className="input" style={{ width: 200 }} type="password" placeholder={t('paramsTab.value')} value={credValue} onChange={e => setCredValue(e.target.value)} />
         <button className="btn btn-primary btn-sm" onClick={addCredential}>{t('paramsTab.add')}</button>
       </div>
       <div className="cred-content">
-        <div style={{ fontSize: 'var(--fs-sm)', color: 'var(--text-muted)', textAlign: 'center', padding: '4px 20px 8px' }}>
+        <div className="tab-empty-hint" style={{ paddingBottom: 8 }}>
           {t('paramsTab.hint')}
         </div>
         {credKeys.length === 0 ? (
-          <div style={{ fontSize: 'var(--fs-sm)', color: 'var(--text-muted)', textAlign: 'center', padding: 20 }}>
+          <div className="tab-empty-hint">
             {t('paramsTab.noParams')}
           </div>
         ) : (
@@ -37,7 +37,7 @@ export default function ParamsTab() {
             <div key={k} className="cred-row">
               <span className="cred-key">{k}</span>
               <span className="cred-val"> ••••••</span>
-              <button className="btn btn-danger btn-xs" onClick={() => removeCredential(k)} title={t('paramsTab.delete')}>✕</button>
+              <button className="btn btn-danger btn-sm" onClick={() => removeCredential(k)} title={t('paramsTab.delete')}>✕</button>
             </div>
           ))
         )}

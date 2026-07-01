@@ -71,7 +71,6 @@ export interface SessionMeta {
 export interface TreeNode {
   name: string;
   label: string;
-  isPipeline: boolean;
   sessions: SessionMeta[];
 }
 

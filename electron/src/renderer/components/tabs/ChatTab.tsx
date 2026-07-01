@@ -20,26 +20,24 @@ function SessionTree() {
   const expandedNodes = useChatStore(s => s.expandedNodes);
   const currentSessionId = useChatStore(s => s.currentSessionId);
   const activePreset = usePipelineStore(s => s.activePreset);
-  const toggleExpand = useChatStore(s => s.toggleExpand);
   const selectSession = useChatStore(s => s.selectSession);
+  const switchPipeline = useChatStore(s => s.switchPipeline);
+  const newSession = useChatStore(s => s.newSession);
   const archiveSession = useChatStore(s => s.archiveSession);
 
   const treeNodes = useMemo((): TreeNode[] => {
     const nodes: TreeNode[] = [
-      { name: '__chat__', label: 'No Workspace', isPipeline: false, sessions: chatSessions },
+      { name: '__chat__', label: t('chat.noWorkspace'), sessions: chatSessions },
     ];
     for (const p of pipelines) {
       nodes.push({
         name: p.name,
         label: p.title || p.name,
-        isPipeline: true,
         sessions: pipelineSessions[p.name] ?? [],
       });
     }
     return nodes;
-  }, [pipelines, chatSessions, pipelineSessions]);
-
-  const hasPipelines = treeNodes.some(n => n.isPipeline);
+  }, [pipelines, chatSessions, pipelineSessions, t]);
 
   const formatLabel = (s: { session_id: string; created_at: string; message_count: number }) => {
     try {
@@ -51,61 +49,44 @@ function SessionTree() {
 
   return (
     <div className="chat-session-list">
-      {treeNodes.map((node, idx) => {
-        const isExpanded = expandedNodes.has(node.name);
-        const isActive = activePreset === node.name;
-        const parts: React.ReactNode[] = [];
-
-        if (idx === 0 && hasPipelines && node.name === '__chat__') {
-          parts.push(
-            <div key="divider-label" className="tree-divider-label">Pipelines</div>,
-            <div key="divider-line" className="tree-divider" />,
-          );
-        }
-
-        parts.push(
-          <div key={node.name} className="tree-node">
-            <div
-              className={'tree-node-header' + (isActive ? ' active' : '') + (node.isPipeline ? ' is-pipeline' : '')}
-              onClick={() => {
-                if (!node.isPipeline) toggleExpand(node.name);
-              }}
-            >
-              <span className="tree-node-arrow">{node.isPipeline ? '' : '>'}</span>
-              <span className="tree-node-label">{node.label}</span>
-              <span className="tree-node-badge">({node.sessions.length})</span>
-            </div>
-            <div
-              className={'tree-children' + (isExpanded ? '' : ' collapsed')}
-              style={{ maxHeight: isExpanded ? node.sessions.length * 28 + 8 + 'px' : 0 }}
-            >
-              {node.sessions.map(s => (
-                <div
-                  key={s.session_id}
-                  className={'tree-session' + (currentSessionId === s.session_id ? ' active' : '')}
-                  onClick={async () => {
-                    if (node.name !== activePreset) await toggleExpand(node.name);
-                    selectSession(s.session_id);
-                  }}
-                >
-                  <span className={'tree-session-dot' + (currentSessionId === s.session_id ? ' active-dot' : '')}>
-                    {currentSessionId === s.session_id ? '●' : '○'}
-                  </span>
-                  <span className="tree-session-label">{formatLabel(s)}</span>
-                  <span className="tree-session-count">{t('chat.sessionCount', { count: s.message_count })}</span>
-                  <button
-                    className="tree-session-archive"
-                    title={t('chat.archiveSession', 'Archive')}
-                    onClick={(e) => { e.stopPropagation(); archiveSession(s.session_id); }}
-                  >✕</button>
-                </div>
-              ))}
-            </div>
-          </div>,
-        );
-
-        return parts;
-      })}
+      {treeNodes.map((node) => (
+        <div key={node.name} className="tree-node">
+          <div
+            className={'tree-node-header' + (activePreset === node.name ? ' active' : '')}
+            onClick={async () => {
+              if (node.name !== activePreset) {
+                await switchPipeline(node.name);
+                await newSession();
+              } else {
+                await newSession();
+              }
+            }}
+          >
+            <span className="tree-node-label">{node.label}</span>
+            <span className="tree-node-badge">({node.sessions.length})</span>
+          </div>
+          <div className="tree-children">
+            {node.sessions.map(s => (
+              <div
+                key={s.session_id}
+                className={'tree-session' + (currentSessionId === s.session_id ? ' active' : '')}
+                onClick={() => selectSession(s.session_id, node.name)}
+              >
+                <span className={'tree-session-dot' + (currentSessionId === s.session_id ? ' active-dot' : '')}>
+                  {currentSessionId === s.session_id ? '●' : '○'}
+                </span>
+                <span className="tree-session-label">{formatLabel(s)}</span>
+                <span className="tree-session-count">{t('chat.sessionCount', { count: s.message_count })}</span>
+                <button
+                  className="tree-session-archive"
+                  title={t('chat.archiveSession', 'Archive')}
+                  onClick={(e) => { e.stopPropagation(); archiveSession(s.session_id, node.name); }}
+                >✕</button>
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
     </div>
   );
 }
@@ -452,11 +433,11 @@ export default function ChatTab() {
                 title={sidebarCollapsed ? t('chat.expandSidebar', 'Expand') : t('chat.collapseSidebar', 'Collapse')}>
                 {sidebarCollapsed ? '▶' : '◀'}
               </button>
-              {activePreset !== '__chat__' && (
-                <span className="chat-title">
-                  {pipelines.find(p => p.name === activePreset)?.title || t('chat.title')}
-                </span>
-              )}
+              <span className="chat-title">
+                {activePreset === '__chat__'
+                  ? t('chat.noWorkspace')
+                  : pipelines.find(p => p.name === activePreset)?.title || t('chat.title')}
+              </span>
             </div>
             <div className="chat-header-right">
               <button className="btn btn-small btn-secondary" onClick={resetChat} title={t('common.reset')}>

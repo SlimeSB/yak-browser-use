@@ -4,6 +4,7 @@ import type { ChatMessage, SessionMeta, PendingEdit } from '../types';
 import { nextMsgId } from '../types';
 import { useConnectionStore } from './connectionStore';
 import { usePipelineStore } from './pipelineStore';
+import i18n from '../i18n';
 
 // ── Types ────────────────────────────────────────────────────
 
@@ -37,8 +38,10 @@ interface ChatState {
   setMessages: (msgs: ChatMessage[]) => void;
   loadSessions: (pipelineName: string) => Promise<void>;
   newSession: () => Promise<void>;
-  archiveSession: (sessionId: string) => Promise<void>;
-  selectSession: (sessionId: string) => Promise<void>;
+  prepareSession: () => Promise<void>;
+  createSession: () => Promise<void>;
+  archiveSession: (sessionId: string, pipelineName?: string) => Promise<void>;
+  selectSession: (sessionId: string, pipelineName?: string) => Promise<void>;
   switchPipeline: (pipelineName: string) => Promise<void>;
   toggleExpand: (name: string) => Promise<void>;
   confirmEdit: (editId: string) => Promise<string | null>;
@@ -69,6 +72,9 @@ export const useChatStore = _create<ChatState>((set, get) => ({
     if (!useConnectionStore.getState().connected) {
       _appendError(set, get, 'Please connect to a browser first.');
       return;
+    }
+    if (!get().currentSessionId) {
+      await get().createSession();
     }
     const msgId = nextMsgId();
     set((s) => ({ chatMessages: [...s.chatMessages, { id: msgId, role: 'user', content: text }] }));
@@ -135,39 +141,47 @@ export const useChatStore = _create<ChatState>((set, get) => ({
     }
   },
 
-  newSession: async () => {
-    const activePreset = usePipelineStore.getState().activePreset;
+  prepareSession: async () => {
+    set({ chatMessages: [], currentSessionId: '', _streamStates: {}, _lastAssistantId: null, _streamingMsgIds: new Set() });
+  },
+
+  createSession: async () => {
+    const preset = usePipelineStore.getState().activePreset;
     set({ loadingSession: true });
     try {
-      const r = await api.newSession(activePreset);
+      const r = await api.newSession(preset);
       if (r.session_id) {
         set({ currentSessionId: r.session_id, chatMessages: [] });
-        const list = await api.listSessions(activePreset);
+        const list = await api.listSessions(preset);
         const sessionsList = list.sessions ?? [];
-        if (activePreset === '__chat__' || !activePreset) {
+        if (preset === '__chat__' || !preset) {
           set({ chatSessions: sessionsList });
         } else {
-          set((s) => ({ pipelineSessions: { ...s.pipelineSessions, [activePreset]: sessionsList } }));
+          set((s) => ({ pipelineSessions: { ...s.pipelineSessions, [preset]: sessionsList } }));
         }
       }
     } catch (e) {
-      console.error('newSession failed: %s', String(e));
+      console.error('createSession failed: %s', String(e));
     } finally {
       set({ loadingSession: false });
     }
   },
 
-  archiveSession: async (sessionId) => {
+  newSession: async () => {
+    await get().prepareSession();
+  },
+
+  archiveSession: async (sessionId, pipelineName?) => {
     if (!confirm('Archive this session?')) return;
-    const activePreset = usePipelineStore.getState().activePreset;
+    const preset = pipelineName ?? usePipelineStore.getState().activePreset;
     try {
-      await api.archiveSession(activePreset, sessionId);
-      const list = await api.listSessions(activePreset);
+      await api.archiveSession(preset, sessionId);
+      const list = await api.listSessions(preset);
       const sessionsList = list.sessions ?? [];
-      if (activePreset === '__chat__' || !activePreset) {
+      if (preset === '__chat__' || !preset) {
         set({ chatSessions: sessionsList });
       } else {
-        set((s) => ({ pipelineSessions: { ...s.pipelineSessions, [activePreset]: sessionsList } }));
+        set((s) => ({ pipelineSessions: { ...s.pipelineSessions, [preset]: sessionsList } }));
       }
       if (get().currentSessionId === sessionId) {
         const found = sessionsList.find(s => s.session_id !== sessionId);
@@ -178,11 +192,11 @@ export const useChatStore = _create<ChatState>((set, get) => ({
     }
   },
 
-  selectSession: async (sessionId) => {
-    const activePreset = usePipelineStore.getState().activePreset;
+  selectSession: async (sessionId, pipelineName?) => {
+    const preset = pipelineName ?? usePipelineStore.getState().activePreset;
     set({ loadingSession: true });
     try {
-      const r = await api.getSessionData(activePreset, sessionId);
+      const r = await api.getSessionData(preset, sessionId);
       if (r.session) {
         const raw = (r.session.messages ?? []) as unknown as Record<string, unknown>[];
         set({
@@ -478,7 +492,7 @@ function _handleChatEvent(set: SetFn, get: GetFn, event: Record<string, unknown>
           if (hadActiveStreams) {
             partial.chatMessages = [...s.chatMessages, {
               id: nextMsgId(), role: 'assistant',
-              content: '❌ 对话被中断（可能达到迭代上限或用户取消）',
+              content: i18n.t('chat.interruptedMessage', { defaultValue: '❌ Session interrupted' }),
             }];
           }
           return partial;

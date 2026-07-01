@@ -46,7 +46,7 @@ export default function ExecTab() {
           connected={connected}
         />
         {loading && currentRunId && (
-          <div style={{ display: 'flex', gap: 6, justifyContent: 'center' }}>
+          <div className="exec-cancel-row">
             <button className="btn btn-danger btn-sm" onClick={cancel} disabled={cancelling}>
               {cancelling ? t('exec.cancel') + '...' : t('exec.cancel')}
             </button>

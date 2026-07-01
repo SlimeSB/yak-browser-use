@@ -27,9 +27,9 @@ export default function SettingsTab() {
               <div className="set-label">{t('settingsTab.colorMode')}</div>
               <div className="set-desc">{theme === 'dark' ? t('settingsTab.darkDesc') : t('settingsTab.lightDesc')}</div>
             </div>
-            <div style={{ display: 'flex', gap: 4 }}>
-              <button className={`btn btn-xs ${theme === 'dark' ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setTheme('dark')}>{t('settingsTab.dark')}</button>
-              <button className={`btn btn-xs ${theme === 'light' ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setTheme('light')}>{t('settingsTab.light')}</button>
+            <div className="set-segment">
+              <button className={`btn btn-sm ${theme === 'dark' ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setTheme('dark')}>{t('settingsTab.dark')}</button>
+              <button className={`btn btn-sm ${theme === 'light' ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setTheme('light')}>{t('settingsTab.light')}</button>
             </div>
           </div>
         </div>
@@ -41,9 +41,9 @@ export default function SettingsTab() {
               <div className="set-label">{t('settingsTab.language')}</div>
               <div className="set-desc">{t('settingsTab.langDesc')}</div>
             </div>
-            <div style={{ display: 'flex', gap: 4 }}>
-              <button className={`btn btn-xs ${i18n.language === 'en' ? 'btn-primary' : 'btn-secondary'}`} onClick={() => i18n.changeLanguage('en')}>English</button>
-              <button className={`btn btn-xs ${i18n.language === 'zh-CN' ? 'btn-primary' : 'btn-secondary'}`} onClick={() => i18n.changeLanguage('zh-CN')}>中文</button>
+            <div className="set-segment">
+              <button className={`btn btn-sm ${i18n.language === 'en' ? 'btn-primary' : 'btn-secondary'}`} onClick={() => i18n.changeLanguage('en')}>English</button>
+              <button className={`btn btn-sm ${i18n.language === 'zh-CN' ? 'btn-primary' : 'btn-secondary'}`} onClick={() => i18n.changeLanguage('zh-CN')}>中文</button>
             </div>
           </div>
         </div>
@@ -57,10 +57,10 @@ export default function SettingsTab() {
                 {reviewMode === 'human' ? t('settingsTab.manualDesc') : reviewMode === 'llm' ? t('settingsTab.autoDesc') : t('settingsTab.noneDesc')}
               </div>
             </div>
-            <div style={{ display: 'flex', gap: 4 }}>
-              <button className={`btn btn-xs ${reviewMode === 'human' ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setReviewMode('human')}>{t('settingsTab.manual')}</button>
-              <button className={`btn btn-xs ${reviewMode === 'llm' ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setReviewMode('llm')}>{t('settingsTab.auto')}</button>
-              <button className={`btn btn-xs ${reviewMode === 'none' ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setReviewMode('none')}>{t('settingsTab.none')}</button>
+            <div className="set-segment">
+              <button className={`btn btn-sm ${reviewMode === 'human' ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setReviewMode('human')}>{t('settingsTab.manual')}</button>
+              <button className={`btn btn-sm ${reviewMode === 'llm' ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setReviewMode('llm')}>{t('settingsTab.auto')}</button>
+              <button className={`btn btn-sm ${reviewMode === 'none' ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setReviewMode('none')}>{t('settingsTab.none')}</button>
             </div>
           </div>
         </div>
@@ -72,9 +72,9 @@ export default function SettingsTab() {
               <div className="set-label">{t('settingsTab.panelOrder')}</div>
               <div className="set-desc">{chatLayoutReversed ? t('settingsTab.editorFirst') : t('settingsTab.chatFirst')}</div>
             </div>
-            <div style={{ display: 'flex', gap: 4 }}>
-              <button className={`btn btn-xs ${!chatLayoutReversed ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setChatLayoutReversed(false)}>{t('settingsTab.chatEditor')}</button>
-              <button className={`btn btn-xs ${chatLayoutReversed ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setChatLayoutReversed(true)}>{t('settingsTab.editorChat')}</button>
+            <div className="set-segment">
+              <button className={`btn btn-sm ${!chatLayoutReversed ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setChatLayoutReversed(false)}>{t('settingsTab.chatEditor')}</button>
+              <button className={`btn btn-sm ${chatLayoutReversed ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setChatLayoutReversed(true)}>{t('settingsTab.editorChat')}</button>
             </div>
           </div>
         </div>
@@ -88,10 +88,10 @@ export default function SettingsTab() {
                 {highlightMode === 'a11y' ? t('settingsTab.a11yDesc') : highlightMode === 'progressive' ? t('settingsTab.progressiveDesc') : t('settingsTab.highlightOffDesc')}
               </div>
             </div>
-            <div style={{ display: 'flex', gap: 4 }}>
-              <button className={`btn btn-xs ${highlightMode === 'a11y' ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setHighlightMode('a11y')}>{t('settingsTab.a11y')}</button>
-              <button className={`btn btn-xs ${highlightMode === 'progressive' ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setHighlightMode('progressive')}>{t('settingsTab.progressive')}</button>
-              <button className={`btn btn-xs ${highlightMode === 'off' ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setHighlightMode('off')}>{t('settingsTab.highlightOff')}</button>
+            <div className="set-segment">
+              <button className={`btn btn-sm ${highlightMode === 'a11y' ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setHighlightMode('a11y')}>{t('settingsTab.a11y')}</button>
+              <button className={`btn btn-sm ${highlightMode === 'progressive' ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setHighlightMode('progressive')}>{t('settingsTab.progressive')}</button>
+              <button className={`btn btn-sm ${highlightMode === 'off' ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setHighlightMode('off')}>{t('settingsTab.highlightOff')}</button>
             </div>
           </div>
         </div>

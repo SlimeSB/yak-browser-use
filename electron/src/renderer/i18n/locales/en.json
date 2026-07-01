@@ -154,7 +154,14 @@
     "a11yDesc": "Accessibility Tree (lightweight, default)",
     "progressiveDesc": "CDP DOM depth scan (dense pages)",
     "highlightOffDesc": "No highlighting overlay",
-    "saved": "Saved"
+    "saved": "Saved",
+    "savingBtn": "Saving...",
+    "savedBtn": "Saved ✓",
+    "saveBtn": "Save",
+    "testingBtn": "Testing...",
+    "testBtn": "Test",
+    "selectModel": "-- Select model --",
+    "llmProvider": "LLM Provider"
   },
   "log": {
     "title": "Log",
@@ -231,6 +238,7 @@
     "think": "Thinking",
     "stop": "■ Stop",
     "interrupted": "Session interrupted",
+    "interruptedMessage": "❌ Session interrupted",
     "noChanges": "No changes detected — content is identical",
     "suggestedChanges": "AI suggested changes to the pipeline",
     "errorDetail": "Error Details",

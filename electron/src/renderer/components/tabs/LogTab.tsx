@@ -56,9 +56,9 @@ export default function LogTab() {
         </div>
         <div className="log-steps">
           {stepNames.length === 0 ? (
-            <div className="log-steps-empty">
-              {t('log.noStepData')}
-            </div>
+                  <div className="tab-empty-hint">
+                    {t('log.noStepData')}
+                  </div>
           ) : (
             stepNames.map((name, i) => {
               const status = getStepStatus(name);
@@ -77,20 +77,20 @@ export default function LogTab() {
           )}
         </div>
       </div>
-      <div className="log-main">
-        <div className="log-toolbar">
-          <span style={{ fontSize: 'var(--fs-sm)', fontWeight: 'var(--fw-semibold)', color: 'var(--text-secondary)' }}>{t('exec.liveLog')}</span>
-          <span style={{ flex: 1 }} />
-          <span style={{ fontSize: 'var(--fs-xs)', color: 'var(--text-muted)' }}>{events.length} {t('log.events')}</span>
-          <button className="btn btn-secondary btn-xs" onClick={onClearEvents}>{t('log.clear')}</button>
-        </div>
+        <div className="log-main">
+          <div className="tab-toolbar">
+            <span className="tab-toolbar-title">{t('exec.liveLog')}</span>
+            <span className="tab-toolbar-spacer" />
+            <span className="tab-toolbar-meta">{events.length} {t('log.events')}</span>
+            <button className="btn btn-secondary btn-sm" onClick={onClearEvents}>{t('log.clear')}</button>
+          </div>
         {pendingReview && (
           <div className="review-card">
             <div className="review-card-header">
               <div className="review-card-title">
                 <span>!</span> {t('log.pendingReview')}
               </div>
-              <span style={{ fontSize: 'var(--fs-xs)', color: 'var(--text-muted)' }}>{pendingReview.guardLayer || t('log.guardian')}</span>
+              <span className="tab-toolbar-meta">{pendingReview.guardLayer || t('log.guardian')}</span>
             </div>
             <div className="review-card-body">
               <div className="review-card-reason">{pendingReview.reason}</div>
@@ -109,7 +109,7 @@ export default function LogTab() {
                 {!showingLogReject ? (
                   <button className="btn btn-danger btn-sm" onClick={() => setShowingLogReject(true)}>{t('log.reject')}</button>
                 ) : (
-                  <div style={{ display: 'flex', gap: 6, flex: 1 }}>
+                  <div className="review-reject-row">
                     <input
                       className="param-input" style={{ flex: 1, fontSize: 'var(--fs-sm)' }}
                       placeholder={t('log.reason') + t('log.required')}
@@ -147,13 +147,13 @@ export default function LogTab() {
         </div>
         <div className="artifact-section">
           <div className="artifact-title">{t('log.summary')}</div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, fontSize: 'var(--fs-sm)' }}>
-            <div><span style={{ color: 'var(--text-muted)' }}>{t('log.step')}s</span> {stepEnds.length}/{stepStarts.length}</div>
-            <div><span style={{ color: 'var(--text-muted)' }}>{t('log.events')}</span> {events.length}</div>
-            <div><span style={{ color: 'var(--text-muted)' }}>{t('log.status')}</span>{' '}
-              {loading ? <span style={{ color: 'var(--primary)' }}>{t('log.running')}</span>
-                : stepStarts.length > 0 ? <span style={{ color: 'var(--success)' }}>{t('log.completed')}</span>
-                : <span style={{ color: 'var(--text-muted)' }}>{t('statusBar.ready')}</span>}
+          <div className="log-summary-grid">
+            <div><span className="log-summary-label">{t('log.step')}s</span> {stepEnds.length}/{stepStarts.length}</div>
+            <div><span className="log-summary-label">{t('log.events')}</span> {events.length}</div>
+            <div><span className="log-summary-label">{t('log.status')}</span>{' '}
+              {loading ? <span className="log-status-running">{t('log.running')}</span>
+                : stepStarts.length > 0 ? <span className="log-status-done">{t('log.completed')}</span>
+                : <span className="log-status-idle">{t('statusBar.ready')}</span>}
             </div>
           </div>
         </div>

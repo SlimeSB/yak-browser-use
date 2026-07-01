@@ -18,8 +18,8 @@ export default function SuggestionsPanel({
   const [showingReject, setShowingReject] = useState(false);
 
   return (
-    <div className="card" style={{ borderColor: '#f59e0b', borderWidth: 2 }}>
-      <div className="card-title" style={{ color: '#f59e0b' }}>
+    <div className="card" style={{ borderColor: 'var(--accent)', borderWidth: 2 }}>
+      <div className="card-title" style={{ color: 'var(--accent)' }}>
         {t('log.pendingReview')}
         {guardLayer && <span style={{ fontSize: 'var(--fs-xs)', marginLeft: 8 }}>[{guardLayer}]</span>}
       </div>

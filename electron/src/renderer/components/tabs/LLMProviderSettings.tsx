@@ -79,7 +79,7 @@ export function LLMProviderSettings() {
 
   return (
     <div className="set-group">
-      <div className="set-group-title">LLM Provider</div>
+      <div className="set-group-title">{t('settingsTab.llmProvider')}</div>
       <div className="set-row" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 6 }}>
         <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
           {presets.map(p => (
@@ -91,14 +91,14 @@ export function LLMProviderSettings() {
           ))}
         </div>
         {presetsError && (
-          <div style={{ fontSize: 'var(--fs-sm)', color: '#e81123' }}>{'⚠'}{presetsError}</div>
+          <div style={{ fontSize: 'var(--fs-sm)', color: 'var(--danger)' }}>{'⚠'}{presetsError}</div>
         )}
 
         {activePreset && (
           <select className="set-input" value={config.model}
             onChange={e => selectModel(e.target.value)} style={{ marginBottom: 4 }}
           >
-            <option value="">-- Select model --</option>
+            <option value="">{t('settingsTab.selectModel')}</option>
             {activePreset.models.map(m => (
               <option key={m.id} value={m.id}>
                 {m.name} ({m.id}){m.context ? ` ⚡${(m.context / 1000).toFixed(0)}K ctx` : ''}
@@ -116,13 +116,13 @@ export function LLMProviderSettings() {
 
         <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
           <button className="btn btn-xs btn-primary" onClick={save} disabled={saving}>
-            {saving ? 'Saving...' : saved ? 'Saved ✓' : 'Save'}
+            {saving ? t('settingsTab.savingBtn') : saved ? t('settingsTab.savedBtn') : t('settingsTab.saveBtn')}
           </button>
           <button className="btn btn-xs btn-secondary" onClick={test} disabled={testing}>
-            {testing ? 'Testing...' : 'Test'}
+            {testing ? t('settingsTab.testingBtn') : t('settingsTab.testBtn')}
           </button>
           {testResult && (
-            <span style={{ fontSize: 'var(--fs-sm)', color: testResult.ok ? 'var(--primary)' : '#e81123', marginLeft: 4 }}>
+            <span style={{ fontSize: 'var(--fs-sm)', color: testResult.ok ? 'var(--primary)' : 'var(--danger)', marginLeft: 4 }}>
               {testResult.ok ? '✓ ' + testResult.msg : '✗ ' + testResult.msg}
             </span>
           )}
