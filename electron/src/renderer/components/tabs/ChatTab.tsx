@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useMemo } from 'react';
+import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -343,43 +343,47 @@ export default function ChatTab() {
   };
 
   // Divider drag-to-resize
-  const dividerRef = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    const el = dividerRef.current;
-    if (!el) return;
-    let dragging = false;
-    const onMouseDown = (e: MouseEvent) => {
-      e.preventDefault();
-      dragging = true;
-      document.body.style.cursor = 'col-resize';
-      document.body.style.userSelect = 'none';
+  const bodyRef = useRef<HTMLDivElement>(null);
+  const draggingRef = useRef(false);
+
+  const handleDividerMouseDown = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    draggingRef.current = true;
+    const startX = e.clientX;
+    const startRatio = splitRatio;
+    const bodyWidth = bodyRef.current?.offsetWidth ?? 1;
+    const sign = chatLayoutReversed ? -1 : 1;
+    document.body.style.userSelect = 'none';
+    document.body.style.cursor = 'col-resize';
+
+    const onMove = (ev: MouseEvent) => {
+      if (!draggingRef.current) return;
+      const dx = (ev.clientX - startX) * sign;
+      const newRatio = Math.min(80, Math.max(20, startRatio + (dx / bodyWidth) * 100));
+      setSplitRatio(newRatio);
     };
-    const onMouseMove = (e: MouseEvent) => {
-      if (!dragging) return;
-      const parent = el.parentElement;
-      if (!parent) return;
-      const rect = parent.getBoundingClientRect();
-      const ratio = ((e.clientX - rect.left) / rect.width) * 100;
-      setSplitRatio(Math.min(80, Math.max(20, ratio)));
-    };
-    const onMouseUp = () => {
-      dragging = false;
-      document.body.style.cursor = '';
+    const onUp = () => {
+      draggingRef.current = false;
       document.body.style.userSelect = '';
+      document.body.style.cursor = '';
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
     };
-    el.addEventListener('mousedown', onMouseDown);
-    document.addEventListener('mousemove', onMouseMove);
-    document.addEventListener('mouseup', onMouseUp);
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  }, [splitRatio, chatLayoutReversed]);
+
+  useEffect(() => {
     return () => {
-      el.removeEventListener('mousedown', onMouseDown);
-      document.removeEventListener('mousemove', onMouseMove);
-      document.removeEventListener('mouseup', onMouseUp);
+      draggingRef.current = false;
+      document.body.style.userSelect = '';
+      document.body.style.cursor = '';
     };
   }, []);
 
   return (
     <div className="chat-layout">
-      <div className="chat-body" style={{ flexDirection: chatLayoutReversed ? 'row-reverse' : 'row' }}>
+      <div className="chat-body" ref={bodyRef} style={{ flexDirection: chatLayoutReversed ? 'row-reverse' : 'row' }}>
         {/* Sidebar */}
         <div className={'chat-session-sidebar' + (sidebarCollapsed ? ' collapsed' : '')}>
           <div className="chat-session-header">
@@ -458,7 +462,7 @@ export default function ChatTab() {
           </div>
         </div>
 
-        <div className="chat-divider" ref={dividerRef} />
+        <div className="chat-divider" onMouseDown={handleDividerMouseDown} />
 
         <EditorPanel />
       </div>
