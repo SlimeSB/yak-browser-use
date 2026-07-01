@@ -782,6 +782,13 @@ body {
 .btn-primary:hover:not(:disabled) {
   filter: brightness(1.1);
 }
+.btn-breathe {
+  animation: breathe 2s ease-in-out infinite;
+}
+@keyframes breathe {
+  0%, 100% { box-shadow: 0 0 4px var(--primary); }
+  50% { box-shadow: 0 0 16px 4px var(--primary); }
+}
 .btn-secondary {
   background: var(--bg-hover);
   color: var(--text-secondary);

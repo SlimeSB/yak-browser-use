@@ -97,7 +97,7 @@ export default function ConnectionBar() {
 
             {connectMode === 'user' ? (
               <div className="conn-segment">
-                <button className="btn btn-primary btn-sm" onClick={() => connect('user')}>
+                <button className={'btn btn-primary btn-sm' + (!connected ? ' btn-breathe' : '')} onClick={() => connect('user')}>
                   {t('connection.connectToChrome')}
                 </button>
                 <span className="conn-status-text">{t('connection.autoDiscover')}</span>
@@ -128,7 +128,7 @@ export default function ConnectionBar() {
                     <button className="btn btn-secondary btn-sm" onClick={handleNewProfile}>{t('connection.newConnection')}</button>
                   )}
                 </div>
-                <button className="btn btn-primary btn-sm" onClick={() => connect('isolated', selectedProfile)}>
+                <button className={'btn btn-primary btn-sm' + (!connected ? ' btn-breathe' : '')} onClick={() => connect('isolated', selectedProfile)}>
                   {t('connection.startConnect')}
                 </button>
               </div>

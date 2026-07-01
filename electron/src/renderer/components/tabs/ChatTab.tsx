@@ -397,9 +397,8 @@ export default function ChatTab() {
               title={t('chat.newSession', 'New Session')}
               style={{
                 width: 22, height: 22, border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)',
-                background: 'transparent', color: 'var(--text-muted)', cursor: 'pointer', fontSize: 'var(--fs-base)',
+                background: 'transparent', color: 'var(--text)', cursor: 'pointer', fontSize: 'var(--fs-base)',
                 display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-                opacity: loadingSession || messages.length === 0 ? 0.35 : 1,
               }}
             >+</button>
           </div>

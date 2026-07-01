@@ -39,7 +39,7 @@ export const useConnectionStore = _create<ConnectionState>((set, get) => ({
   connectionError: null,
   profiles: [],
   selectedProfile: '',
-  connectMode: 'user',
+  connectMode: 'isolated',
   restartDialog: null,
   restarting: false,
   highlightMode: loadHighlightMode(),
