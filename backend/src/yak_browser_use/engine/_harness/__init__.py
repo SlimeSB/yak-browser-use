@@ -18,9 +18,7 @@ from yak_browser_use.engine._harness.tool_guardrails import (
 )
 from yak_browser_use.engine._harness.turn_context import (
     TurnContext,
-    InterruptState,
     build_turn_context,
-    save_interrupt_state,
 )
 from yak_browser_use.engine._harness.tool_executor import (
     execute_tool_calls_sequential,
@@ -30,7 +28,6 @@ from yak_browser_use.engine._harness.tool_executor import (
 from yak_browser_use.engine._harness.conversation_loop import (
     ConversationResult,
     run_conversation_loop,
-    resume_conversation,
 )
 from yak_browser_use.engine._harness.tools import (
     get_all_tools,
@@ -46,14 +43,11 @@ __all__ = [
     "ToolCallGuardrailState",
     "create_chat_guardrail_config",
     "TurnContext",
-    "InterruptState",
     "build_turn_context",
-    "save_interrupt_state",
     "execute_tool_calls_sequential",
     "execute_tool_calls",
     "UnrecoverableError",
     "ConversationResult",
     "run_conversation_loop",
-    "resume_conversation",
     "get_all_tools",
 ]

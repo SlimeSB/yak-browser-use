@@ -152,9 +152,6 @@ async def execute_tool_calls_sequential(
         _append_tool_result(messages, tool_call_id, fn_name, result_text,
                             ok=ok, duration_ms=result_dict.get("duration_ms", int((time.time() - start) * 1000)))
 
-        if result_dict.get("_pipeline_finish"):
-            break
-
         if ok and fn_name in ("browser_goto", "browser_click", "browser_fill", "browser_scroll") and cdp_helpers is not None:
             await _auto_refresh_highlights(cdp_helpers)
             if hasattr(cdp_helpers, "bridge") and cdp_helpers.bridge is not None:
@@ -173,6 +170,9 @@ async def execute_tool_calls_sequential(
                 "id": tool_call_id,
                 "result": result_text_for_event,
             })
+
+        if result_dict.get("_pipeline_finish"):
+            break
 
     if guardrail_state:
         guardrail_state.reset()

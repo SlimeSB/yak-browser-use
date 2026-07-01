@@ -32,7 +32,6 @@ from yak_browser_use.engine._harness.tool_guardrails import ToolCallGuardrailSta
 from yak_browser_use.engine._harness.turn_context import (
     TurnContext,
     build_turn_context,
-    InterruptState,
 )
 from yak_browser_use.engine._harness.tool_executor import (
     execute_tool_calls_sequential,
@@ -367,20 +366,3 @@ def _build_assistant_message(response: object) -> dict:
         msg["reasoning"] = thinking
     return msg
 
-
-def resume_conversation(
-    interrupt_state: InterruptState,
-    system_prompt: str,
-) -> tuple[list[dict], IterationBudget | None, dict | None]:
-    """Restore conversation from saved interrupt state.
-
-    Explicitly creates a fresh TurnContext to reset retry counters.
-    Returns: (messages, budget, error_info)
-    """
-    messages = interrupt_state.messages
-
-    budget = None
-    if interrupt_state.budget:
-        budget = IterationBudget.from_dict(interrupt_state.budget)
-
-    return messages, budget, interrupt_state.error_info

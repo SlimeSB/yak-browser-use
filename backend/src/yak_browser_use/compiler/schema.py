@@ -104,7 +104,6 @@ class PipelineYaml(BaseModel):
     system_prompt: str = ""
     url_aliases: dict[str, str] = {}
     constants: dict[str, Any] = {}
-    guardian: dict[str, Any] = Field(default_factory=dict)
     steps: list[StepYaml] = Field(..., min_length=1)
 
     def to_pipeline_def(self) -> PipelineDef:
@@ -120,7 +119,6 @@ class PipelineYaml(BaseModel):
                 "system_prompt": self.system_prompt,
                 "url_aliases": self.url_aliases,
                 "constants": self.constants,
-                "guardian": self.guardian,
             },
         )
 

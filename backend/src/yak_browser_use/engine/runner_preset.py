@@ -110,7 +110,7 @@ def _setup_run_logger(run_dir: Path) -> logging.Handler | None:
     return None
 
 
-async def _execute_tool_step_with_guardian(
+async def _execute_tool_step(
     step_def: dict,
     tools_dir: Path,
     step_dir: Path,
@@ -299,7 +299,7 @@ async def run_pipeline(
                         shared_store=shared_store,
                     )
             else:
-                step_result = await _execute_tool_step_with_guardian(
+                step_result = await _execute_tool_step(
                     step_def,
                     wm.tools_dir,
                     step_dir,

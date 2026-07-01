@@ -3,10 +3,8 @@
 from yak_browser_use.engine._harness.conversation_loop import (
     _prepare_messages,
     ConversationResult,
-    resume_conversation,
 )
 from yak_browser_use.engine._harness.iteration_budget import IterationBudget
-from yak_browser_use.engine._harness.turn_context import InterruptState, save_interrupt_state
 
 
 def test_prepare_messages_with_system():
@@ -35,31 +33,3 @@ def test_conversation_result_defaults():
     assert result.final_response == "done"
     assert result.interrupted is False
     assert result.turn_count == 0
-
-
-def test_resume_conversation():
-    budget = IterationBudget(max_total=50)
-    budget.consume(5)
-    state = save_interrupt_state(
-        messages=[{"role": "user", "content": "hello"}],
-        budget=budget,
-        error_info={"code": "timeout"},
-    )
-    msgs, restored_budget, error_info = resume_conversation(state, "system prompt")
-    assert len(msgs) == 1
-    assert msgs[0]["content"] == "hello"
-    assert restored_budget is not None
-    assert restored_budget.remaining == 45
-    assert error_info["code"] == "timeout"
-
-
-def test_resume_conversation_no_budget():
-    state = InterruptState(
-        messages=[{"role": "user", "content": "hi"}],
-        budget=None,
-        error_info=None,
-    )
-    msgs, budget, error_info = resume_conversation(state, "")
-    assert len(msgs) == 1
-    assert budget is None
-    assert error_info is None

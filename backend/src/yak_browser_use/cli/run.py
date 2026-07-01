@@ -56,16 +56,7 @@ async def _cmd_run(path: str, params: dict | None = None) -> None:
         logger.error("Cannot connect to Chrome: %s", e)
         raise SystemExit(1)
 
-    # 4. Prepare guardian
-    from yak_browser_use.engine._lifecycle.guardian import (
-        create_guardian_from_frontmatter,
-        inject_guardian_config_to_steps,
-    )
-
-    inject_guardian_config_to_steps(steps, parsed.frontmatter)
-    guardian = create_guardian_from_frontmatter(parsed.frontmatter)
-
-    # 5. Run pipeline (blocks until done; handles workspace, run_id, status internally)
+    # 4. Run pipeline (blocks until done; handles workspace, run_id, status internally)
     from yak_browser_use.engine.runner_preset import run_pipeline
 
     try:
@@ -75,7 +66,6 @@ async def _cmd_run(path: str, params: dict | None = None) -> None:
             cdp_helpers=browser,
             pipeline_path=input_path,
             frontmatter=parsed.frontmatter,
-            guardian=guardian,
         )
     finally:
         await bridge.stop()
