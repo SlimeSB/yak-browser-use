@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Any
 
+from yak_browser_use.tools._path_utils import validate_path
 from yak_browser_use.utils.logging import get_logger
 
 logger = get_logger(__name__)
@@ -512,7 +513,6 @@ def _build_registry_impl() -> None:
         code = args.get("code", "")
         script_file = args.get("script_file")
         if script_file:
-            from yak_browser_use.tools._path_utils import validate_path
             try:
                 p = validate_path(script_file, pipeline=ctx.pipeline_name or None)
                 code = p.read_text(encoding="utf-8")
