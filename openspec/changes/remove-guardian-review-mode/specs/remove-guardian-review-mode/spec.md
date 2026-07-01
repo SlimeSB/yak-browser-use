@@ -23,7 +23,7 @@
 - **Reason**: 端点返回 501 Not Implemented，从未真正实现。
 - **Migration**: 删除该端点。前端不再调用审批接口。
 
-### Requirement: 前端审批卡片
+### Requirement: 前端审批卡片及 pendingReview 状态
 系统 SHOULD 在 LogTab 和 ExecTab 中展示 pendingReview 审批卡片，允许用户批准或拒绝。
-- **Reason**: 审批卡片调用的后端端点返回 501，审批流程从未走通。
-- **Migration**: 移除审批卡片 UI。保留 `pipelineStore` 中的 `pendingReview` 字段以防后端仍返回相关数据。
+- **Reason**: 审批卡片调用的后端端点返回 501，审批流程从未走通。移除审批门控后，后端不再返回 `pending_review` 数据，`pendingReview` 及相关代码（类型、actions、响应处理分支）全部为死代码。
+- **Migration**: 彻底移除前端审批卡片 UI 及 `pipelineStore.ts` 中的 `pendingReview` 字段、`PendingReviewData` 接口、`setPendingReview`、`reviewApprove`、`reviewReject`、`pending_review` 响应处理分支。`LogTab`/`ExecTab`/`App.tsx` 中的相关引用同步移除。`LogTab` 中的 `DiffView` import 仅在 pendingReview 场景使用，确认无其他引用后一并移除。

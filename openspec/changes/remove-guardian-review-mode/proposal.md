@@ -8,14 +8,31 @@ Guardian 审批门控 + reviewMode 审查模式是一套从未真正工作过的
 
 ## What Changes
 
-- **移除 `guardian.py` 整个文件** — Guardian 类、ApprovalResult、StepReviewInterrupt、所有辅助函数（`create_guardian_from_frontmatter`、`inject_guardian_config_to_steps`、`llm_review_extra_ops`、`step_guard`、`split_by_guard_result`）
-- **移除 `runner_preset.py` 中的 Guardian approval gate** — 第 272-313 行的审批门控代码块
-- **移除 `routes.py` 中的 Guardian 相关代码** — `api_run` 和 `api_restart_pipeline` 中的 guardian import 和调用，以及整个 `api_review_step` 端点
-- **移除前端 reviewMode 设置** — `SettingsTab.tsx` 中的 reviewMode 三选一 UI
-- **移除前端 pipelineStore 中的 reviewMode 状态** — `reviewMode` 字段、`setReviewMode` action、以及运行时的 `review_mode` YAML 注入逻辑
-- **移除前端审批 UI** — `LogTab.tsx` 和 `ExecTab.tsx` 中的 pendingReview 审批卡片
-- **移除 i18n 翻译 key** — reviewMode 相关的翻译条目
-- **保留 `version_manager.py` 的 STALE 逻辑** — 属于独立模块，与 Guardian 无关
+### 后端
+
+- **删除 `guardian.py` 整个文件** — Guardian 类、ApprovalResult、StepReviewInterrupt、所有辅助函数（`create_guardian_from_frontmatter`、`inject_guardian_config_to_steps`、`llm_review_extra_ops`、`step_guard`、`split_by_guard_result`）
+- **修改 `runner_preset.py`** — 移除第 272-313 行的审批门控代码块；移除 `run_pipeline` 函数的 `guardian=None` 参数
+- **修改 `routes.py`** — `api_run` 和 `api_restart_pipeline` 中的 guardian import 和调用（`create_guardian_from_frontmatter`、`inject_guardian_config_to_steps`、`guardian=guardian`）；删除 `ReviewStepRequest` 模型类；删除整个 `api_review_step` 端点
+- **不删除 `test_ops.py` 中的 `test_circuit_breaker_*` 测试** — 注：这些测试测实为 `ToolContext`/`CircuitBreakerMixin` 的 circuit breaker，与 Guardian 类无关，保持不动
+
+### 前端
+
+- **修改 `SettingsTab.tsx`** — 移除 reviewMode 相关的整个 set-group（第 51-66 行），包括 `reviewMode` 的 store 读取（第 17 行）
+- **修改 `pipelineStore.ts`** — 移除 `reviewMode` 字段（第 43、85 行）、移除 `setReviewMode` action（第 56、249 行）、移除 `run()` 方法中的 `review_mode` YAML 注入逻辑（第 160-163 行）
+- **彻底移除 `pendingReview` 相关死代码**：
+  - `pipelineStore.ts`：移除 `pendingReview` 字段（第 42、84 行）、`setPendingReview` action（第 57、250 行）、`PendingReviewData` interface（第 23-28 行）、`PendingReviewData` import（第 7 行）、`reviewApprove`/`reviewReject` actions（第 48-49、213-229 行）、`run()` 中对 `resp.data?.pending_review` 的响应处理分支（第 175-185 行）
+  - `LogTab.tsx`：移除 pendingReview 审批卡片 UI（第 87-136 行区域）、移除 `pendingReview`、`reviewApprove`、`reviewReject` 的 store 读取（第 16、29-30 行）
+  - `ExecTab.tsx`：移除 pendingReview 审批卡片 UI（第 63-69 行区域），移除 `pendingReview`、`reviewApprove`、`reviewReject` 的 store 读取
+  - `App.tsx`：移除 pendingReview 侧边栏指示点（第 151 行）
+
+### i18n
+
+- **修改 `zh-CN.json` 和 `en.json`** — 移除 reviewMode 相关翻译 key（`reviewMode`、`manual`、`auto`、`none`、`manualDesc`、`autoDesc`、`noneDesc`、`review` 等）
+
+### 保留
+
+- **`version_manager.py` 的 STALE 逻辑** — 属于独立模块，与 Guardian 无关
+- **`test_ops.py` 中的 `test_circuit_breaker_*` 测试** — 测的是 `ToolContext`（`CircuitBreakerMixin`），与 Guardian 无关
 
 ## Capabilities
 

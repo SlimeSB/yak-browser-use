@@ -31,26 +31,30 @@
 | `guardian.py` 整体删除 | 整个文件移除 | 所有函数均无外部调用者 |
 | `api_review_step` 端点 | 删除路由注册 | 返回 501 的无用端点 |
 | `ReviewStepRequest` 模型 | 删除 | 仅被该端点使用 |
-| 前端 pendingReview 相关 | 保留 store 中的 `pendingReview` 字段，只移除 UI 渲染 | 后端仍可能返回 `pending_review` 数据（runner_preset.py 的审批门控移除后不会再触发，但为保险保留 store 字段避免类型错误） |
-| 测试清理 | 删除 `test_ops.py` 中的 circuit_breaker 测试 | 测试依赖的 Guardian 类将被移除 |
+| 前端 pendingReview 相关 | **彻底移除**：store 字段 + 类型 + actions + UI，全部删除 | `pendingReview` 非空的唯一路径是后端返回 `pending_review`，审批门控移除后此数据不可能再产生，保留只会增加无源码债 |
+| `run_pipeline` 函数签名 | 同步移除 `guardian=None` 参数 | 审批门控已不传此参数 |
+| 测试清理 | **不删除** `test_ops.py` 中的 `test_circuit_breaker_*` 测试 | 这些测试测的是 `ToolContext._fail_count`（`CircuitBreakerMixin`），与 Guardian 类完全无关 |
 
 ## 风险 / 权衡
 
 - **低风险**：所有被删除的代码均为死代码或从未生效的功能
-- **兼容性**：前端 `pipelineStore.ts` 中的 `pendingReview` 字段保留，不会导致类型错误
+- **兼容性**：前端 `pendingReview` 字段、类型、actions 全部彻底移除。由于审批门控移除后后端不再返回 `pending_review` 数据，移除不会导致运行时错误
 - **回滚**：如果发现遗漏依赖，git revert 即可恢复
 
 ## 迁移计划
 
 1. 删除 `guardian.py` 文件
-2. 修改 `runner_preset.py`：移除 guardian import 和审批门控代码块
-3. 修改 `routes.py`：移除 guardian import/调用、`ReviewStepRequest`、`api_review_step`
-4. 修改前端 `pipelineStore.ts`：移除 `reviewMode`、`setReviewMode`、YAML 注入逻辑
+2. 修改 `runner_preset.py`：移除 guardian import 和审批门控代码块；移除 `run_pipeline` 函数的 `guardian=None` 参数
+3. 修改 `routes.py`：移除 guardian import/调用、`ReviewStepRequest`、`api_review_step`（覆盖 `api_run` 和 `api_restart_pipeline`）
+4. 修改前端 `pipelineStore.ts`：
+   - 移除 `reviewMode` 字段 + `setReviewMode` + YAML 注入
+   - 移除 `pendingReview` 字段 + `PendingReviewData` 类型 + `setPendingReview` + `reviewApprove` + `reviewReject` + `pending_review` 响应处理分支
 5. 修改前端 `SettingsTab.tsx`：移除 reviewMode UI
-6. 修改前端 `LogTab.tsx` 和 `ExecTab.tsx`：移除 pendingReview 审批卡片
-7. 修改前端 `App.tsx`：移除 pendingReview 侧边栏指示点
-8. 修改 i18n 文件：移除 reviewMode 翻译 key
-9. 清理测试
+6. 修改前端 `LogTab.tsx`：移除 pendingReview 审批卡片 + store 读取
+7. 修改前端 `ExecTab.tsx`：移除 pendingReview 审批卡片 + store 读取
+8. 修改前端 `App.tsx`：移除 pendingReview 侧边栏指示点
+9. 修改 i18n 文件：移除 reviewMode 翻译 key
+10. **不修改** `test_ops.py`（`test_circuit_breaker_*` 测的是 ToolContext，与 Guardian 无关）
 
 无需数据迁移，无需上线步骤，PR 合并即可。
 
