@@ -566,16 +566,17 @@ def _build_registry_impl() -> None:
             },
         },
         "pipeline_update_step": {
-            "description": "Incrementally update a single step in a pipeline. Only the fields provided in `updates` are modified; all other fields stay unchanged. When changing browser_ops, tool_name, or goal_description, mutually exclusive fields are automatically cleared.",
+            "description": "Update one or more steps in a pipeline. Accepts a `steps_updates` dict (key=step_name, value=updates) for batch updates, or the older `step_name` + `updates` for single-step backward compatibility. Only the fields provided in each updates dict are modified; all other fields stay unchanged. When changing browser_ops, tool_name, or goal_description, mutually exclusive fields are automatically cleared.",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "pipeline_name": {"type": "string", "description": "Name of the pipeline preset to modify."},
-                    "step_name": {"type": "string", "description": "Name of the step to update."},
-                    "updates": {"type": "object", "description": "Fields to update on the step. Supported keys: browser_ops (list of single-key dicts), tool_name (string), goal_description (string), description (string), depends_on (list of strings), check (dict — 验收检查，传 {} 跳过。支持 url_contains/element_exists/text_contains/element_visible)。"},
+                    "steps_updates": {"type": "object", "description": "Dict of step_name -> updates for batch updating multiple steps. Key is the step name, value is a dict of fields to update (same format as `updates`). Example: {\"step_1\": {\"description\": \"new desc\"}, \"step_3\": {\"browser_ops\": [...]}}."},
+                    "step_name": {"type": "string", "description": "Name of a single step to update (legacy compat, use `steps_updates` instead)."},
+                    "updates": {"type": "object", "description": "Fields to update on a single step (legacy compat, requires `step_name`). Supported keys: browser_ops (list of single-key dicts), tool_name (string), goal_description (string), description (string), depends_on (list of strings), check (dict — 验收检查，传 {} 跳过。支持 url_contains/element_exists/text_contains/element_visible)。"},
                     "explanation": {"type": "string", "description": "Human-readable explanation of what was changed and why."},
                 },
-                "required": ["pipeline_name", "step_name", "updates"],
+                "required": ["pipeline_name"],
             },
         },
         "pipeline_add_step": {

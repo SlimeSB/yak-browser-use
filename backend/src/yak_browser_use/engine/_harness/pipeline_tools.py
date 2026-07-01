@@ -124,28 +124,44 @@ async def pipeline_view(name: str | None = None, **kwargs) -> dict:
 
 async def pipeline_update_step(
     pipeline_name: str,
-    step_name: str,
-    updates: dict,
+    steps_updates: dict | None = None,
+    step_name: str | None = None,
+    updates: dict | None = None,
     explanation: str = "",
     **kwargs,
 ) -> dict:
-    if not updates:
-        return {"ok": False, "error": "updates must not be empty"}
+    if steps_updates is None and step_name is not None and updates is not None:
+        steps_updates = {step_name: updates}
+
+    if not steps_updates:
+        return {"ok": False, "error": "必须提供 steps_updates（或 step_name + updates）"}
 
     try:
         validated = _load_pipeline_yaml(pipeline_name)
     except (FileNotFoundError, ValueError) as e:
         return {"ok": False, "error": str(e)}
 
-    try:
-        _get_store().update_step(validated, step_name, updates)
-    except ValueError as e:
-        return {"ok": False, "error": str(e)}
-    except Exception as e:
-        return {"ok": False, "error": f"Validation failed: {e}"}
+    store = _get_store()
+    errors: list[str] = []
+    updated_steps: list[str] = []
+    for s_name, s_updates in steps_updates.items():
+        if not s_updates:
+            errors.append(f"[{s_name}] updates must not be empty")
+            continue
+        try:
+            store.update_step(validated, s_name, s_updates)
+            updated_steps.append(s_name)
+        except ValueError as e:
+            errors.append(f"[{s_name}] {e}")
+        except Exception as e:
+            errors.append(f"[{s_name}] Validation failed: {e}")
 
+    if errors:
+        return {"ok": False, "error": "\n".join(errors)}
+
+    step_names_str = ", ".join(updated_steps)
     await _write_via_edit_pipeline(pipeline_name, validated, explanation)
-    return {"ok": True, "result": f"Step '{step_name}' updated in pipeline '{pipeline_name}'"}
+    return {"ok": True, "result": f"已在 pipeline '{pipeline_name}' 中更新 {len(updated_steps)} 个步骤: {step_names_str}"}
 
 
 async def pipeline_add_step(
