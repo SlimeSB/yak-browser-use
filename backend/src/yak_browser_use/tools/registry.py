@@ -510,6 +510,16 @@ def _build_registry_impl() -> None:
             return {"ok": False, "error": "浏览器不可用 — 请确保 CDP 连接已建立"}
         bridge = ctx.cdp_helpers.bridge if hasattr(ctx.cdp_helpers, "bridge") else ctx.cdp_helpers
         code = args.get("code", "")
+        script_file = args.get("script_file")
+        if script_file:
+            from yak_browser_use.tools._path_utils import validate_path
+            try:
+                p = validate_path(script_file, pipeline=ctx.pipeline_name or None)
+                code = p.read_text(encoding="utf-8")
+            except Exception:
+                return {"ok": False, "error": f"脚本文件不存在: {script_file}"}
+        elif not code:
+            return {"ok": False, "error": "必须提供 code 或 script_file 参数"}
         try:
             result = await bridge.evaluate(code)
             output_to = args.get("output_to")
@@ -543,15 +553,16 @@ def _build_registry_impl() -> None:
             return {"ok": False, "error": err_str}
 
     registry.register("browser_eval_js", {
-        "description": "[需 CDP] 在浏览器当前页面执行任意 JavaScript 代码并返回结果。支持 output_to 将结果存入 shared_store，支持 return_format 控制返回格式。",
+        "description": "[需 CDP] 在浏览器当前页面执行任意 JavaScript 代码并返回结果。支持 output_to 将结果存入 shared_store，支持 return_format 控制返回格式。\n⚠️ 脚本在 () => { ... } 中执行，顶层不要写 return，直接写表达式即可。如需多行逻辑，使用箭头函数：() => { ... }。\n支持 script_file 从 workspace 加载 JS 脚本文件（优先级高于 code）。",
         "parameters": {
             "type": "object",
             "properties": {
                 "code": {"type": "string", "description": "要执行的 JavaScript 代码。"},
+                "script_file": {"type": "string", "description": "可选，从 workspace 加载 JS 脚本文件的路径。优先级高于 code。当 script_file 和 code 都为空时返回错误。"},
                 "output_to": {"type": "string", "description": "可选，将执行结果存入 shared_store 的变量名，后续工具可通过 {key} 引用。"},
                 "return_format": {"type": "string", "enum": ["raw", "json", "csv"], "description": "返回格式：raw（默认，原样返回）、json（JSON 序列化）、csv（数组转为 CSV 文本）。"},
             },
-            "required": ["code"],
+            "required": [],
         },
     }, _eval_js_handler)
 
