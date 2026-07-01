@@ -251,11 +251,12 @@ def _build_registry_impl() -> None:
             },
         },
         "source": {
-            "description": "Get the full HTML source of the current page.",
+            "description": "Get the HTML source of the current page. Without selector: returns full page HTML. With selector: returns outerHTML of the matching element.",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "cached": {"type": "boolean", "description": "If true, read HTML from bridge cache instead of CDP. Falls back to CDP if no cache."},
+                    "selector": {"type": "string", "description": "Optional CSS selector. When provided, returns outerHTML of the first matching element instead of full page source."},
                 },
             },
         },

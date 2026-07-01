@@ -189,19 +189,32 @@ async def execute_browser_op(
                 result["result"] = {"direction": direction, "amount": amount}
 
             elif op_type == "source":
-                cached = params.get("cached", False)
-                strip_styles = params.get("strip_styles", False)
-                only_body = params.get("only_body", False)
-                if hasattr(bridge, "get_page_html"):
-                    html = await bridge.get_page_html(cached=cached)
+                selector = params.get("selector", "")
+                if selector:
+                    js = f"() => {{ const el = document.querySelector('{selector}'); return el ? el.outerHTML : null; }}"
+                    html = await bridge.evaluate(js)
+                    if html is None:
+                        result["ok"] = False
+                        result["error"] = f"selector '{selector}' not found"
+                        result["html"] = ""
+                        result["result"] = {"length": 0, "selector": selector}
+                    else:
+                        result["html"] = html
+                        result["result"] = {"length": len(html), "selector": selector}
                 else:
-                    html = await bridge.source(strip_styles=strip_styles, only_body=only_body)
-                result["html"] = html
-                result["result"] = {"length": len(html)}
-                if strip_styles:
-                    result["result"]["stripped"] = True
-                if only_body:
-                    result["result"]["only_body"] = True
+                    cached = params.get("cached", False)
+                    strip_styles = params.get("strip_styles", False)
+                    only_body = params.get("only_body", False)
+                    if hasattr(bridge, "get_page_html"):
+                        html = await bridge.get_page_html(cached=cached)
+                    else:
+                        html = await bridge.source(strip_styles=strip_styles, only_body=only_body)
+                    result["html"] = html
+                    result["result"] = {"length": len(html)}
+                    if strip_styles:
+                        result["result"]["stripped"] = True
+                    if only_body:
+                        result["result"]["only_body"] = True
 
             elif op_type == "lookup_selector":
                 ref = params.get("ref", "")
