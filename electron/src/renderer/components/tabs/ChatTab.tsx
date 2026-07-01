@@ -286,10 +286,11 @@ export default function ChatTab() {
           tools.push(messages[i + 1]);
           i++;
         }
-        if (!msg.content && !msg.reasoning && tools.length > 0 && result.length > 0) {
+        if (!msg.content && tools.length > 0 && result.length > 0) {
           const prev = result[result.length - 1];
-          if (prev.role === 'assistant') {
-            prev.toolCalls = [...(prev.toolCalls ?? []), ...tools];
+          if (prev.role === 'assistant' && prev.toolCalls) {
+            prev.reasoning = undefined;
+            prev.toolCalls = [...prev.toolCalls, ...tools];
             continue;
           }
         }
