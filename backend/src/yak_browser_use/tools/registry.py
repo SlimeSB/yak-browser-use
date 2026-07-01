@@ -510,16 +510,14 @@ def _build_registry_impl() -> None:
         if ctx.cdp_helpers is None:
             return {"ok": False, "error": "浏览器不可用 — 请确保 CDP 连接已建立"}
         bridge = ctx.cdp_helpers.bridge if hasattr(ctx.cdp_helpers, "bridge") else ctx.cdp_helpers
-        code = args.get("code", "")
         script_file = args.get("script_file")
-        if script_file:
-            try:
-                p = validate_path(script_file, pipeline=ctx.pipeline_name or None)
-                code = p.read_text(encoding="utf-8")
-            except Exception:
-                return {"ok": False, "error": f"脚本文件不存在: {script_file}"}
-        elif not code:
-            return {"ok": False, "error": "必须提供 code 或 script_file 参数"}
+        if not script_file:
+            return {"ok": False, "error": "必须提供 script_file 参数"}
+        try:
+            p = validate_path(script_file, pipeline=ctx.pipeline_name or None)
+            code = p.read_text(encoding="utf-8")
+        except Exception:
+            return {"ok": False, "error": f"脚本文件不存在: {script_file}"}
         try:
             result = await bridge.evaluate(code)
             output_to = args.get("output_to")
@@ -534,35 +532,18 @@ def _build_registry_impl() -> None:
                 return {"ok": True, "result": f"return_format=csv requires array result, got {type(result).__name__}"}
             return {"ok": True, "result": result}
         except Exception as e:
-            err_str = str(e)
-            # Catch Playwright wrapping issues: browser_eval_js executes code in () => { ... } wrapper,
-            # so top-level `return` statements are illegal.
-            if "Illegal return statement" in err_str:
-                return {
-                    "ok": False,
-                    "error": err_str,
-                    "_hint": (
-                        "browser_eval_js 将代码包在 () => { ... } 中执行。不要在代码顶层使用 return 语句，"
-                        "直接写表达式即可。示例：\n"
-                        "  ✅ code='document.querySelectorAll(\"a\").length'\n"
-                        "  ✅ code='Array.from(document.querySelectorAll(\".item\")).map(el => el.textContent)'\n"
-                        "  ❌ code='return document.querySelectorAll(\"a\").length'\n"
-                        "如果是在写多行函数体，用箭头函数：code='() => { const x = 1; return x + 2; }'"
-                    ),
-                }
-            return {"ok": False, "error": err_str}
+            return {"ok": False, "error": str(e)}
 
     registry.register("browser_eval_js", {
-        "description": "[需 CDP] 在浏览器当前页面执行任意 JavaScript 代码并返回结果。支持 output_to 将结果存入 shared_store，支持 return_format 控制返回格式。\n⚠️ 脚本在 () => { ... } 中执行，顶层不要写 return，直接写表达式即可。如需多行逻辑，使用箭头函数：() => { ... }。\n支持 script_file 从 workspace 加载 JS 脚本文件（优先级高于 code）。",
+        "description": "[需 CDP] 从 workspace 加载 JS 脚本文件并在浏览器当前页面执行。\n必须提供 script_file 参数（workspace 相对路径，如 tools/extract.js）。\n支持 output_to 将结果存入 shared_store，支持 return_format 控制返回格式。",
         "parameters": {
             "type": "object",
             "properties": {
-                "code": {"type": "string", "description": "要执行的 JavaScript 代码。"},
-                "script_file": {"type": "string", "description": "可选，从 workspace 加载 JS 脚本文件的路径。优先级高于 code。当 script_file 和 code 都为空时返回错误。"},
+                "script_file": {"type": "string", "description": "必须。workspace 相对路径的 JS 脚本文件（如 tools/extract.js）。路径限制在 workspace 安全目录内。"},
                 "output_to": {"type": "string", "description": "可选，将执行结果存入 shared_store 的变量名，后续工具可通过 {key} 引用。"},
                 "return_format": {"type": "string", "enum": ["raw", "json", "csv"], "description": "返回格式：raw（默认，原样返回）、json（JSON 序列化）、csv（数组转为 CSV 文本）。"},
             },
-            "required": [],
+            "required": ["script_file"],
         },
     }, _eval_js_handler)
 
