@@ -2,14 +2,46 @@
 
 from __future__ import annotations
 
+import csv
+import io
 import json
+import re
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable
+from typing import Callable, Any
 
 from yak_browser_use.utils.logging import get_logger
 
 logger = get_logger(__name__)
+
+
+def _auto_csv(data: Any) -> str:
+    """Convert a list of dicts to CSV text with auto-extracted headers."""
+    if not isinstance(data, list):
+        return str(data)
+    if not data:
+        return ""
+    fields: set[str] = set()
+    for item in data:
+        if isinstance(item, dict):
+            fields.update(item.keys())
+    fields_sorted = sorted(fields)
+    buf = io.StringIO()
+    writer = csv.writer(buf)
+    writer.writerow(fields_sorted)
+    for item in data:
+        if isinstance(item, dict):
+            row = []
+            for f in fields_sorted:
+                val = item.get(f, "")
+                if isinstance(val, (dict, list)):
+                    val = json.dumps(val, ensure_ascii=False)
+                row.append(val)
+            writer.writerow(row)
+        else:
+            writer.writerow([item])
+    return buf.getvalue()
+
 
 # ── Lazy-loaded dispatch maps (imported once, cached) ────────────────────────
 
@@ -198,7 +230,7 @@ def _build_registry_impl() -> None:
                     },
                     "query": {
                         "type": "string",
-                        "description": "a11y/progressive 模式有效。不以 #/. 开头时按文本/tag/type/role 模糊匹配；以 # 或 . 开头时按 CSS selector 精确匹配。",
+                        "description": "a11y/progressive 模式有效。仅按文本/tag/type/role 模糊匹配，不支持 CSS selector。",
                     },
                     "expand_key": {
                         "type": "string",
@@ -406,16 +438,28 @@ def _build_registry_impl() -> None:
         code = args.get("code", "")
         try:
             result = await bridge.evaluate(code)
+            output_to = args.get("output_to")
+            if output_to and ctx.shared_store is not None:
+                ctx.shared_store[output_to] = result
+            return_format = args.get("return_format", "raw")
+            if return_format == "json":
+                return {"ok": True, "result": json.dumps(result, ensure_ascii=False)}
+            elif return_format == "csv":
+                if isinstance(result, list):
+                    return {"ok": True, "result": _auto_csv(result)}
+                return {"ok": True, "result": f"return_format=csv requires array result, got {type(result).__name__}"}
             return {"ok": True, "result": result}
         except Exception as e:
             return {"ok": False, "error": str(e)}
 
     registry.register("browser_eval_js", {
-        "description": "[需 CDP] 在浏览器当前页面执行任意 JavaScript 代码并返回结果。",
+        "description": "[需 CDP] 在浏览器当前页面执行任意 JavaScript 代码并返回结果。支持 output_to 将结果存入 shared_store，支持 return_format 控制返回格式。",
         "parameters": {
             "type": "object",
             "properties": {
                 "code": {"type": "string", "description": "要执行的 JavaScript 代码。"},
+                "output_to": {"type": "string", "description": "可选，将执行结果存入 shared_store 的变量名，后续工具可通过 {key} 引用。"},
+                "return_format": {"type": "string", "enum": ["raw", "json", "csv"], "description": "返回格式：raw（默认，原样返回）、json（JSON 序列化）、csv（数组转为 CSV 文本）。"},
             },
             "required": ["code"],
         },
@@ -575,7 +619,7 @@ def _build_registry_impl() -> None:
     }, _file_read_handler)
 
     registry.register("file_write", {
-        "description": "将文本内容写入文件，自动创建父目录。content 支持 {key} 引用：content: \"{key}\" 可从 shared_store 读取其他 tool 的输出数据，避免大数据绕经 LLM 上下文。",
+        "description": "将文本内容写入文件，自动创建父目录。content 支持 {key} 模板替换：{content} 中的 {varname} 会被替换为 shared_store 中对应变量的 JSON 序列化值。",
         "parameters": {
             "type": "object",
             "properties": {
@@ -588,16 +632,17 @@ def _build_registry_impl() -> None:
     }, _file_write_handler)
 
     registry.register("format_convert", {
-        "description": "转换文件格式（xlsx/csv/json 互转）。根据文件扩展名自动识别源/目标格式，也可显式指定。",
+        "description": "转换文件格式（xlsx/csv/json 互转）。根据文件扩展名自动识别源/目标格式，也可显式指定。提供 source_json 可从内存数据直接转换。",
         "parameters": {
             "type": "object",
             "properties": {
-                "source": {"type": "string", "description": "源文件路径"},
+                "source": {"type": "string", "description": "源文件路径（与 source_json 二选一，source_json 优先）"},
                 "target": {"type": "string", "description": "目标文件路径"},
                 "source_fmt": {"type": "string", "description": "源格式（xlsx/csv/json），为空时从扩展名推断"},
                 "target_fmt": {"type": "string", "description": "目标格式（xlsx/csv/json），为空时从扩展名推断"},
+                "source_json": {"type": "array", "description": "JSON 数组（直接从内存数据转换，优先于 source）", "items": {"type": "object"}},
             },
-            "required": ["source", "target"],
+            "required": ["target"],
         },
     }, _format_convert_handler)
 
@@ -844,10 +889,26 @@ async def _file_write_handler(args: dict, ctx: ToolContext) -> dict:
         pipeline_root = (WORKSPACES_ROOT / ctx.pipeline_name).resolve()
         if p.parent == pipeline_root or p == pipeline_root:
             return {"ok": False, "error": f"不允许写入 workspace 根目录: {path}，请使用子目录（如 downloads/）"}
+    _VAR_PATTERN = re.compile(r'\{(\w+)\}')
+    warnings: list[str] = []
+    store = ctx.shared_store
+    if store is not None:
+
+        def _replace_var(m: re.Match) -> str:
+            key = m.group(1)
+            if key in store:
+                return json.dumps(store[key], ensure_ascii=False)
+            warnings.append(f"变量 {key} 未找到")
+            return m.group(0)
+
+        content = _VAR_PATTERN.sub(_replace_var, content)
     from yak_browser_use.tools.file_write import file_write
     result = await file_write(path=path, content=content, encoding=args.get("encoding", "utf-8"), pipeline=ctx.pipeline_name or None)
     if result.get("ok"):
-        return {"ok": True, "path": path, "size": len(content)}
+        ret = {"ok": True, "path": path, "size": len(content)}
+        if warnings:
+            ret["_warnings"] = warnings
+        return ret
     return result
 
 
@@ -856,12 +917,20 @@ async def _format_convert_handler(args: dict, ctx: ToolContext) -> dict:
     target = args.get("target", "")
     source_fmt = args.get("source_fmt", "")
     target_fmt = args.get("target_fmt", "")
-    if not source or not target:
-        return {"ok": False, "error": "source and target are required"}
-    from yak_browser_use.tools.format_convert import _sniff_format
-    sf = source_fmt or _sniff_format(source)
-    tf = target_fmt or _sniff_format(target)
-    return {"ok": True, "result": f"格式信息: {source} ({sf}) → {target} ({tf})", "source": source, "target": target, "source_fmt": sf, "target_fmt": tf}
+    source_json = args.get("source_json", None)
+    if not source and source_json is None:
+        return {"ok": False, "error": "source or source_json is required"}
+    if not target:
+        return {"ok": False, "error": "target is required"}
+    from yak_browser_use.tools.format_convert import format_convert
+    return await format_convert(
+        source=source,
+        target=target,
+        source_fmt=source_fmt,
+        target_fmt=target_fmt,
+        source_json=source_json,
+        pipeline=ctx.pipeline_name or None,
+    )
 
 
 async def _read_data_handler(args: dict, ctx: ToolContext) -> dict:

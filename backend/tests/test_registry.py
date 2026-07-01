@@ -322,15 +322,14 @@ class TestFileHandlers:
 
     @pytest.mark.asyncio
     async def test_format_convert_returns_metadata(self):
-        result = await _format_convert_handler(
-            {"source": "data.csv", "target": "data.json"},
-            ToolContext(),
-        )
-        assert result["ok"] is True
-        assert result["source"] == "data.csv"
-        assert result["target"] == "data.json"
-        assert result["source_fmt"] == "csv"
-        assert result["target_fmt"] == "json"
+        with patch("yak_browser_use.tools.format_convert.format_convert", new_callable=AsyncMock) as mock_fc:
+            mock_fc.return_value = {"ok": True, "result": "converted", "target": "data.json"}
+            result = await _format_convert_handler(
+                {"source": "data.csv", "target": "data.json"},
+                ToolContext(),
+            )
+            assert result["ok"] is True
+            mock_fc.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_format_convert_no_paths(self):

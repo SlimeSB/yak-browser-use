@@ -26,6 +26,6 @@
 
 ## 5. 回归验证
 
-- [ ] 5.1 运行 `python -m pytest backend/tests/test_registry.py` 确认所有现有测试通过
-- [ ] 5.2 运行 `python -m pytest backend/tests/test_file_io.py` 确认 file_write / file_read 原有行为不受影响
-- [ ] 5.3 运行 `python -m pytest backend/tests/` 全量测试确认无回归
+- [x] 5.1 运行 `python -m pytest backend/tests/test_registry.py` 确认所有现有测试通过
+- [x] 5.2 运行 `python -m pytest backend/tests/test_file_io.py` 确认 file_write / file_read 原有行为不受影响
+- [x] 5.3 运行 `python -m pytest backend/tests/` 全量测试确认无回归

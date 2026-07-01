@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import csv
+import json
 import os
 import tempfile
 from pathlib import Path
@@ -24,11 +25,12 @@ def _sniff_format(path: str) -> str:
 
 
 async def format_convert(
-    source: str,
-    target: str,
+    source: str = "",
+    target: str = "",
     source_fmt: str = "",
     target_fmt: str = "",
     pipeline: str | None = None,
+    source_json: Any = None,
 ) -> dict:
     """Convert a file between xlsx/csv/json formats.
 
@@ -38,17 +40,36 @@ async def format_convert(
         source_fmt: Source format (xlsx/csv/json). Empty = sniff from extension.
         target_fmt: Target format (xlsx/csv/json). Empty = sniff from extension.
         pipeline: Pipeline name for downloads/ prefix resolution.
+        source_json: JSON data to convert directly (skips file read, takes precedence over source).
 
     Returns:
         {"ok": True, "result": "已转换: <target>", "target": "..."} or {"ok": False, "error": "..."}
     """
-    src_fmt = source_fmt or _sniff_format(source)
     tgt_fmt = target_fmt or _sniff_format(target)
+
+    if tgt_fmt not in _SUPPORTED_FORMATS:
+        return {"ok": False, "error": f"不支持的目标格式: {tgt_fmt}"}
+
+    if source_json is not None:
+        try:
+            tgt_path = validate_path(target, pipeline=pipeline)
+            tgt_path.parent.mkdir(parents=True, exist_ok=True)
+            if tgt_fmt == "csv":
+                _write_csv_from_list(source_json, tgt_path)
+            elif tgt_fmt == "xlsx":
+                _write_xlsx_from_list(source_json, tgt_path)
+            else:
+                return {"ok": False, "error": f"source_json 不支持目标格式: {tgt_fmt}"}
+            note = "source_json takes precedence over source"
+            return {"ok": True, "result": f"已从内存数据转换 → {target}（{tgt_fmt}）", "target": target, "_note": note}
+        except Exception as e:
+            logger.warning("format_convert source_json failed: %s", e, exc_info=True)
+            return {"ok": False, "error": str(e)}
+
+    src_fmt = source_fmt or _sniff_format(source)
 
     if src_fmt not in _SUPPORTED_FORMATS:
         return {"ok": False, "error": f"不支持的源格式: {src_fmt}"}
-    if tgt_fmt not in _SUPPORTED_FORMATS:
-        return {"ok": False, "error": f"不支持的目标格式: {tgt_fmt}"}
     if src_fmt == tgt_fmt:
         return {"ok": False, "error": f"源格式和目标格式相同: {src_fmt}"}
 
@@ -78,6 +99,81 @@ async def format_convert(
     except Exception as e:
         logger.warning("format_convert: %s → %s failed: %s", src_fmt, tgt_fmt, e, exc_info=True)
         return {"ok": False, "error": str(e)}
+
+
+def _write_csv_from_list(data: list, path: Path) -> None:
+    """Write a list of dicts as CSV, auto-extracting field names as header."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    if not data:
+        path.write_text("", encoding="utf-8-sig")
+        return
+    fields = set()
+    for item in data:
+        if isinstance(item, dict):
+            fields.update(item.keys())
+    fields = sorted(fields)
+    fd, tmp_name = tempfile.mkstemp(suffix=".csv", prefix=f"_fc_list_{path.stem}_", dir=str(path.parent))
+    os.close(fd)
+    tmp = Path(tmp_name)
+    try:
+        with open(tmp, "w", encoding="utf-8-sig", newline="") as f:
+            writer = csv.writer(f)
+            writer.writerow(fields)
+            for item in data:
+                if isinstance(item, dict):
+                    row = []
+                    for f_name in fields:
+                        val = item.get(f_name, "")
+                        if isinstance(val, (dict, list)):
+                            val = json.dumps(val, ensure_ascii=False)
+                        row.append(val)
+                    writer.writerow(row)
+                else:
+                    writer.writerow([item])
+        os.replace(str(tmp), str(path))
+    except BaseException:
+        if tmp.exists():
+            tmp.unlink()
+        raise
+
+
+def _write_xlsx_from_list(data: list, path: Path) -> None:
+    """Write a list of dicts as xlsx, auto-extracting field names as header."""
+    import openpyxl
+    path.parent.mkdir(parents=True, exist_ok=True)
+    wb = openpyxl.Workbook()
+    try:
+        ws = wb.active
+        if data:
+            fields = set()
+            for item in data:
+                if isinstance(item, dict):
+                    fields.update(item.keys())
+            fields = sorted(fields)
+            ws.append(fields)
+            for item in data:
+                if isinstance(item, dict):
+                    row = []
+                    for f_name in fields:
+                        val = item.get(f_name, "")
+                        if isinstance(val, (dict, list)):
+                            val = json.dumps(val, ensure_ascii=False)
+                        row.append(val)
+                    ws.append(row)
+                else:
+                    ws.append([item])
+        fd, tmp_name = tempfile.mkstemp(suffix=".xlsx", prefix=f"_fc_list_{path.stem}_", dir=str(path.parent))
+        os.close(fd)
+        tmp = Path(tmp_name)
+        try:
+            wb.save(str(tmp))
+            os.replace(str(tmp), str(path))
+        except BaseException:
+            if tmp.exists():
+                tmp.unlink()
+            raise
+    finally:
+        wb.close()
 
 
 # ── xlsx ↔ csv ──
