@@ -64,6 +64,9 @@ def _build_field_extraction_js(selector: str, fields: dict) -> str:
     safe = _safe_selector(selector)
     field_entries = []
     for key, expr in fields.items():
+        if not expr:
+            field_entries.append(f"    {json.dumps(key)}: ''")
+            continue
         if expr.startswith("@"):
             attr = expr[1:]
             field_entries.append(

@@ -893,12 +893,16 @@ def _build_registry_impl() -> None:
         selector = args.get("selector", "")
         fields = args.get("fields", None)
         output_to = args.get("output_to", None)
+        wait_seconds = args.get("wait_seconds", 0)
 
         if fields is not None and not isinstance(fields, dict):
             return {"ok": False, "error": "fields 参数必须是 object 类型（如 {\"title\": \"h3\"}）"}
 
         if fields and not selector:
             return {"ok": False, "error": "fields 参数需要同时提供 selector"}
+
+        if wait_seconds and wait_seconds > 0:
+            await bridge.wait(mode="duration", duration=int(wait_seconds * 1000))
 
         if fields:
             js = _build_field_extraction_js(selector, fields)
@@ -925,6 +929,13 @@ def _build_registry_impl() -> None:
             result["_truncated"] = True
             result["total"] = len(full_data)
 
+        if not items:
+            result["_note"] = (
+                "未检测到匹配元素。可能原因：(1) 页面是 SPA，需要增加 wait_seconds（建议 2-3 秒）；"
+                "(2) 没有匹配的列表结构，建议先用 browser_snapshot 获取页面结构后提供明确的 selector；"
+                "(3) 内容需要滚动加载。"
+            )
+
         if output_to and ctx.shared_store is not None:
             ctx.shared_store[output_to] = full_data
             result["_output_to"] = output_to
@@ -932,12 +943,13 @@ def _build_registry_impl() -> None:
         return result
 
     registry.register("browser_extract_list", {
-        "description": "[需 CDP] 从当前页面提取列表数据。支持自定义 CSS selector 和字段映射（fields）。结果可选存入 shared_store。",
+        "description": "[需 CDP] 从当前页面提取列表数据。支持自定义 CSS selector 和字段映射（fields）。结果可选存入 shared_store。SPA 页面可设置 wait_seconds 等待渲染。",
         "parameters": {
             "type": "object",
             "properties": {
-                "selector": {"type": "string", "description": "可选，CSS selector 定位列表容器。省略时自动检测常见列表结构（li、role=listitem 等）。"},
+                "selector": {"type": "string", "description": "可选，CSS selector 定位列表容器。省略时自动检测常见列表结构。"},
                 "output_to": {"type": "string", "description": "可选，将完整提取结果存入 shared_store 的变量名。"},
+                "wait_seconds": {"type": "number", "description": "可选，提取前等待秒数（SPA 页面建议 2-3 秒，默认 0 不等待）。"},
                 "fields": {
                     "type": "object",
                     "description": "可选，字段映射字典。key 为输出字段名，value 为 CSS selector（如 'h3'）或 '@attr' 获取属性。需要同时提供 selector。",

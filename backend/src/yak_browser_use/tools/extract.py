@@ -99,7 +99,10 @@ EXTRACT_LIST_JS = """() => {
     // Try common list structures: ul > li, div[role="listitem"], etc.
     const selectors = [
         'li', '[role="listitem"]', '.item', '.list-item', '[class*="result-item"]',
-        '[data-component-type="s-search-result"]', '.s-result-item'
+        '[data-component-type="s-search-result"]', '.s-result-item',
+        '[class*="card"]', '[class*="video"]', '[class*="post"]',
+        '[class*="article"]', '[class*="feed"]', '[class*="grid"] > *',
+        '[class*="list"] > *'
     ];
 
     for (const sel of selectors) {
