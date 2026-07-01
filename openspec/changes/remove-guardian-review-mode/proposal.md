@@ -14,6 +14,9 @@ Guardian 审批门控 + reviewMode 审查模式是一套从未真正工作过的
 - **修改 `runner_preset.py`** — 移除第 272-313 行的审批门控代码块；移除 `run_pipeline` 函数的 `guardian=None` 参数
 - **修改 `routes.py`** — `api_run` 和 `api_restart_pipeline` 中的 guardian import 和调用（`create_guardian_from_frontmatter`、`inject_guardian_config_to_steps`、`guardian=guardian`）；删除 `ReviewStepRequest` 模型类；删除整个 `api_review_step` 端点
 - **不删除 `test_ops.py` 中的 `test_circuit_breaker_*` 测试** — 注：这些测试测实为 `ToolContext`/`CircuitBreakerMixin` 的 circuit breaker，与 Guardian 类无关，保持不动
+- **修改 `test_api_routes.py`** — 删除 `test_review_not_implemented` 测试（测试被删除的 501 端点）
+- **修改 `types.ts`** — 删除 `reviewPipeline` IPC 声明
+- **修改 `ExecTab.tsx`** — 移除 `SuggestionsPanel` import + 组件渲染
 
 ### 前端
 
@@ -46,8 +49,8 @@ Guardian 审批门控 + reviewMode 审查模式是一套从未真正工作过的
 
 ## Impact
 
-- **后端**：删除 `backend/src/yak_browser_use/engine/_lifecycle/guardian.py`；修改 `runner_preset.py`（移除审批门控）；修改 `routes.py`（移除 guardian 导入/调用和 review 端点）
-- **前端**：修改 `SettingsTab.tsx`（移除 reviewMode UI）；修改 `pipelineStore.ts`（移除 reviewMode 状态和 YAML 注入）；修改 `LogTab.tsx` 和 `ExecTab.tsx`（移除审批卡片）；修改 `App.tsx`（移除 pendingReview 侧边栏指示点）
+- **后端**：删除 `backend/src/yak_browser_use/engine/_lifecycle/guardian.py`；修改 `runner_preset.py`（移除审批门控）；修改 `routes.py`（移除 guardian 导入/调用和 review 端点）；修改 `test_api_routes.py`（删除 review 端点测试）
+- **前端**：修改 `SettingsTab.tsx`（移除 reviewMode UI）；修改 `pipelineStore.ts`（移除 reviewMode + reviewMode 状态和 YAML 注入 + 彻底移除 pendingReview）；修改 `LogTab.tsx` 和 `ExecTab.tsx`（移除审批卡片 + DiffView/SuggestionsPanel）；修改 `App.tsx`（移除 pendingReview 侧边栏指示点）；修改 `apiClient.ts` + `types.ts`（移除 reviewPipeline）；修改 `LogTab.tsx` 的 `getStepStatus` 移除 `review` 状态分支
 - **i18n**：修改 `zh-CN.json` 和 `en.json`（移除 reviewMode 翻译 key）
 - **API**：删除 `POST /api/pipeline/{thread_id}/review` 端点
-- **测试**：`test_ops.py` 中的 circuit_breaker 测试需要清理
+- **测试**：`test_ops.py` 中的 `test_circuit_breaker_*` 测试**不修改**（测的是 `ToolContext`/`CircuitBreakerMixin`，与 Guardian 无关）

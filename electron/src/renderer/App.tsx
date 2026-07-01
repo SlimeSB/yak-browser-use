@@ -38,7 +38,6 @@ export default function App() {
   const activeTab = useUiStore(s => s.activeTab);
   const setActiveTab = useUiStore(s => s.setActiveTab);
   const loading = usePipelineStore(s => s.loading);
-  const pendingReview = usePipelineStore(s => s.pendingReview);
   const sidebarRef = useRef<HTMLElement>(null);
 
   const measureAndSetWidth = useCallback(() => {
@@ -148,7 +147,6 @@ export default function App() {
             >
               <span className="sidebar-icon-wrap">{ICONS[tab.icon]}</span>
               <span className="sidebar-label">{t(tab.label)}</span>
-              {tab.id === 'log' && pendingReview && <span className="sidebar-dot" />}
             </button>
           ))}
 

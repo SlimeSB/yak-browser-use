@@ -239,13 +239,6 @@ class TestParams:
 # ── PIPELINE endpoints ─────────────────────────────────────────────
 
 
-class TestPipelineEndpoints:
-    def test_review_not_implemented(self, client):
-        with patch("yak_browser_use.api.routes.engine_state", _mock_engine_state()):
-            resp = client.post("/api/pipeline/some_id/review", json={"action": "approve"})
-        assert resp.status_code == 501
-
-
 # ── CHAT endpoints ─────────────────────────────────────────────────
 
 

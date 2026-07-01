@@ -29,7 +29,6 @@ from yak_browser_use.engine.executor import (
 )
 from yak_browser_use.engine.state import RunContext
 from yak_browser_use.engine.step_machine import StepMachine, StepStatus
-from yak_browser_use.engine._lifecycle.guardian import ApprovalResult
 from yak_browser_use.utils.logging import get_logger
 from yak_browser_use.workspace.manager import WorkspaceManager, DEFAULT_MAX_RUNS
 from yak_browser_use.workspace.path_guard import PathGuard
@@ -145,7 +144,6 @@ async def run_pipeline(
     pipeline_path: Path | None = None,
     frontmatter: dict | None = None,
     resume_from_index: int = 0,
-    guardian=None,
     ws_clients: list | None = None,
 ) -> RunContext:
     """Execute a pipeline: create workspace → run through steps → finalize.
@@ -163,7 +161,6 @@ async def run_pipeline(
         pipeline_path: Optional path to pipeline.yaml for snapshot context.
         frontmatter: Optional pipeline frontmatter dict.
         resume_from_index: Step index to resume from (0 = start).
-        guardian: Optional Guardian instance for approval gating.
         ws_clients: Optional list of WebSocket client queues for event broadcast.
 
     Returns:
@@ -268,49 +265,6 @@ async def run_pipeline(
 
             ctx.step_index = node.index
             ctx.current_step = step_def.get("name", f"step_{node.index}")
-
-            # ── Guardian approval gate ──
-            review_mode = (frontmatter or {}).get("review_mode", "human")
-            if guardian is not None and review_mode != "none":
-                result = guardian.approve(
-                    step_name=ctx.current_step,
-                    step_def=step_def,
-                    pipeline_name=pipeline_name,
-                )
-                if result == ApprovalResult.REQUIRES_REVIEW:
-                    machine.end_step(
-                        node,
-                        StepStatus.PENDING_REVIEW,
-                        error={
-                            "code": "REVIEW_INTERRUPT",
-                            "message": f"Step '{ctx.current_step}' requires manual approval",
-                        },
-                    )
-                    wm.set_status(run_dir, "paused", current_step=ctx.current_step)
-                    events.emit_step_end(ctx.current_step, _step_type(step_def), "paused", 0)
-                    events.emit_error(ctx.current_step, "REVIEW_INTERRUPT", "Step requires manual approval")
-                    logger.info("  ⏸ %s: requires manual approval", ctx.current_step)
-                    final_status = "paused"
-                    _write_execution_tree(run_dir, machine, pipeline_name)
-                    break
-
-                if result == ApprovalResult.BLOCKED_STALE:
-                    machine.end_step(
-                        node,
-                        StepStatus.FAILED,
-                        error={
-                            "code": "STALE",
-                            "message": f"Pipeline '{pipeline_name}' is STALE — circuit breaker fired",
-                        },
-                    )
-                    wm.set_status(run_dir, "failed", current_step=ctx.current_step)
-                    events.emit_step_end(ctx.current_step, _step_type(step_def), "failed", 0)
-                    events.emit_error(ctx.current_step, "STALE", "Circuit breaker fired")
-                    logger.error("  ✗ %s: pipeline STALE, circuit breaker fired", ctx.current_step)
-                    final_status = "failed"
-                    ctx.errors.append({"step": ctx.current_step, "code": "STALE", "message": "Circuit breaker fired"})
-                    _write_execution_tree(run_dir, machine, pipeline_name)
-                    break
 
             # ── Step directory ──
             step_key = _safe_dirname(ctx.current_step)

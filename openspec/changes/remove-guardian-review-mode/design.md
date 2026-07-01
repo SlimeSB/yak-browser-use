@@ -15,7 +15,7 @@
 - 清理前端 reviewMode 设置 UI 和审批卡片
 - 清理 i18n 翻译条目
 - 删除 `api_review_step` 端点
-- 清理相关测试
+- **不修改** `test_ops.py` 中的 `test_circuit_breaker_*` 测试（与 Guardian 无关）
 
 **非目标：**
 - 不改动 `version_manager.py` 的 STALE 逻辑（独立模块）
@@ -33,7 +33,11 @@
 | `ReviewStepRequest` 模型 | 删除 | 仅被该端点使用 |
 | 前端 pendingReview 相关 | **彻底移除**：store 字段 + 类型 + actions + UI，全部删除 | `pendingReview` 非空的唯一路径是后端返回 `pending_review`，审批门控移除后此数据不可能再产生，保留只会增加无源码债 |
 | `run_pipeline` 函数签名 | 同步移除 `guardian=None` 参数 | 审批门控已不传此参数 |
-| 测试清理 | **不删除** `test_ops.py` 中的 `test_circuit_breaker_*` 测试 | 这些测试测的是 `ToolContext._fail_count`（`CircuitBreakerMixin`），与 Guardian 类完全无关 |
+| 测试清理 | **不删除** `test_ops.py` 中的 `test_circuit_breaker_*` 测试；**删除** `test_api_routes.py` 中的 `test_review_not_implemented` | circuit_breaker 测试与 Guardian 无关；review 端点已删除，其测试也应移除 |
+| `SuggestionsPanel` | 随 pendingReview 一并移除 | 仅在 ExecTab 的 pendingReview 场景使用 |
+| `DiffView` import in LogTab | 随 pendingReview 一并移除 | 仅在 LogTab 的 pendingReview 场景使用 |
+| `types.ts` IPC 声明 | 同步移除 `reviewPipeline` | apiClient 中对应函数已删除 |
+| `getStepStatus` 签名 | 移除 `pendingReview` 参数和 `'review'` 状态返回值 | pendingReview 已不存在，review 状态不再有意义 |
 
 ## 风险 / 权衡
 
@@ -46,15 +50,19 @@
 1. 删除 `guardian.py` 文件
 2. 修改 `runner_preset.py`：移除 guardian import 和审批门控代码块；移除 `run_pipeline` 函数的 `guardian=None` 参数
 3. 修改 `routes.py`：移除 guardian import/调用、`ReviewStepRequest`、`api_review_step`（覆盖 `api_run` 和 `api_restart_pipeline`）
-4. 修改前端 `pipelineStore.ts`：
+4. 修改 `test_api_routes.py`：删除 `test_review_not_implemented` 测试
+5. 修改前端 `pipelineStore.ts`：
    - 移除 `reviewMode` 字段 + `setReviewMode` + YAML 注入
    - 移除 `pendingReview` 字段 + `PendingReviewData` 类型 + `setPendingReview` + `reviewApprove` + `reviewReject` + `pending_review` 响应处理分支
-5. 修改前端 `SettingsTab.tsx`：移除 reviewMode UI
-6. 修改前端 `LogTab.tsx`：移除 pendingReview 审批卡片 + store 读取
-7. 修改前端 `ExecTab.tsx`：移除 pendingReview 审批卡片 + store 读取
-8. 修改前端 `App.tsx`：移除 pendingReview 侧边栏指示点
-9. 修改 i18n 文件：移除 reviewMode 翻译 key
-10. **不修改** `test_ops.py`（`test_circuit_breaker_*` 测的是 ToolContext，与 Guardian 无关）
+   - `getStepStatus` 签名简化：移除 `pendingReview` 参数 + `'review'` 状态
+6. 修改前端 `SettingsTab.tsx`：移除 reviewMode UI
+7. 修改前端 `LogTab.tsx`：移除 pendingReview 审批卡片 + DiffView import + store 读取 + review 状态分支
+8. 修改前端 `ExecTab.tsx`：移除 pendingReview SuggestionsPanel + store 读取
+9. 修改前端 `App.tsx`：移除 pendingReview 侧边栏指示点
+10. 修改 `apiClient.ts`：移除 `reviewPipeline` 函数
+11. 修改 `types.ts`：移除 `reviewPipeline` IPC 声明
+12. 修改 i18n 文件（zh-CN.json + en.json）：移除 reviewMode 等翻译 key
+13. **不修改** `test_ops.py`（`test_circuit_breaker_*` 测的是 ToolContext，与 Guardian 无关）
 
 无需数据迁移，无需上线步骤，PR 合并即可。
 

@@ -88,13 +88,6 @@ export function cancelPipeline(pipelineName: string, runId: string) {
   );
 }
 
-export function reviewPipeline(threadId: string, action: string, reason?: string) {
-  return apiFetch<{ status?: string; error?: string }>(
-    `/api/pipeline/${encodeURIComponent(threadId)}/review`,
-    { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action, reason: reason || '' }) }
-  );
-}
-
 // ── Chat ─────────────────────────────────────────────────────
 
 export function chat(message: string, pipelineName?: string) {

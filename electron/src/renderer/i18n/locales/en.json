@@ -74,13 +74,6 @@
   "eventLog": {
     "noEvents": "No events yet…"
   },
-  "review": {
-    "title": "Review Mode",
-    "manual": "Manual",
-    "auto": "Auto",
-    "none": "Off",
-    "description": "Review mode controls how pipeline steps are approved before execution."
-  },
   "versions": {
     "title": "Learned Versions",
     "refresh": "Refresh",
@@ -129,16 +122,8 @@
     "light": "Light",
     "darkDesc": "Dark — black & orange",
     "lightDesc": "Light — white & blue",
-    "review": "Review",
-    "reviewMode": "Review Mode",
-    "manual": "Manual",
-    "auto": "Auto",
-    "manualDesc": "Manual approval for all operations",
-    "autoDesc": "LLM auto-review",
-    "noneDesc": "No review, auto-approve all",
     "language": "Language",
     "langDesc": "English / 中文",
-    "none": "Off",
     "chatLayout": "Chat Layout",
     "panelOrder": "Panel order",
     "chatFirst": "Chat left, Editor right",
@@ -176,11 +161,6 @@
     "paused": "Paused",
     "cancelled": "Cancelled",
     "pending": "Pending",
-    "viewDiff": "View Diff",
-    "review": "Review",
-    "approve": "Approve",
-    "reject": "Reject",
-    "reason": "Reason",
     "startTime": "Start Time",
     "endTime": "End Time",
     "summary": "Summary",
@@ -195,17 +175,12 @@
     "of": "of",
     "noMatchingSteps": "No matching steps",
     "noStepData": "No step data",
-    "pendingReview": "Pending Review",
     "clear": "Clear",
-    "guardian": "guardian",
-    "required": "(required)",
-    "confirmReject": "Confirm Reject",
     "artifacts": "Artifacts",
     "noArtifacts": "No artifacts",
     "artifactsHint": "Results will appear here after running a pipeline",
     "events": "Events",
-    "steps": "Steps",
-    "selectorValue": "Selector/Value"
+    "steps": "Steps"
   },
   "restartDialog": {
     "title": "Browser restart required",

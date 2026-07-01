@@ -8,7 +8,6 @@ import StageList from '../StageList';
 import ProgressBar from '../ProgressBar';
 import EventLog from '../EventLog';
 import ResultTable from '../ResultTable';
-import SuggestionsPanel from '../SuggestionsPanel';
 import { useUiStore } from '../../stores/uiStore';
 
 export default function ExecTab() {
@@ -21,7 +20,6 @@ export default function ExecTab() {
   const cancelling = usePipelineStore(s => s.cancelling);
   const preset = pipelines.find(p => p.name === activePreset);
   const params = usePipelineStore(s => s.params);
-  const pendingReview = usePipelineStore(s => s.pendingReview);
   const stages = preset?.stages ?? [];
   const events = usePipelineStore(s => s.events);
   const result = usePipelineStore(s => s.result);
@@ -30,8 +28,6 @@ export default function ExecTab() {
   const cancel = usePipelineStore(s => s.cancel);
   const setActivePreset = usePipelineStore(s => s.setActivePreset);
   const setParam = usePipelineStore(s => s.setParam);
-  const reviewApprove = usePipelineStore(s => s.reviewApprove);
-  const reviewReject = usePipelineStore(s => s.reviewReject);
   const setActiveTab = useUiStore(s => s.setActiveTab);
 
   return (
@@ -58,15 +54,6 @@ export default function ExecTab() {
             schema={preset.inputs}
             values={params}
             onChange={setParam}
-          />
-        )}
-        {pendingReview && (
-          <SuggestionsPanel
-            extraOps={pendingReview.extraOps}
-            reason={pendingReview.reason}
-            guardLayer={pendingReview.guardLayer}
-            onApprove={reviewApprove}
-            onReject={reviewReject}
           />
         )}
       </div>

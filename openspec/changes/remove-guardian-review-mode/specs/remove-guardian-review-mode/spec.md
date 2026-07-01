@@ -21,9 +21,9 @@
 ### Requirement: 审批 API 端点
 系统 MUST 提供 `POST /api/pipeline/{thread_id}/review` 端点用于审批/拒绝待处理的 pipeline 操作。
 - **Reason**: 端点返回 501 Not Implemented，从未真正实现。
-- **Migration**: 删除该端点。前端不再调用审批接口。
+- **Migration**: 删除该端点及对应的 `ReviewStepRequest` 模型。删除 `apiClient.ts` 中的 `reviewPipeline` 前端调用函数及 `types.ts` 中的 IPC 声明。删除 `test_api_routes.py` 中的 `test_review_not_implemented` 测试。
 
 ### Requirement: 前端审批卡片及 pendingReview 状态
 系统 SHOULD 在 LogTab 和 ExecTab 中展示 pendingReview 审批卡片，允许用户批准或拒绝。
 - **Reason**: 审批卡片调用的后端端点返回 501，审批流程从未走通。移除审批门控后，后端不再返回 `pending_review` 数据，`pendingReview` 及相关代码（类型、actions、响应处理分支）全部为死代码。
-- **Migration**: 彻底移除前端审批卡片 UI 及 `pipelineStore.ts` 中的 `pendingReview` 字段、`PendingReviewData` 接口、`setPendingReview`、`reviewApprove`、`reviewReject`、`pending_review` 响应处理分支。`LogTab`/`ExecTab`/`App.tsx` 中的相关引用同步移除。`LogTab` 中的 `DiffView` import 仅在 pendingReview 场景使用，确认无其他引用后一并移除。
+- **Migration**: 彻底移除前端审批卡片 UI 及 `pipelineStore.ts` 中的 `pendingReview` 字段、`PendingReviewData` 接口、`setPendingReview`、`reviewApprove`、`reviewReject`、`pending_review` 响应处理分支。`LogTab`/`ExecTab`/`App.tsx` 中的相关引用同步移除。`LogTab` 中的 `DiffView` import 仅在 pendingReview 场景使用，一并移除。`ExecTab` 中的 `SuggestionsPanel` import + 组件渲染随 pendingReview 一并移除。`getStepStatus` 签名移除 `pendingReview` 参数和 `'review'` 状态值。

@@ -80,11 +80,6 @@ class PipelineSaveRequest(BaseModel):
 class LogForwardRequest(BaseModel):
     entries: list[dict[str, Any]]
 
-class ReviewStepRequest(BaseModel):
-    action: str
-    reason: str = ""
-
-
 # ── Helpers ─────────────────────────────────────────────────────────
 
 
@@ -246,13 +241,6 @@ def register_all_routes(app: FastAPI) -> None:
                             extras = " | ".join(f"{k}={v}" for k, v in params.items())
                             step["goal_description"] = f"{desc} (params: {extras})"
 
-                from yak_browser_use.engine._lifecycle.guardian import (
-                    create_guardian_from_frontmatter,
-                    inject_guardian_config_to_steps,
-                )
-                inject_guardian_config_to_steps(steps, parsed.frontmatter)
-                guardian = create_guardian_from_frontmatter(parsed.frontmatter)
-
                 from yak_browser_use.cdp.helpers import CDPHelpers
                 browser = CDPHelpers(engine_state.bridge)
 
@@ -269,7 +257,6 @@ def register_all_routes(app: FastAPI) -> None:
                     cdp_helpers=browser,
                     pipeline_path=snapshot_path,
                     frontmatter=parsed.frontmatter,
-                    guardian=guardian,
                     ws_clients=engine_state.ws_clients,
                 )
 
@@ -772,13 +759,6 @@ def register_all_routes(app: FastAPI) -> None:
 
             parsed, steps = _prepare_steps(pipeline_text, pipeline_path)
 
-            from yak_browser_use.engine._lifecycle.guardian import (
-                create_guardian_from_frontmatter,
-                inject_guardian_config_to_steps,
-            )
-            inject_guardian_config_to_steps(steps, parsed.frontmatter)
-            guardian = create_guardian_from_frontmatter(parsed.frontmatter)
-
             ts = int(time.time())
             snapshot_path = wm.versions_dir / f"snapshot_{ts}.pipeline.yaml"
             snapshot_path.write_text(pipeline_text, encoding="utf-8")
@@ -800,7 +780,6 @@ def register_all_routes(app: FastAPI) -> None:
                     pipeline_path=snapshot_path,
                     frontmatter=parsed.frontmatter,
                     resume_from_index=resume_from_index,
-                    guardian=guardian,
                     ws_clients=engine_state.ws_clients,
                 )
 
@@ -862,19 +841,6 @@ def register_all_routes(app: FastAPI) -> None:
         except Exception as exc:
             logger.exception("GET /api/pipeline/%s/runs failed", pipeline_name)
             raise ServerError(str(exc))
-
-    @app.post("/api/pipeline/{thread_id}/review")
-    async def api_review_step(thread_id: str, request: ReviewStepRequest) -> JSONResponse:
-        """Review/approve/reject a pending pipeline operation.
-
-        NOTE: Full implementation requires engine.checkpoint.MemorySaver
-        which is not yet available in this project. Currently returns 501.
-        """
-        logger.warning("POST /api/pipeline/%s/review called but not implemented", thread_id)
-        return JSONResponse(
-            {"status": "error", "error": "review endpoint not implemented", "code": "NOT_IMPLEMENTED"},
-            status_code=501,
-        )
 
     # =================================================================
     # WORKSPACE — events
