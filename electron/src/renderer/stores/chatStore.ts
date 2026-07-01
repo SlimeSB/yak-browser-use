@@ -29,6 +29,7 @@ interface ChatState {
   _streamStates: Record<number, StreamState>;
   _processedEditIds: Set<string>;
   _lastAssistantId: string | null;
+  _streamingMsgIds: Set<string>;
   // actions
   send: (text: string) => Promise<void>;
   cancelChat: () => Promise<void>;
@@ -59,6 +60,7 @@ export const useChatStore = _create<ChatState>((set, get) => ({
   _streamStates: {},
   _processedEditIds: new Set(),
   _lastAssistantId: null,
+  _streamingMsgIds: new Set(),
 
   // ── Chat send / receive ───────────────────────────────────
 
@@ -95,7 +97,7 @@ export const useChatStore = _create<ChatState>((set, get) => ({
     try {
       const result = await api.chatReset();
       if (result.ok) {
-        set({ chatMessages: [], _streamStates: {}, _lastAssistantId: null });
+        set({ chatMessages: [], _streamStates: {}, _lastAssistantId: null, _streamingMsgIds: new Set() });
       }
     } catch (e) {
       console.error('Chat reset failed: %s', String(e));
@@ -401,14 +403,19 @@ function _handleChatEvent(set: SetFn, get: GetFn, event: Record<string, unknown>
     case 'chat.error': {
       const ti = event.turn_index as number;
       if (ti != null) {
-        set((s) => {
-          const st = s._streamStates[ti];
-          return st ? { _streamStates: { ...s._streamStates, [ti]: { ...st, complete: true } } } : {};
-        });
+        const st = get()._streamStates[ti];
+        if (st) {
+          set((s) => {
+            const streamingMsgIds = new Set(s._streamingMsgIds);
+            if (st.assistantMsgId) streamingMsgIds.delete(st.assistantMsgId);
+            return {
+              _streamStates: { ...s._streamStates, [ti]: { ...st, complete: true } },
+              _streamingMsgIds: streamingMsgIds,
+              chatMessages: [...s.chatMessages, { id: nextMsgId(), role: 'assistant', content: `[Error] ${(event.message as string) || ''}` }],
+            };
+          });
+        }
       }
-      set((s) => ({
-        chatMessages: [...s.chatMessages, { id: nextMsgId(), role: 'assistant', content: `[Error] ${(event.message as string) || ''}` }],
-      }));
       return;
     }
 
@@ -428,7 +435,9 @@ function _handleChatEvent(set: SetFn, get: GetFn, event: Record<string, unknown>
         } else {
           chatMessages = [...s.chatMessages, { id: newId, role: 'assistant', content: '' }];
         }
-        return { _streamStates: streamStates, chatMessages, _lastAssistantId: newId };
+        const streamingMsgIds = new Set(s._streamingMsgIds);
+        streamingMsgIds.add(newId);
+        return { _streamStates: streamStates, chatMessages, _lastAssistantId: newId, _streamingMsgIds: streamingMsgIds };
       });
       return;
     }
@@ -439,8 +448,29 @@ function _handleChatEvent(set: SetFn, get: GetFn, event: Record<string, unknown>
       const st = get()._streamStates[ti];
       if (st) {
         const newSt = { ...st, accumulating: st.accumulating + content };
-        set((s) => ({ _streamStates: { ...s._streamStates, [ti]: newSt } }));
-        _patchAssistantMsg(set, get, (msg) => ({ ...msg, content: newSt.toolAnnotation + newSt.accumulating }));
+        const newContent = newSt.toolAnnotation + newSt.accumulating;
+        const lastId = st.assistantMsgId;
+        set((s) => {
+          const streamStates = { ...s._streamStates, [ti]: newSt };
+          const next = [...s.chatMessages];
+          let patched = false;
+          if (lastId) {
+            const idx = next.findIndex(m => m.id === lastId);
+            if (idx >= 0 && next[idx].role === 'assistant') {
+              next[idx] = { ...next[idx], content: newContent };
+              patched = true;
+            }
+          }
+          if (!patched) {
+            for (let i = next.length - 1; i >= 0; i--) {
+              if (next[i].role === 'assistant') {
+                next[i] = { ...next[i], content: newContent };
+                break;
+              }
+            }
+          }
+          return { _streamStates: streamStates, chatMessages: next };
+        });
       }
       return;
     }
@@ -451,8 +481,29 @@ function _handleChatEvent(set: SetFn, get: GetFn, event: Record<string, unknown>
       const st = get()._streamStates[ti];
       if (st) {
         const newSt = { ...st, reasoningParts: [...st.reasoningParts, content] };
-        set((s) => ({ _streamStates: { ...s._streamStates, [ti]: newSt } }));
-        _patchAssistantMsg(set, get, (msg) => ({ ...msg, reasoning: newSt.reasoningParts.join('') }));
+        const newReasoning = newSt.reasoningParts.join('');
+        const lastId = st.assistantMsgId;
+        set((s) => {
+          const streamStates = { ...s._streamStates, [ti]: newSt };
+          const next = [...s.chatMessages];
+          let patched = false;
+          if (lastId) {
+            const idx = next.findIndex(m => m.id === lastId);
+            if (idx >= 0 && next[idx].role === 'assistant') {
+              next[idx] = { ...next[idx], reasoning: newReasoning };
+              patched = true;
+            }
+          }
+          if (!patched) {
+            for (let i = next.length - 1; i >= 0; i--) {
+              if (next[i].role === 'assistant') {
+                next[i] = { ...next[i], reasoning: newReasoning };
+                break;
+              }
+            }
+          }
+          return { _streamStates: streamStates, chatMessages: next };
+        });
       }
       return;
     }
@@ -464,13 +515,31 @@ function _handleChatEvent(set: SetFn, get: GetFn, event: Record<string, unknown>
         const st = get()._streamStates[ti];
         if (st) {
           const newSt = { ...st, toolAnnotation: `\n\n[Calling ${toolName}...]` };
-          set((s) => ({ _streamStates: { ...s._streamStates, [ti]: newSt } }));
+          const lastId = st.assistantMsgId;
+          set((s) => {
+            const streamStates = { ...s._streamStates, [ti]: newSt };
+            const next = [...s.chatMessages];
+            const append = `\n\n[Calling ${toolName}...]`;
+            let patched = false;
+            if (lastId) {
+              const idx = next.findIndex(m => m.id === lastId);
+              if (idx >= 0 && next[idx].role === 'assistant') {
+                next[idx] = { ...next[idx], content: next[idx].content ? next[idx].content + append : append };
+                patched = true;
+              }
+            }
+            if (!patched) {
+              for (let i = next.length - 1; i >= 0; i--) {
+                if (next[i].role === 'assistant') {
+                  next[i] = { ...next[i], content: next[i].content ? next[i].content + append : append };
+                  break;
+                }
+              }
+            }
+            return { _streamStates: streamStates, chatMessages: next };
+          });
         }
       }
-      _patchAssistantMsg(set, get, (msg) => ({
-        ...msg,
-        content: msg.content ? msg.content + `\n\n[Calling ${toolName}...]` : `[Calling ${toolName}...]`,
-      }));
       return;
     }
 
@@ -478,7 +547,14 @@ function _handleChatEvent(set: SetFn, get: GetFn, event: Record<string, unknown>
       const ti = event.turn_index as number;
       const st = get()._streamStates[ti];
       if (st) {
-        set((s) => ({ _streamStates: { ...s._streamStates, [ti]: { ...st, complete: true } } }));
+        set((s) => {
+          const streamingMsgIds = new Set(s._streamingMsgIds);
+          if (st.assistantMsgId) streamingMsgIds.delete(st.assistantMsgId);
+          return {
+            _streamStates: { ...s._streamStates, [ti]: { ...st, complete: true } },
+            _streamingMsgIds: streamingMsgIds,
+          };
+        });
         _patchAssistantMsg(set, get, (msg) => ({
           ...msg,
           content: st.toolAnnotation + (st.accumulating || msg.content),

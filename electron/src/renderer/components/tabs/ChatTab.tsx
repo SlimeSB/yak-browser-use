@@ -200,9 +200,10 @@ function ToolChip({ tc }: ToolChipProps) {
 interface MessageBubbleProps {
   msg: ChatMessage;
   toolCalls?: ChatMessage[];
+  isStreaming?: boolean;
 }
 
-const MessageBubble = React.memo(function MessageBubble({ msg, toolCalls }: MessageBubbleProps) {
+const MessageBubble = React.memo(function MessageBubble({ msg, toolCalls, isStreaming }: MessageBubbleProps) {
   const { t } = useTranslation();
   const [thinkExpanded, setThinkExpanded] = useState(false);
 
@@ -214,7 +215,15 @@ const MessageBubble = React.memo(function MessageBubble({ msg, toolCalls }: Mess
     return <div className="chat-system-msg"><pre>{msg.content}</pre></div>;
   }
 
-  // assistant
+  // assistant — during streaming show plain text (fast), after stream_end render Markdown
+  const contentNode = (() => {
+    if (!msg.content) return null;
+    if (isStreaming) {
+      return <pre className="chat-agent-content-streaming">{msg.content}</pre>;
+    }
+    return <ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.content}</ReactMarkdown>;
+  })();
+
   return (
     <>
       {msg.reasoning && msg.content && !toolCalls && (
@@ -229,8 +238,8 @@ const MessageBubble = React.memo(function MessageBubble({ msg, toolCalls }: Mess
           {thinkExpanded && <pre className="chat-think-body">{msg.reasoning}</pre>}
         </div>
       )}
-      {msg.content && (
-        <div className="chat-agent-content"><ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.content}</ReactMarkdown></div>
+      {contentNode && (
+        <div className="chat-agent-content">{contentNode}</div>
       )}
       {(toolCalls?.length ?? 0) > 0 && (
         <div className="tool-chips">
@@ -248,6 +257,7 @@ const MessageBubble = React.memo(function MessageBubble({ msg, toolCalls }: Mess
 export default function ChatTab() {
   const { t } = useTranslation();
   const messages = useChatStore(s => s.chatMessages);
+  const streamingMsgIds = useChatStore(s => s._streamingMsgIds);
   const currentSessionId = useChatStore(s => s.currentSessionId);
   const pendingEdit = useChatStore(s => s.activePendingEdit);
   const pipelines = usePipelineStore(s => s.pipelines);
@@ -302,13 +312,19 @@ export default function ChatTab() {
     return result;
   }, [messages]);
 
-  // Auto-scroll
+  // Auto-scroll — deferred to rAF to avoid layout thrashing during streaming
   useEffect(() => {
     const el = scrollRef.current;
     if (!el) return;
-    if (el.scrollHeight - el.scrollTop - el.clientHeight < 100) {
-      el.scrollTop = el.scrollHeight;
-    }
+    let rafId: number;
+    const check = () => {
+      rafId = 0;
+      if (el.scrollHeight - el.scrollTop - el.clientHeight < 100) {
+        el.scrollTop = el.scrollHeight;
+      }
+    };
+    rafId = requestAnimationFrame(check);
+    return () => { if (rafId) cancelAnimationFrame(rafId); };
   }, [messages]);
 
   // Split ratio
@@ -437,7 +453,7 @@ export default function ChatTab() {
             )}
             {mergedMessages.map((msg, i) => (
               <div key={msg.id || i} className={`chat-message ${msg.role}`}>
-                <MessageBubble msg={msg} toolCalls={msg.toolCalls} />
+                <MessageBubble msg={msg} toolCalls={msg.toolCalls} isStreaming={streamingMsgIds.has(msg.id)} />
               </div>
             ))}
           </div>

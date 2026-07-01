@@ -36,7 +36,30 @@ async function connect() {
   }
 }
 
-function dispatch(event: Record<string, unknown>) {
+const _THROTTLED_TYPES = new Set(['chat.text_chunk', 'chat.think_chunk']);
+const _pendingStream: Record<string, Record<string, unknown>> = {};
+let _rafId: number | null = null;
+
+function _flushPending() {
+  _rafId = null;
+  const events = Object.values(_pendingStream);
+  for (const ev of events) {
+    delete _pendingStream[ev.type as string + '_' + (ev.turn_index ?? '')];
+  }
+  for (const ev of events) {
+    _dispatchImmediate(ev);
+  }
+}
+
+function _throttle(event: Record<string, unknown>) {
+  const key = (event.type as string) + '_' + (event.turn_index ?? '');
+  _pendingStream[key] = event;
+  if (_rafId === null) {
+    _rafId = requestAnimationFrame(_flushPending);
+  }
+}
+
+function _dispatchImmediate(event: Record<string, unknown>) {
   const et = event.type as string;
 
   // Step 1: chat.* events
@@ -69,6 +92,22 @@ function dispatch(event: Record<string, unknown>) {
     (event.step || event.pipeline || '') as string,
     event,
   );
+}
+
+function dispatch(event: Record<string, unknown>) {
+  const et = event.type as string;
+  // Throttle high-frequency streaming events to once per frame
+  if (_THROTTLED_TYPES.has(et)) {
+    _throttle(event);
+    return;
+  }
+  // Ensure any pending streaming events are flushed before state-changing events
+  if (_rafId !== null) {
+    cancelAnimationFrame(_rafId);
+    _rafId = null;
+    _flushPending();
+  }
+  _dispatchImmediate(event);
 }
 
 export function initGateway() {

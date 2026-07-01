@@ -937,26 +937,75 @@ def register_all_routes(app: FastAPI) -> None:
         _turn_idx = (len(session.messages) if session else 0)
         _stream_started_this_turn = False
 
+        _delta_buffer: list[str] = []
+        _delta_flush_task: asyncio.Task | None = None
+        _reasoning_buffer: list[str] = []
+        _reasoning_flush_task: asyncio.Task | None = None
+        _DELTA_FLUSH_DELAY = 0.03
+        _REASONING_FLUSH_DELAY = 0.1
+
         def _push(event: dict) -> None:
             service.events.push(event)
 
+        async def _flush_text_deltas() -> None:
+            await asyncio.sleep(_DELTA_FLUSH_DELAY)
+            nonlocal _delta_flush_task
+            _delta_flush_task = None
+            bufs = _delta_buffer.copy()
+            _delta_buffer.clear()
+            merged = "".join(bufs)
+            if merged:
+                _push({"type": "chat.text_chunk", "content": merged, "turn_index": _turn_idx})
+
+        async def _flush_reasoning_deltas() -> None:
+            await asyncio.sleep(_REASONING_FLUSH_DELAY)
+            nonlocal _reasoning_flush_task
+            _reasoning_flush_task = None
+            bufs = _reasoning_buffer.copy()
+            _reasoning_buffer.clear()
+            merged = "".join(bufs)
+            if merged:
+                _push({"type": "chat.think_chunk", "content": merged, "turn_index": _turn_idx})
+
         def _on_stream_start() -> None:
-            nonlocal _turn_idx, _stream_started_this_turn
+            nonlocal _turn_idx, _stream_started_this_turn, _delta_flush_task, _reasoning_flush_task
             if not _stream_started_this_turn:
                 _turn_idx += 1
                 _stream_started_this_turn = True
+            if _delta_flush_task and not _delta_flush_task.done():
+                _delta_flush_task.cancel()
+            _delta_buffer.clear()
+            _delta_flush_task = None
+            if _reasoning_flush_task and not _reasoning_flush_task.done():
+                _reasoning_flush_task.cancel()
+            _reasoning_buffer.clear()
+            _reasoning_flush_task = None
             _push({"type": "chat.stream_start", "turn_index": _turn_idx})
 
         def _on_stream_end(has_tool_calls: bool) -> None:
-            nonlocal _stream_started_this_turn
+            nonlocal _stream_started_this_turn, _delta_flush_task, _reasoning_flush_task
             _stream_started_this_turn = False
+            if _delta_flush_task and not _delta_flush_task.done():
+                _delta_flush_task.cancel()
+            _delta_buffer.clear()
+            _delta_flush_task = None
+            if _reasoning_flush_task and not _reasoning_flush_task.done():
+                _reasoning_flush_task.cancel()
+            _reasoning_buffer.clear()
+            _reasoning_flush_task = None
             _push({"type": "chat.stream_end", "has_tool_calls": has_tool_calls, "turn_index": _turn_idx})
 
         def _on_text_delta(text: str) -> None:
-            _push({"type": "chat.text_chunk", "content": text, "turn_index": _turn_idx})
+            nonlocal _delta_flush_task
+            _delta_buffer.append(text)
+            if _delta_flush_task is None or _delta_flush_task.done():
+                _delta_flush_task = asyncio.create_task(_flush_text_deltas())
 
         def _on_reasoning_delta(text: str) -> None:
-            _push({"type": "chat.think_chunk", "content": text, "turn_index": _turn_idx})
+            nonlocal _reasoning_flush_task
+            _reasoning_buffer.append(text)
+            if _reasoning_flush_task is None or _reasoning_flush_task.done():
+                _reasoning_flush_task = asyncio.create_task(_flush_reasoning_deltas())
 
         def _on_tool_generated(name: str) -> None:
             _push({"type": "chat.tool_generated", "tool_name": name, "turn_index": _turn_idx})
