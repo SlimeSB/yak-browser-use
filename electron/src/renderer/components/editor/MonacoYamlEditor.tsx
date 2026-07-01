@@ -30,13 +30,11 @@ export default function MonacoYamlEditor({
 
   const hasDiff = original !== undefined && modified !== undefined && original !== modified;
 
-  const _nonEmpty = (s: string) => s || '\n';
-
   useEffect(() => {
     if (!containerRef.current) return;
     disposedRef.current = false;
 
-    const safeValue = value || '\n';
+    const safeValue = value ?? '';
 
     originalModelRef.current = monaco.editor.createModel(
       safeValue,
@@ -85,7 +83,12 @@ export default function MonacoYamlEditor({
       padding: { top: 8, bottom: 8 },
     };
     editor.getModifiedEditor().updateOptions(innerOptions);
-    editor.getOriginalEditor().updateOptions(innerOptions);
+    editor.getOriginalEditor().updateOptions({
+      ...innerOptions,
+      lineNumbers: 'off',
+      glyphMargin: false,
+      lineDecorationsWidth: 0,
+    });
 
     editorRef.current = editor;
 
@@ -96,7 +99,7 @@ export default function MonacoYamlEditor({
         if (disposedRef.current) return;
         const text = modifiedModelRef.current?.getValue() ?? '';
         if (originalModelRef.current && text !== originalModelRef.current.getValue()) {
-          originalModelRef.current.setValue(_nonEmpty(text));
+          originalModelRef.current.setValue(text);
         }
         onChangeRef.current?.(text);
       }, 300);
@@ -119,25 +122,12 @@ export default function MonacoYamlEditor({
     };
   }, []);
 
-  useEffect(() => {
-    if (!modifiedModelRef.current || disposedRef.current) return;
-    const currentValue = modifiedModelRef.current.getValue();
-    if (!hasDiff && currentValue !== value) {
-      applyingDiffRef.current = true;
-      modifiedModelRef.current.setValue(_nonEmpty(value));
-      if (originalModelRef.current) {
-        originalModelRef.current.setValue(_nonEmpty(value));
-      }
-      applyingDiffRef.current = false;
-    }
-  }, [value, hasDiff]);
-
   const setModels = useCallback(
     (orig: string, mod: string) => {
       if (!originalModelRef.current || !modifiedModelRef.current || disposedRef.current) return;
       applyingDiffRef.current = true;
-      originalModelRef.current.setValue(_nonEmpty(orig));
-      modifiedModelRef.current.setValue(_nonEmpty(mod));
+      originalModelRef.current.setValue(orig ?? '');
+      modifiedModelRef.current.setValue(mod ?? '');
       applyingDiffRef.current = false;
     },
     []
@@ -155,15 +145,21 @@ export default function MonacoYamlEditor({
       editorRef.current.updateOptions({ readOnly: true });
     } else {
       editorRef.current.updateOptions({ readOnly: false });
-      const currentText = modifiedModelRef.current?.getValue() ?? '';
-      if (currentText !== value && originalModelRef.current) {
-        applyingDiffRef.current = true;
-        modifiedModelRef.current?.setValue(_nonEmpty(value));
-        originalModelRef.current.setValue(_nonEmpty(value));
-        applyingDiffRef.current = false;
-      }
     }
-  }, [original, modified, hasDiff, setModels, value]);
+  }, [original, modified, hasDiff, setModels]);
+
+  useEffect(() => {
+    if (!modifiedModelRef.current || disposedRef.current || hasDiff) return;
+    const currentValue = modifiedModelRef.current.getValue();
+    if (currentValue !== value) {
+      applyingDiffRef.current = true;
+      modifiedModelRef.current.setValue(value ?? '');
+      if (originalModelRef.current) {
+        originalModelRef.current.setValue(value ?? '');
+      }
+      applyingDiffRef.current = false;
+    }
+  }, [value, hasDiff]);
 
   return (
     <div
