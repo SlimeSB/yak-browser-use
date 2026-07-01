@@ -191,7 +191,9 @@ async def execute_browser_op(
             elif op_type == "source":
                 selector = params.get("selector", "")
                 if selector:
-                    js = f"() => {{ const el = document.querySelector('{selector}'); return el ? el.outerHTML : null; }}"
+                    from yak_browser_use.tools.extract_fields import _safe_selector
+                    safe_sel = _safe_selector(selector)
+                    js = f"() => {{ const el = document.querySelector('{safe_sel}'); return el ? el.outerHTML : null; }}"
                     html = await bridge.evaluate(js)
                     if html is None:
                         result["ok"] = False

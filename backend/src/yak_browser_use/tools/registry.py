@@ -633,7 +633,7 @@ def _build_registry_impl() -> None:
     }, _file_write_handler)
 
     registry.register("format_convert", {
-        "description": "转换文件格式（xlsx/csv/json 互转）。根据文件扩展名自动识别源/目标格式，也可显式指定。提供 source_json 可从内存数据直接转换。",
+        "description": "转换文件格式（xlsx/csv/json 互转）。根据文件扩展名自动识别源/目标格式，也可显式指定。提供 source_json 可从内存数据直接转换。支持 output_to 将转换后文件的绝对路径存入 shared_store。",
         "parameters": {
             "type": "object",
             "properties": {
@@ -642,6 +642,7 @@ def _build_registry_impl() -> None:
                 "source_fmt": {"type": "string", "description": "源格式（xlsx/csv/json），为空时从扩展名推断"},
                 "target_fmt": {"type": "string", "description": "目标格式（xlsx/csv/json），为空时从扩展名推断"},
                 "source_json": {"type": "array", "description": "JSON 数组（直接从内存数据转换，优先于 source）", "items": {"type": "object"}},
+                "output_to": {"type": "string", "description": "可选，转换成功后目标文件的绝对路径存入 shared_store 的变量名。"},
             },
             "required": ["target"],
         },
@@ -797,6 +798,165 @@ def _build_registry_impl() -> None:
         },
     }, _data_browse_handler)
 
+    # ── browser_extract_* tools (chat-mode data extraction) ──────────────
+
+    from yak_browser_use.tools.extract import (
+        EXTRACT_LIST_JS,
+        EXTRACT_TABLE_JS,
+        EXTRACT_DETAILS_JS,
+    )
+    from yak_browser_use.tools.extract_fields import (
+        _safe_selector,
+        _build_selector_js,
+        _build_field_extraction_js,
+        _build_table_selector_js,
+        _build_details_selector_js,
+    )
+
+    async def _browser_extract_list_handler(args: dict, ctx: ToolContext) -> dict:
+        if ctx.cdp_helpers is None:
+            return {"ok": False, "error": "浏览器不可用 — 请确保 CDP 连接已建立"}
+        bridge = ctx.cdp_helpers.bridge if hasattr(ctx.cdp_helpers, "bridge") else ctx.cdp_helpers
+        selector = args.get("selector", "")
+        fields = args.get("fields", None)
+        output_to = args.get("output_to", None)
+
+        if fields and not selector:
+            return {"ok": False, "error": "fields 参数需要同时提供 selector"}
+
+        if fields:
+            js = _build_field_extraction_js(selector, fields)
+        elif selector:
+            js = _build_selector_js(selector)
+        else:
+            js = EXTRACT_LIST_JS
+
+        try:
+            items = await bridge.evaluate(js)
+        except Exception as e:
+            return {"ok": False, "error": str(e)}
+
+        if not isinstance(items, list):
+            items = []
+
+        full_data = items
+        truncated = len(items) > 50
+        if truncated:
+            items = items[:50]
+
+        result: dict = {"ok": True, "items": items, "count": len(items)}
+        if truncated:
+            result["_truncated"] = True
+            result["total"] = len(full_data)
+
+        if output_to and ctx.shared_store is not None:
+            ctx.shared_store[output_to] = full_data
+            result["_output_to"] = output_to
+
+        return result
+
+    registry.register("browser_extract_list", {
+        "description": "[需 CDP] 从当前页面提取列表数据。支持自定义 CSS selector 和字段映射（fields）。结果可选存入 shared_store。",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "selector": {"type": "string", "description": "可选，CSS selector 定位列表容器。省略时自动检测常见列表结构（li、role=listitem 等）。"},
+                "output_to": {"type": "string", "description": "可选，将完整提取结果存入 shared_store 的变量名。"},
+                "fields": {
+                    "type": "object",
+                    "description": "可选，字段映射字典。key 为输出字段名，value 为 CSS selector（如 'h3'）或 '@attr' 获取属性。需要同时提供 selector。",
+                    "additionalProperties": {"type": "string"},
+                },
+            },
+        },
+    }, _browser_extract_list_handler)
+
+    async def _browser_extract_table_handler(args: dict, ctx: ToolContext) -> dict:
+        if ctx.cdp_helpers is None:
+            return {"ok": False, "error": "浏览器不可用 — 请确保 CDP 连接已建立"}
+        bridge = ctx.cdp_helpers.bridge if hasattr(ctx.cdp_helpers, "bridge") else ctx.cdp_helpers
+        selector = args.get("selector", "")
+        output_to = args.get("output_to", None)
+
+        if selector:
+            js = _build_table_selector_js(selector)
+        else:
+            js = EXTRACT_TABLE_JS
+
+        try:
+            result = await bridge.evaluate(js)
+        except Exception as e:
+            return {"ok": False, "error": str(e)}
+
+        if not isinstance(result, dict):
+            result = {"headers": [], "rows": []}
+
+        full_rows = result.get("rows", [])
+        truncated = len(full_rows) > 100
+        if truncated:
+            result["rows"] = full_rows[:100]
+
+        ret: dict = {"ok": True, "headers": result.get("headers", []), "rows": result.get("rows", [])}
+        if truncated:
+            ret["_truncated"] = True
+            ret["total_rows"] = len(full_rows)
+
+        if output_to and ctx.shared_store is not None:
+            ctx.shared_store[output_to] = {"headers": result.get("headers", []), "rows": full_rows}
+            ret["_output_to"] = output_to
+
+        return ret
+
+    registry.register("browser_extract_table", {
+        "description": "[需 CDP] 从当前页面提取表格数据（headers + rows）。支持自定义 CSS selector。结果可选存入 shared_store。",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "output_to": {"type": "string", "description": "可选，将完整提取结果存入 shared_store 的变量名。"},
+                "selector": {"type": "string", "description": "可选，CSS selector 定位表格容器。省略时自动检测常见表格结构。"},
+            },
+        },
+    }, _browser_extract_table_handler)
+
+    async def _browser_extract_details_handler(args: dict, ctx: ToolContext) -> dict:
+        if ctx.cdp_helpers is None:
+            return {"ok": False, "error": "浏览器不可用 — 请确保 CDP 连接已建立"}
+        bridge = ctx.cdp_helpers.bridge if hasattr(ctx.cdp_helpers, "bridge") else ctx.cdp_helpers
+        selector = args.get("selector", "")
+        output_to = args.get("output_to", None)
+
+        if selector:
+            js = _build_details_selector_js(selector)
+        else:
+            js = EXTRACT_DETAILS_JS
+
+        try:
+            result = await bridge.evaluate(js)
+        except Exception as e:
+            return {"ok": False, "error": str(e)}
+
+        if not isinstance(result, dict):
+            result = {"text": "", "details": []}
+
+        ret: dict = {"ok": True, "text": result.get("text", ""), "details": result.get("details", [])}
+
+        if output_to and ctx.shared_store is not None:
+            ctx.shared_store[output_to] = result
+            ret["_output_to"] = output_to
+
+        return ret
+
+    registry.register("browser_extract_details", {
+        "description": "[需 CDP] 从当前页面提取结构化详情（key-value 对）。支持自定义 CSS selector 限定容器。结果可选存入 shared_store。",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "output_to": {"type": "string", "description": "可选，将完整提取结果存入 shared_store 的变量名。"},
+                "selector": {"type": "string", "description": "可选，CSS selector 定位详情容器。省略时自动检测常见详情结构。"},
+            },
+        },
+    }, _browser_extract_details_handler)
+
     logger.info("build_registry: registered %d tools", len(registry._tools))
 
 
@@ -919,12 +1079,13 @@ async def _format_convert_handler(args: dict, ctx: ToolContext) -> dict:
     source_fmt = args.get("source_fmt", "")
     target_fmt = args.get("target_fmt", "")
     source_json = args.get("source_json", None)
+    output_to = args.get("output_to", None)
     if not source and source_json is None:
         return {"ok": False, "error": "source or source_json is required"}
     if not target:
         return {"ok": False, "error": "target is required"}
     from yak_browser_use.tools.format_convert import format_convert
-    return await format_convert(
+    result = await format_convert(
         source=source,
         target=target,
         source_fmt=source_fmt,
@@ -932,6 +1093,15 @@ async def _format_convert_handler(args: dict, ctx: ToolContext) -> dict:
         source_json=source_json,
         pipeline=ctx.pipeline_name or None,
     )
+    if result.get("ok") and output_to and ctx.shared_store is not None:
+        from yak_browser_use.tools._path_utils import validate_path
+        try:
+            abs_path = str(validate_path(target, pipeline=ctx.pipeline_name or None))
+            ctx.shared_store[output_to] = abs_path
+            result["_output_to"] = output_to
+        except ValueError:
+            pass
+    return result
 
 
 async def _read_data_handler(args: dict, ctx: ToolContext) -> dict:
