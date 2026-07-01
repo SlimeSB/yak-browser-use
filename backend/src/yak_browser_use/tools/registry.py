@@ -730,7 +730,7 @@ def _build_registry_impl() -> None:
                 "target": {"type": "string", "description": "目标文件路径"},
                 "source_fmt": {"type": "string", "description": "源格式（xlsx/csv/json），为空时从扩展名推断"},
                 "target_fmt": {"type": "string", "description": "目标格式（xlsx/csv/json），为空时从扩展名推断"},
-                "source_json": {"type": "array", "description": "JSON 数组（直接从内存数据转换，优先于 source）", "items": {"type": "object"}},
+                "source_json": {"type": "string", "description": "JSON 数组或指针字符串。支持 {*key} 指针语法从 shared_store 读取数据（如 \"{*bili_videos_data}\"），或传 JSON 数组字符串。优先于 source 参数。"},
                 "output_to": {"type": "string", "description": "可选，转换成功后目标文件的绝对路径存入 shared_store 的变量名。"},
             },
             "required": ["target"],

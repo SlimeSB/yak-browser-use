@@ -41,7 +41,8 @@ async def format_convert(
         target_fmt: Target format (xlsx/csv/json). Empty = sniff from extension.
         pipeline: Pipeline name for downloads/ prefix resolution.
         source_json: JSON data to convert directly (skips file read, takes precedence over source).
-
+            支持 {*key} 指针语法从 shared_store 读取数据（传入字符串 "{*my_key}" 时自动从 shared_store["my_key"] 取值）。
+            示例：source_json="{*bili_videos_data}" target="downloads/videos.csv"
     Returns:
         {"ok": True, "result": "已转换: <target>", "target": "..."} or {"ok": False, "error": "..."}
     """
