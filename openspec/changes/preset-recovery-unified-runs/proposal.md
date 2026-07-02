@@ -17,10 +17,10 @@
 - **新增** `_build_recovery_prompt()` 格式化失败上下文为 agent prompt
 - **修改** `PlaywrightBridge._resolve_download_path()` 基于 `run_id` 而非全局 workspace 解析下载路径
 - **修改** `PlaywrightBridge.set_download_pipeline()` 接口，接受 `run_id` 参数
-- **修改** `_resolve_input_files()` 的 `downloads/` 前缀解析为 run-relative（加 fallback 兼容旧数据）
+- **修改** `_resolve_input_files()` 的 `downloads/` 前缀解析为 run-relative（无 fallback）
 - **修改** RunContext 新增 `failure_context` 字段
-- **修改** `engine_state.connect_chrome()` 不再绑定全局下载路径，延迟到首次 `set_download_pipeline()` 调用
-- **保留** 旧 `workspace/downloads/` 路径的 fallback 兼容（已存在的下载文件仍可访问）
+- **修改** `engine_state.connect_chrome()` 不再绑定全局下载路径，延迟到首次 `set_download_dir()` 调用
+- **移除** 旧 `workspace/downloads/` 路径的 fallback（无消费方，YAGNI）
 
 ## Capabilities
 
@@ -30,7 +30,7 @@
 
 ### Modified Capabilities
 - `browser-download`: 浏览器下载路径从 workspace 级 `downloads/` 改为 `runs/{id}/downloads/`
-- `session-management`: agent session 创建时自动在 `runs/` 下建立对应目录
+- `unified-runs-directory`: agent session 创建时自动通过 `create_run("agent")` 在 `runs/` 下建立对应目录
 
 ## Impact
 

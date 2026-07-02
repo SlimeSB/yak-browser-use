@@ -5,7 +5,7 @@
 
 #### Scenario: Step selector not found
 - **WHEN** 一个 browser step 使用了不存在的 CSS 选择器
-- **THEN** 系统 MUST 在 RunContext.failure_context 中记录 step_index、error_code="SELECTOR_NOT_FOUND"、step_result（截断后）和 execution_tree
+- **THEN** 系统 MUST 在 RunContext.failure_context 中记录 step_index、error_code="SELECTOR_NOT_FOUND"、step_result（截断后）和 execution_tree（来自 StepMachine 内存快照，不依赖文件）
 - **AND** 系统 MUST NOT 将 run 标记为 "failed"，而是保持 "running" 状态
 
 #### Scenario: Check assertion fails
@@ -29,8 +29,8 @@
 #### Scenario: All recovery attempts exhausted
 - **WHEN** 连续 3 次 recovery 后 pipeline 仍然失败
 - **THEN** 系统 MUST 将最终 run 标记为 "failed"
-- **AND** 创建 version snapshot
-- **AND** 返回 status="completed" if not ctx.errors and ctx.failure_context is None else "failed"
+- **AND** MUST 不创建版本快照（VersionManager 已不参与此流程）
+- **AND** 返回 status="failed"
 
 #### Scenario: Agent calls pipeline_finish(status="failed")
 - **WHEN** agent 判断无法修复并调用 pipeline_finish(status="failed", summary="...")
@@ -38,14 +38,45 @@
 - **AND** 最终 status 为 "failed"
 
 ### Requirement: Recovery prompt SHALL include complete failure context
-`_build_recovery_prompt()` MUST 将 failure_context 格式化为包含以下信息的 user message：pipeline 名称、失败 step 的 index 和 name、错误码和错误信息、失败 step 定义 JSON、执行结果（截断后）、execution tree、已完成步骤列表。
+`_build_recovery_prompt()` MUST 将 failure_context 格式化为包含以下信息的 user message。prompt 模板如下：
+
+```
+## Pipeline Recovery (Attempt {attempt}/{max_attempts})
+
+The preset pipeline "{pipeline_name}" failed at step {step_index} "{step_name}".
+
+### Error
+- Code: {error_code}
+- Message: {error_message}
+
+### Failed Step Definition
+```json
+{step_def_json}
+```
+
+### Step Result (truncated)
+{step_result_truncated}
+
+### Execution Tree
+```json
+{execution_tree_json}
+```
+
+### Completed Steps
+{completed_steps_list}
+
+### Instructions
+1. Use `pipeline_view` to see the full pipeline
+2. Use browser tools (`snapshot`, `click`, etc.) to diagnose the current page state
+3. Use `edit_pipeline` to fix the yaml
+4. Call `pipeline_finish(status="completed")` when done, or `pipeline_finish(status="failed", summary="<reason>")` if you cannot fix it
+```
 
 #### Scenario: Build prompt for selector error
 - **WHEN** failure_context 包含 error_code="SELECTOR_NOT_FOUND"
-- **THEN** 生成的 prompt MUST 包含 "## Pipeline Recovery (Attempt N/3)" 标题
-- **AND** MUST 包含失败 step 的完整 browser_ops 定义
-- **AND** MUST 提示 agent 可用 pipeline_view 查看完整 pipeline、用 browser tools 诊断页面、用 edit_pipeline 修复
-- **AND** MUST 提示 agent 完成后调用 pipeline_finish(status="completed")
+- **THEN** 生成的 prompt MUST 按上述模板格式化
+- **AND** MUST 包含失败 step 的完整 browser_ops 定义（在 Failed Step Definition JSON 中）
+- **AND** MUST 包含 recovery 指令（pipeline_view → browser tools → edit_pipeline → pipeline_finish）
 
 ### Requirement: Recovery session SHALL be independent and identifiable
 每次 recovery MUST 通过 service.new_session() 创建全新独立 session，不污染现有 chat session 历史。recovery session 的 run_id 必须以 `recovery_` 前缀标识。

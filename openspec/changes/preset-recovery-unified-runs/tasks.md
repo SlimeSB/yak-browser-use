@@ -24,6 +24,7 @@
   - 删除 `_snapshot_cleaned` 标志和 finally 里的错误清理逻辑
   - `_prepare_steps(pipeline_text, snapshot_path)` → 直接 parse pipeline_text
   - 不再传 `pipeline_path=snapshot_path` 给 run_pipeline
+- [ ] 2.5 确认 `parse_pipeline()` 签名无 `pipeline_path` 参数（当前已是最简，无需改动）
 
 ## 3. Preset recovery 实现
 
@@ -41,7 +42,7 @@
   3. 调用 `bridge.set_download_dir(name, new_session_run_id)` 绑定 agent session 下载路径
   4. 调用 `process_chat_message(prompt)` 发送 recovery prompt
   5. 等待 agent 完成（pipeline_finish → budget.exhaust）
-  6. 检查 agent 是否调了 pipeline_finish(status="failed") → 是则 break
+  6. 检查 agent 最后一次 tool_call 是否为 `pipeline_finish` 且 status="failed" → 是则 break（不 re-run）
   7. 从 pipeline.yaml 重新 parse → 调用 `run_pipeline()` 新建 run_dir 重跑
   8. 成功则清除 failure_context 并 break
 - [ ] 3.8 处理 recovery 耗尽：循环结束后 if `ctx.failure_context is not None` → set_status("failed") + return status="failed"
