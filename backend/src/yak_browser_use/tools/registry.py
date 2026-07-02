@@ -510,14 +510,9 @@ def _build_registry_impl() -> None:
         if ctx.cdp_helpers is None:
             return {"ok": False, "error": "浏览器不可用 — 请确保 CDP 连接已建立"}
         bridge = ctx.cdp_helpers.bridge if hasattr(ctx.cdp_helpers, "bridge") else ctx.cdp_helpers
-        script_file = args.get("script_file")
-        if not script_file:
-            return {"ok": False, "error": "必须提供 script_file 参数"}
-        try:
-            p = validate_path(script_file, pipeline=ctx.pipeline_name or None)
-            code = p.read_text(encoding="utf-8")
-        except Exception:
-            return {"ok": False, "error": f"脚本文件不存在: {script_file}"}
+        code = args.get("code", "")
+        if not code:
+            return {"ok": False, "error": "必须提供 code 参数"}
         try:
             result = await bridge.evaluate(code)
             output_to = args.get("output_to")
@@ -525,25 +520,39 @@ def _build_registry_impl() -> None:
                 ctx.shared_store[output_to] = result
             return_format = args.get("return_format", "raw")
             if return_format == "json":
-                return {"ok": True, "result": json.dumps(result, ensure_ascii=False)}
+                return {"ok": True, "result": json.dumps(result, ensure_ascii=False, indent=2)}
             elif return_format == "csv":
                 if isinstance(result, list):
                     return {"ok": True, "result": _auto_csv(result)}
                 return {"ok": True, "result": f"return_format=csv requires array result, got {type(result).__name__}"}
             return {"ok": True, "result": result}
         except Exception as e:
-            return {"ok": False, "error": str(e)}
+            err_str = str(e)
+            if "Illegal return statement" in err_str:
+                return {
+                    "ok": False,
+                    "error": err_str,
+                    "_hint": (
+                        "browser_eval_js 将代码包在 () => { ... } 中执行。不要在代码顶层使用 return 语句，"
+                        "直接写表达式即可。示例：\n"
+                        "  ✅ code='document.querySelectorAll(\"a\").length'\n"
+                        "  ✅ code='Array.from(document.querySelectorAll(\".item\")).map(el => el.textContent)'\n"
+                        "  ❌ code='return document.querySelectorAll(\"a\").length'\n"
+                        "如果是在写多行函数体，用箭头函数：code='() => { const x = 1; return x + 2; }'"
+                    ),
+                }
+            return {"ok": False, "error": err_str}
 
     registry.register("browser_eval_js", {
-        "description": "[需 CDP] 从 workspace 加载 JS 脚本文件并在浏览器当前页面执行。\n必须提供 script_file 参数（workspace 相对路径，如 tools/extract.js）。\n支持 output_to 将结果存入 shared_store，支持 return_format 控制返回格式。",
+        "description": "[需 CDP] 在浏览器当前页面执行任意 JavaScript 代码并返回结果。\n支持多行代码（使用 YAML | 语法或 \\n 换行）。\n支持 output_to 将结果存入 shared_store，支持 return_format 控制返回格式。\n⚠️ 脚本在 () => { ... } 中执行，顶层不要写 return，直接写表达式即可。如需多行逻辑，使用箭头函数：() => { ... }。",
         "parameters": {
             "type": "object",
             "properties": {
-                "script_file": {"type": "string", "description": "必须。workspace 相对路径的 JS 脚本文件（如 tools/extract.js）。路径限制在 workspace 安全目录内。"},
+                "code": {"type": "string", "description": "要执行的 JavaScript 代码（必填）。支持多行，使用 YAML | 语法或 \\n 转义换行。顶层不要写 return 语句，表达式结果会自动返回。"},
                 "output_to": {"type": "string", "description": "可选，将执行结果存入 shared_store 的变量名，后续工具可通过 {key} 引用。"},
-                "return_format": {"type": "string", "enum": ["raw", "json", "csv"], "description": "返回格式：raw（默认，原样返回）、json（JSON 序列化）、csv（数组转为 CSV 文本）。"},
+                "return_format": {"type": "string", "enum": ["raw", "json", "csv"], "description": "返回格式：raw（默认，原样返回）、json（JSON 序列化，indent=2 格式化）、csv（数组转为 CSV 文本）。"},
             },
-            "required": ["script_file"],
+            "required": ["code"],
         },
     }, _eval_js_handler)
 

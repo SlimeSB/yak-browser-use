@@ -104,6 +104,8 @@ async def pipeline_view(name: str | None = None, **kwargs) -> dict:
         }
         if s.tool_name:
             step_info["tool_name"] = s.tool_name
+        if s.params:
+            step_info["params"] = s.params
         if s.goal_description:
             step_info["goal_description"] = s.goal_description
         if s.browser_ops is not None:
