@@ -151,6 +151,8 @@ SAMPLE_YAML_TEXT = textwrap.dedent("""\
       description: Navigate
       browser_ops:
       - goto: https://example.com
+      check:
+        ignore: true
     - name: step_2
       description: Search
       browser_ops:
@@ -159,14 +161,20 @@ SAMPLE_YAML_TEXT = textwrap.dedent("""\
           value: test
       depends_on:
       - step_1
+      check:
+        ignore: true
     - name: step_3
       description: Tool step
       tool_name: my_tool
       params:
         format: csv
+      check:
+        ignore: true
     - name: step_4
       description: Goal
       goal_description: Analyze results
+      check:
+        ignore: true
 """)
 
 
@@ -243,7 +251,7 @@ class TestStripDefaults:
         pipeline = PipelineYaml(
             name="snap_test",
             steps=[
-                StepYaml(name="s1", browser_ops=[{"goto": "https://x.com"}]),
+                StepYaml(name="s1", browser_ops=[{"goto": "https://x.com"}], check={"ignore": True}),
             ],
         )
         yaml_str = PipelineStore.to_yaml(pipeline)
@@ -256,8 +264,8 @@ class TestStripDefaults:
             name="snap_test",
             description="",
             steps=[
-                StepYaml(name="s1", description="keep_me", browser_ops=[{"goto": "x"}]),
-                StepYaml(name="s2", description="", browser_ops=[{"click": "y"}]),
+                StepYaml(name="s1", description="keep_me", browser_ops=[{"goto": "x"}], check={"ignore": True}),
+                StepYaml(name="s2", description="", browser_ops=[{"click": "y"}], check={"ignore": True}),
             ],
         )
         data = pipeline.model_dump()
@@ -267,14 +275,14 @@ class TestStripDefaults:
         assert "description" not in stripped["steps"][1]
 
     def test_empty_params_excluded(self):
-        step = StepYaml(name="s1", browser_ops=[{"goto": "x"}], params={})
+        step = StepYaml(name="s1", browser_ops=[{"goto": "x"}], params={}, check={"ignore": True})
         pipeline = PipelineYaml(name="test", steps=[step])
         data = pipeline.model_dump()
         stripped = PipelineStore._strip_defaults(data)
         assert "params" not in stripped["steps"][0]
 
     def test_empty_input_schema_excluded(self):
-        step = StepYaml(name="s1", browser_ops=[{"goto": "x"}], input_schema={}, output_schema={})
+        step = StepYaml(name="s1", browser_ops=[{"goto": "x"}], input_schema={}, output_schema={}, check={"ignore": True})
         pipeline = PipelineYaml(name="test", steps=[step])
         data = pipeline.model_dump()
         stripped = PipelineStore._strip_defaults(data)
@@ -282,7 +290,7 @@ class TestStripDefaults:
         assert "output_schema" not in stripped["steps"][0]
 
     def test_empty_depends_on_excluded(self):
-        step = StepYaml(name="s1", description="no deps", browser_ops=[{"goto": "x"}], depends_on=[])
+        step = StepYaml(name="s1", description="no deps", browser_ops=[{"goto": "x"}], depends_on=[], check={"ignore": True})
         pipeline = PipelineYaml(name="test", steps=[step])
         yaml_str = PipelineStore.to_yaml(pipeline)
         assert "depends_on" not in yaml_str
@@ -290,7 +298,7 @@ class TestStripDefaults:
     def test_non_default_values_preserved(self):
         step = StepYaml(
             name="s1", description="has deps", browser_ops=[{"goto": "x"}],
-            depends_on=["s0"], params={"format": "csv"},
+            depends_on=["s0"], params={"format": "csv"}, check={"ignore": True},
         )
         pipeline = PipelineYaml(name="test", steps=[step])
         yaml_str = PipelineStore.to_yaml(pipeline)
@@ -301,7 +309,7 @@ class TestStripDefaults:
         assert "format" in yaml_str
 
     def test_strip_defaults_behavior(self):
-        step = StepYaml(name="s1", description="test", browser_ops=[{"goto": "x"}])
+        step = StepYaml(name="s1", description="test", browser_ops=[{"goto": "x"}], check={"ignore": True})
         pipeline = PipelineYaml(name="test", steps=[step])
         data = pipeline.model_dump()
         stripped = PipelineStore._strip_defaults(data)
@@ -329,6 +337,8 @@ class TestPipelineStoreLoad:
               - fill:
                   selector: '#q'
                   value: text
+              check:
+                ignore: true
         """)
         pipe_path = dir_path / "pipeline.yaml"
         pipe_path.write_text(yaml_text, encoding="utf-8")
@@ -367,9 +377,13 @@ class TestPipelineStoreLoadMeta:
             - name: s1
               browser_ops:
               - goto: x
+              check:
+                ignore: true
             - name: s2
               browser_ops:
               - click: y
+              check:
+                ignore: true
         """)
         pipe_path = dir_path / "pipeline.yaml"
         pipe_path.write_text(yaml_text, encoding="utf-8")
@@ -415,7 +429,7 @@ class TestPipelineStoreCrud:
     def test_add_step(self):
         pipeline = PipelineStore.from_yaml(SAMPLE_YAML_TEXT)
         store = PipelineStore()
-        new_step = StepYaml(name="new_step", browser_ops=[{"goto": "https://new.com"}])
+        new_step = StepYaml(name="new_step", browser_ops=[{"goto": "https://new.com"}], check={"ignore": True})
         store.add_step(pipeline, new_step)
         assert len(pipeline.steps) == 5
         assert pipeline.steps[4].name == "new_step"
@@ -424,7 +438,7 @@ class TestPipelineStoreCrud:
     def test_add_step_after(self):
         pipeline = PipelineStore.from_yaml(SAMPLE_YAML_TEXT)
         store = PipelineStore()
-        new_step = StepYaml(name="after_step", browser_ops=[{"scroll": 100}])
+        new_step = StepYaml(name="after_step", browser_ops=[{"scroll": 100}], check={"ignore": True})
         store.add_step(pipeline, new_step, after="step_1")
         assert len(pipeline.steps) == 5
         assert pipeline.steps[1].name == "after_step"
@@ -432,7 +446,7 @@ class TestPipelineStoreCrud:
     def test_add_step_duplicate_raises(self):
         pipeline = PipelineStore.from_yaml(SAMPLE_YAML_TEXT)
         store = PipelineStore()
-        dup = StepYaml(name="step_1", browser_ops=[{"goto": "x"}])
+        dup = StepYaml(name="step_1", browser_ops=[{"goto": "x"}], check={"ignore": True})
         with pytest.raises(ValueError, match="already exists"):
             store.add_step(pipeline, dup)
 

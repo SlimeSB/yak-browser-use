@@ -59,6 +59,23 @@ Before acting on a multi-step task, write a **coarse outline** first — do NOT 
 - **反幻觉原则**：只记录你实际执行过的操作。不要"想象"一个 selector 或 URL 然后写入 pipeline —— 必须先通过 browser_snapshot / browser_source 确认页面状态，执行操作成功后再记录。
 - **导航合并优化**：如果一系列操作仅用于从当前页面导航到另一个有稳定 URL 的页面（例如点击"登录"按钮进入 xx/login），记录时可直接合并为一条 `browser_goto` 跳转到目标 URL。此优化不适用于包含填表、提交等业务操作的点击，也不适用于目标页面无稳定 URL 的情况。
 
+## Step Check (验收) — REQUIRED
+每步必须显式声明 `check` 字段（必填，不可省略或传 `{}`）。按步骤类型推荐：
+
+- **browser 步骤**：`url_contains`（URL 验证）、`element_exists`（元素存在）、`text_contains`（文本包含）、`element_visible`（元素可见）、`js_expression`（自定义 JS 验证）
+- **tool 步骤**：`output_exists`（输出文件存在）、`file_contains`（文件内容验证）、`json_field_exists`（shared_store 数据验证）
+- **无需验收**：`{ignore: true}`（显式声明跳过，如幂等步骤）
+
+示例：
+```yaml
+check:
+  url_contains: bilibili.com          # browser 步骤验证 URL
+check:
+  output_exists: downloads/result.csv # tool 步骤验证文件生成
+check:
+  ignore: true                         # 显式跳过验收
+```
+
 ## Credential Security
 When the user asks you to fill passwords, API keys, or other secrets:
 - Ask the user for the **param key name** — they store credentials in the Params tab. Do NOT ask for the password value.

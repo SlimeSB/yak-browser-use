@@ -6,6 +6,12 @@ from pydantic import BaseModel, Field, model_validator
 
 from yak_browser_use.compiler.models import PipelineDef, StepDef
 
+_VALID_CHECK_KEYS: frozenset = frozenset({
+    "url_contains", "element_exists", "text_contains", "element_visible",
+    "output_exists", "file_contains", "js_expression", "json_field_exists",
+    "ignore",
+})
+
 
 class StepYaml(BaseModel):
     """Pydantic model for a single step in pipeline.yaml."""
@@ -22,7 +28,7 @@ class StepYaml(BaseModel):
     browser_ops: list[dict] | None = None
     tool_name: str | None = None
     goal_description: str | None = None
-    check: dict | None = None
+    check: dict = Field(..., description="步骤执行后的验收检查条件，必须显式声明验收方式或 {ignore: true}")
 
     @model_validator(mode="after")
     def _normalize_browser_ops(self):
@@ -33,6 +39,17 @@ class StepYaml(BaseModel):
             )
             if need_convert:
                 self.browser_ops = [_convert_browser_op(op) for op in self.browser_ops]
+        return self
+
+    @model_validator(mode="after")
+    def _check_guard(self):
+        """Validate check field: reject empty dict and unknown keys."""
+        if not self.check:
+            raise ValueError("check 不能为空字典，请提供验收条件或 {ignore: true}")
+        for key in self.check:
+            if key not in _VALID_CHECK_KEYS:
+                valid_keys = ", ".join(sorted(_VALID_CHECK_KEYS))
+                raise ValueError(f"check 字段不支持 key: '{key}'，合法值: {valid_keys}")
         return self
 
     @model_validator(mode="after")

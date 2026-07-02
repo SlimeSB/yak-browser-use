@@ -305,20 +305,16 @@ async def run_pipeline(
             check_def = step_def.get("check")
             if check_def is not None and step_result["status"] == "completed":
                 bridge = getattr(cdp_helpers, "bridge", None) if cdp_helpers else None
-                if bridge is None:
+                check_result = await run_check(
+                    check_def, bridge,
+                    step_dir=step_dir, shared_store=shared_store,
+                )
+                if not check_result["ok"]:
                     step_result["status"] = "failed"
                     step_result["error"] = {
                         "code": "CHECK_FAILED",
-                        "message": "浏览器不可用，无法执行验收检查",
+                        "message": check_result.get("error", "验收未通过"),
                     }
-                else:
-                    check_result = await run_check(check_def, bridge)
-                    if not check_result["ok"]:
-                        step_result["status"] = "failed"
-                        step_result["error"] = {
-                            "code": "CHECK_FAILED",
-                            "message": check_result.get("error", "验收未通过"),
-                        }
 
             write_step_json(step_dir, sanitize_result(step_result))
 

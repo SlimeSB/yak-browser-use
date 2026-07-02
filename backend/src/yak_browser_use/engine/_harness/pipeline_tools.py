@@ -383,7 +383,10 @@ async def pipeline_compile(
         "step_count": len(steps),
         "steps": steps,
         "hint": (
-            "Review the steps above. Add 'check' fields, refine descriptions, "
+            "Review the steps above. Add 'check' fields (必填 — 每步必须显式声明验收条件，"
+            "不可省略或传 {}。支持: url_contains/element_exists/text_contains/"
+            "element_visible/output_exists/file_contains/js_expression/"
+            "json_field_exists/ignore), refine descriptions, "
             "adjust browser_ops as needed, then use pipeline_create to save "
             "(or edit_pipeline if the pipeline already exists)."
         ),

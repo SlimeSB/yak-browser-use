@@ -484,34 +484,85 @@ async def execute_tool(
 # ──────────────────────────────────────────────────────────────
 
 
-async def run_check(check_def: dict | None, bridge: BrowserBridge) -> dict:
+_VALID_CHECK_KEYS: frozenset = frozenset({
+    "url_contains", "element_exists", "text_contains", "element_visible",
+    "output_exists", "file_contains", "js_expression", "json_field_exists",
+    "ignore",
+})
+
+
+async def run_check(
+    check_def: dict | None,
+    bridge: BrowserBridge | None,
+    step_dir: Path | None = None,
+    shared_store: dict | None = None,
+) -> dict:
     """Run programmatic checks against the current page state.
 
-    Supports four check conditions:
-    - url_contains: current URL contains the given string
-    - element_exists: CSS selector exists in the DOM
-    - text_contains: page body text contains the given string
-    - element_visible: CSS selector is visible (not display:none/visibility:hidden)
-
-    All conditions must pass for the check to succeed.
+    Supports check conditions:
+    - url_contains / element_exists / text_contains / element_visible: browser-based
+    - output_exists: file exists in step_dir
+    - file_contains: file content contains text
+    - js_expression: evaluate JS in browser
+    - json_field_exists: field path exists in shared_store
+    - ignore: skip all checks
 
     Returns: {ok, result, error?}
     """
+    if check_def is None:
+        return {"ok": False, "result": "check: 失败", "error": "check 定义不能为 None"}
     if not check_def:
-        return {"ok": True, "result": "无验收条件，默认通过"}
+        return {"ok": False, "result": "check: 失败", "error": "check 定义不能为空"}
+
+    # ── ignore: 显式跳过 ──
+    if check_def.get("ignore") is True:
+        return {"ok": True, "result": "ignore: 显式跳过验收"}
 
     try:
         current_url = ""
-        try:
-            if hasattr(bridge, "page") and bridge.page:
-                current_url = bridge.page.url
-            else:
-                url_result = await bridge.evaluate("window.location.href")
-                current_url = str(url_result) if url_result else ""
-        except Exception as e:
-            logger.debug("run_check: failed to get current URL: %s", e)
+        if bridge is not None:
+            try:
+                if hasattr(bridge, "page") and bridge.page:
+                    current_url = bridge.page.url
+                else:
+                    url_result = await bridge.evaluate("window.location.href")
+                    current_url = str(url_result) if url_result else ""
+            except Exception as e:
+                logger.debug("run_check: failed to get current URL: %s", e)
 
+        # ── 前置资源校验 ──
+        if "output_exists" in check_def or "file_contains" in check_def:
+            if step_dir is None:
+                return {
+                    "ok": False, "result": "check: 失败",
+                    "error": "output_exists/file_contains 需要 step_dir",
+                }
+        if "json_field_exists" in check_def:
+            if shared_store is None:
+                return {
+                    "ok": False, "result": "check: 失败",
+                    "error": "json_field_exists 需要 shared_store",
+                }
+        if "js_expression" in check_def:
+            if bridge is None:
+                return {
+                    "ok": False, "result": "check: 失败",
+                    "error": "js_expression 需要浏览器环境(bridge)",
+                }
+
+        # ── 运行时未知 key 拦截 ──
         for key in check_def:
+            if key not in _VALID_CHECK_KEYS:
+                return {
+                    "ok": False, "result": "check: 失败",
+                    "error": f"不支持的 check key: '{key}'",
+                }
+
+        # ── 通用 string-only 校验（只对已知 string-only key） ──
+        _STRING_ONLY_KEYS = {"url_contains", "element_exists", "text_contains", "element_visible", "output_exists"}
+        for key in check_def:
+            if key not in _STRING_ONLY_KEYS:
+                continue
             value = check_def[key]
             if not isinstance(value, str) or not value:
                 return {
@@ -521,6 +572,7 @@ async def run_check(check_def: dict | None, bridge: BrowserBridge) -> dict:
                     "current_url": current_url,
                 }
 
+        # ── url_contains ──
         if "url_contains" in check_def:
             expected = check_def["url_contains"]
             if expected not in current_url:
@@ -531,6 +583,7 @@ async def run_check(check_def: dict | None, bridge: BrowserBridge) -> dict:
                     "current_url": current_url,
                 }
 
+        # ── element_exists ──
         if "element_exists" in check_def:
             selector = check_def["element_exists"]
             exists = await bridge.evaluate(
@@ -544,6 +597,7 @@ async def run_check(check_def: dict | None, bridge: BrowserBridge) -> dict:
                     "current_url": current_url,
                 }
 
+        # ── text_contains ──
         if "text_contains" in check_def:
             expected = check_def["text_contains"]
             body_text = await bridge.evaluate("document.body.innerText || ''")
@@ -556,6 +610,7 @@ async def run_check(check_def: dict | None, bridge: BrowserBridge) -> dict:
                     "current_url": current_url,
                 }
 
+        # ── element_visible ──
         if "element_visible" in check_def:
             selector = check_def["element_visible"]
             visible = await bridge.evaluate(
@@ -574,6 +629,82 @@ async def run_check(check_def: dict | None, bridge: BrowserBridge) -> dict:
                     "current_url": current_url,
                 }
 
+        # ── output_exists ──
+        if "output_exists" in check_def:
+            path_str = check_def["output_exists"]
+            target = (step_dir / path_str).resolve()
+            if not str(target).startswith(str(step_dir.resolve())):
+                return {
+                    "ok": False, "result": "output_exists: 失败",
+                    "error": f"路径越界: {path_str}",
+                }
+            if not target.exists():
+                return {
+                    "ok": False, "result": "output_exists: 失败",
+                    "error": f"输出文件不存在: {path_str}",
+                }
+
+        # ── file_contains ──
+        if "file_contains" in check_def:
+            fc = check_def["file_contains"]
+            path_str = fc.get("path", "")
+            text = fc.get("text", "")
+            target = (step_dir / path_str).resolve()
+            if not str(target).startswith(str(step_dir.resolve())):
+                return {
+                    "ok": False, "result": "file_contains: 失败",
+                    "error": f"路径越界: {path_str}",
+                }
+            if not target.exists():
+                return {
+                    "ok": False, "result": "file_contains: 失败",
+                    "error": f"文件不存在: {path_str}",
+                }
+            if target.is_dir():
+                return {
+                    "ok": False, "result": "file_contains: 失败",
+                    "error": f"路径不是文件: {path_str}",
+                }
+            content = target.read_text(encoding="utf-8", errors="replace")
+            if text not in content:
+                return {
+                    "ok": False, "result": "file_contains: 失败",
+                    "error": f"文件内容不包含 '{text}'",
+                }
+
+        # ── js_expression ──
+        if "js_expression" in check_def:
+            js = check_def["js_expression"]
+            js_result = await bridge.evaluate(js)
+            if not js_result:
+                return {
+                    "ok": False, "result": "js_expression: 失败",
+                    "error": "JS 表达式返回 falsy 值",
+                }
+
+        # ── json_field_exists ──
+        if "json_field_exists" in check_def:
+            jfe = check_def["json_field_exists"]
+            step_name = jfe.get("step", "")
+            field = jfe.get("field", "")
+            step_data = shared_store.get(step_name, {})
+            data = step_data.get("data", {}) if isinstance(step_data, dict) else {}
+            parts = field.split(".")
+            current = data
+            found = True
+            for part in parts:
+                if isinstance(current, dict) and part in current:
+                    current = current[part]
+                else:
+                    found = False
+                    break
+            if not found or current is None:
+                return {
+                    "ok": False, "result": "json_field_exists: 失败",
+                    "error": f"字段不存在: {field}",
+                }
+
+        # ── result_msg ──
         passed_checks = [k for k in check_def if k]
         if len(passed_checks) == 1:
             result_msg = f"{passed_checks[0]}: 通过"

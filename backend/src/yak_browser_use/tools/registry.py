@@ -565,7 +565,7 @@ def _build_registry_impl() -> None:
                     "pipeline_name": {"type": "string", "description": "Name of the pipeline preset to modify."},
                     "steps_updates": {"type": "object", "description": "Dict of step_name -> updates for batch updating multiple steps. Key is the step name, value is a dict of fields to update (same format as `updates`). Example: {\"step_1\": {\"description\": \"new desc\"}, \"step_3\": {\"browser_ops\": [...]}}."},
                     "step_name": {"type": "string", "description": "Name of a single step to update (legacy compat, use `steps_updates` instead)."},
-                    "updates": {"type": "object", "description": "Fields to update on a single step (legacy compat, requires `step_name`). Supported keys: browser_ops (list of single-key dicts), tool_name (string), goal_description (string), description (string), depends_on (list of strings), check (dict — 验收检查，传 {} 跳过。支持 url_contains/element_exists/text_contains/element_visible)。"},
+                    "updates": {"type": "object", "description": "Fields to update on a single step (legacy compat, requires `step_name`). Supported keys: browser_ops (list of single-key dicts), tool_name (string), goal_description (string), description (string), depends_on (list of strings), check (dict — 必填，必须显式声明验收条件，不可省略或传 {}。支持: url_contains/element_exists/text_contains/element_visible/output_exists/file_contains/js_expression/json_field_exists/ignore)。"},
                     "explanation": {"type": "string", "description": "Human-readable explanation of what was changed and why."},
                 },
                 "required": ["pipeline_name"],
@@ -583,7 +583,7 @@ def _build_registry_impl() -> None:
                     "tool_name": {"type": "string", "description": "Name of a custom tool to invoke. Mutually exclusive with browser_ops and goal_description."},
                     "goal_description": {"type": "string", "description": "High-level goal description for this step. Mutually exclusive with browser_ops and tool_name."},
                     "depends_on": {"type": "array", "description": "List of step names this step depends on.", "items": {"type": "string"}},
-                    "check": {"type": "object", "description": "步骤执行后的验收检查条件。执行时机：步骤完成（status='completed'）后立即执行。所有条件必须全部通过才算通过。失败后果：状态变为 'failed'，pipeline 停止。支持的条件键：url_contains（当前 URL 包含指定字符串）、element_exists（CSS selector 在 DOM 中存在）、text_contains（页面文本包含指定字符串）、element_visible（CSS selector 可见）。不执行检查时传 {}（空对象）。"},
+                    "check": {"type": "object", "description": "步骤执行后的验收检查条件（必填，不可省略或传 {}）。执行时机：步骤完成（status='completed'）后立即执行。所有条件必须全部通过才算通过。失败后果：状态变为 'failed'，pipeline 停止。支持的条件键：url_contains（当前 URL 包含指定字符串）、element_exists（CSS selector 在 DOM 中存在）、text_contains（页面文本包含指定字符串）、element_visible（CSS selector 可见）、output_exists（step_dir 下文件是否存在）、file_contains（文件内容是否包含文本）、js_expression（浏览器 JS 表达式返回 truthy）、json_field_exists（shared_store 中字段路径是否存在）、ignore（显式跳过验收，值必须为 true）。"},
                     "after": {"type": "string", "description": "Name of the step to insert after. Omit to append."},
                     "heading": {"type": "boolean", "description": "Set to true to create an outline placeholder step without browser_ops, tool_name, or goal_description."},
                     "explanation": {"type": "string", "description": "Human-readable explanation of what was changed and why."},
@@ -610,14 +610,14 @@ def _build_registry_impl() -> None:
                 "properties": {
                     "pipeline_name": {"type": "string", "description": "Name for the new pipeline preset."},
                     "description": {"type": "string", "description": "Human-readable description of the pipeline."},
-                    "steps": {"type": "array", "description": "List of step objects. Each step must have: name (string), description (string), check (dict, use {} to skip). Optional: browser_ops (list of dicts), tool_name (string), goal_description (string), depends_on (list of strings).", "items": {"type": "object"}},
+                    "steps": {"type": "array", "description": "List of step objects. Each step must have: name (string), description (string), check (dict — 必填，必须显式声明验收条件，不可省略或传 {}。支持: url_contains/element_exists/text_contains/element_visible/output_exists/file_contains/js_expression/json_field_exists/ignore)。Optional: browser_ops (list of dicts), tool_name (string), goal_description (string), depends_on (list of strings).", "items": {"type": "object"}},
                     "explanation": {"type": "string", "description": "Human-readable explanation of what was created and why."},
                 },
                 "required": ["pipeline_name", "description", "steps"],
             },
         },
         "pipeline_compile": {
-            "description": "Read the current chat session's browser operations and return them as structured step definitions. This tool is READ-ONLY — it does NOT write any file. Review the returned steps, add 'check' fields, refine descriptions and browser_ops, then use pipeline_create (new) or pipeline_update_step (existing) to save the pipeline.",
+            "description": "Read the current chat session's browser operations and return them as structured step definitions. This tool is READ-ONLY — it does NOT write any file. Review the returned steps, add 'check' fields (必填 — 每步必须显式声明验收条件，不可省略或传 {}), refine descriptions and browser_ops, then use pipeline_create (new) or pipeline_update_step (existing) to save the pipeline.",
             "parameters": {
                 "type": "object",
                 "properties": {

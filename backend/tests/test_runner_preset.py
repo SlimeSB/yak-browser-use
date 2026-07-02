@@ -445,3 +445,52 @@ class TestRunPipeline:
             assert ctx.errors[0]["code"] == "BROWSER_ERROR"
             # Original attempt + 1 retry = at least 2 executions
             assert mock_exec.await_count >= 2
+
+    @pytest.mark.asyncio
+    async def test_tool_step_with_output_exists_check(self, tmp_path):
+        """Tool step with output_exists check should pass when file exists."""
+        from yak_browser_use.engine.runner_preset import run_pipeline
+
+        steps = [
+            {
+                "name": "extract",
+                "tool_name": "extract_table",
+                "check": {"output_exists": "result.csv"},
+            },
+        ]
+
+        with (
+            patch("yak_browser_use.engine.runner_preset.WorkspaceManager") as MockWM,
+            patch("yak_browser_use.engine.runner_preset.execute_tool_step", new_callable=AsyncMock) as mock_exec,
+            patch("yak_browser_use.engine.runner_preset.write_step_json"),
+            patch("yak_browser_use.engine.runner_preset.sanitize_result", side_effect=lambda x: x),
+            patch("yak_browser_use.engine.runner_preset._write_execution_tree"),
+            patch("yak_browser_use.engine.runner_preset._setup_run_logger", return_value=None),
+            patch("yak_browser_use.engine.runner_preset.EventSink") as MockEvents,
+        ):
+            mock_wm = MagicMock()
+            mock_wm.root = tmp_path
+            mock_wm.versions_dir = tmp_path / "versions"
+            mock_wm.tools_dir = tmp_path / "tools"
+            mock_wm.create_run.return_value = tmp_path / "run_1"
+            mock_wm.get_status.return_value = "running"
+            mock_wm.get_latest_version.return_value = "v1"
+            MockWM.return_value = mock_wm
+
+            async def _mock_exec(step_def, tools_dir, step_dir, run_dir, **kwargs):
+                # Simulate tool step that creates an output file
+                (step_dir / "result.csv").write_text("a,b,c", encoding="utf-8")
+                return {"status": "completed", "duration_ms": 50}
+
+            mock_exec.side_effect = _mock_exec
+
+            mock_events = MagicMock()
+            MockEvents.return_value = mock_events
+
+            ctx = await run_pipeline(
+                pipeline_name="tool_check_test",
+                steps=steps,
+                cdp_helpers=None,
+            )
+
+            assert len(ctx.errors) == 0
