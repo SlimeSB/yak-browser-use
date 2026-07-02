@@ -7,7 +7,8 @@ import type { ChatMessage, TreeNode } from '../../types';
 import { useConnectionStore } from '../../stores/connectionStore';
 import { usePipelineStore } from '../../stores/pipelineStore';
 import { useUiStore } from '../../stores/uiStore';
-import MonacoYamlEditor from '../editor/MonacoYamlEditor';
+import CodeMirrorYamlEditor from '../editor/CodeMirrorYamlEditor';
+import { useEditorWrap } from '../editor/useEditorWrap';
 import { readStorage, writeStorage } from '../../utils/storage';
 
 // ── Tree sidebar ─────────────────────────────────────────────
@@ -104,6 +105,7 @@ function EditorPanel() {
   const setPipelineEditor = usePipelineStore(s => s.setPipelineEditor);
   const savePipeline = usePipelineStore(s => s.savePipeline);
   const [diffError, setDiffError] = useState('');
+  const [wrap, setWrap] = useEditorWrap(true);
 
   return (
     <div className="chat-pipeline-editor">
@@ -113,6 +115,13 @@ function EditorPanel() {
             {t('chat.save', 'Save')}
           </button>
         )}
+        <button
+          className={`btn btn-small ${wrap ? 'btn-primary' : 'btn-secondary'}`}
+          onClick={() => setWrap(!wrap)}
+          title={wrap ? t('chat.wrapOn', 'Wrap: ON') : t('chat.wrapOff', 'Wrap: OFF')}
+        >
+          ↩
+        </button>
       </div>
       {pendingEdit && (
         <>
@@ -138,12 +147,14 @@ function EditorPanel() {
           {diffError && <div className="chat-diff-error">{diffError}</div>}
         </>
       )}
-      <MonacoYamlEditor
+      <CodeMirrorYamlEditor
         value={pipelineEditor}
         original={pendingEdit?.original}
         modified={pendingEdit?.modified}
         onChange={setPipelineEditor}
         theme={theme}
+        wrap={wrap}
+        onWrapChange={setWrap}
       />
     </div>
   );

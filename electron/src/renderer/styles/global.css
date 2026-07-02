@@ -2696,14 +2696,12 @@ body {
 .chat-pipeline-textarea:focus {
   border-color: var(--blue);
 }
-.monaco-yaml-editor {
-  flex: 1;
-  min-height: 0;
+.cm-editor {
   border-radius: var(--radius-sm);
-  overflow: hidden;
+  background: var(--bg-surface);
 }
-.monaco-yaml-editor .monaco-editor {
-  border-radius: var(--radius-sm);
+.cm-editor .cm-gutters {
+  border-right: 1px solid var(--border-light);
 }
 .chat-diff-bar {
   display: flex;
