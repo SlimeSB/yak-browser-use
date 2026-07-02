@@ -187,12 +187,12 @@ class TestResolveParams:
         assert resolved["url"] == "https://example.com/${nonexistent}"
         assert errors == ["nonexistent"]
 
-    def test_sub_non_string_type_error_keeps_placeholder(self):
+    def test_sub_non_string_type_serializes_to_json(self):
         store = {"a": "ok", "b": {"nested": True}}
         params = {"x": "${a}${b}"}
         resolved, errors = resolve_params(params, store)
-        assert resolved["x"] == "ok${b}"
-        assert errors == ["b"]
+        assert resolved["x"] == 'ok{"nested": true}'
+        assert errors == []
 
     def test_sub_partial_failure_other_paths_ok(self):
         store = {"a": "yes"}
@@ -202,12 +202,12 @@ class TestResolveParams:
         assert resolved["bad"] == "prefix ${missing.x}"
         assert errors == ["missing.x"]
 
-    def test_sub_list_value_error(self):
+    def test_sub_list_value_serializes_to_json(self):
         store = {"a": [1, 2, 3]}
         params = {"x": "prefix ${a} suffix"}
         resolved, errors = resolve_params(params, store)
-        assert resolved["x"] == "prefix ${a} suffix"
-        assert errors == ["a"]
+        assert resolved["x"] == "prefix [1, 2, 3] suffix"
+        assert errors == []
 
     # ── mixed {path} and ${path} ─────────────────────────────────────
 

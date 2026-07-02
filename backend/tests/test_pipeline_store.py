@@ -132,9 +132,9 @@ class TestBrowserOpsTypeCoverage:
         result = PipelineStore._from_yaml_ops([internal])[0]
         assert result == internal
 
-    def test_empty_op_converts_to_empty(self):
+    def test_empty_op_is_skipped(self):
         result = PipelineStore._from_yaml_ops([{}])
-        assert result == [{}]
+        assert result == []
 
 
 # ═══════════════════════════════════════════════════════════════════
