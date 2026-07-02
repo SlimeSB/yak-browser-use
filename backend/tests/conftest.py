@@ -116,3 +116,40 @@ def sample_goal_step() -> dict:
         "goal_description": "Analyze the extracted data and generate a summary",
         "system_prompt": "You are a data analyst.",
     }
+
+
+# ── LLM mock factories ───────────────────────────────────────────
+
+
+def make_llm_response(*, content: str | None = None, tool_calls: list | None = None):
+    """Build a minimal LLM response object for Agent tests."""
+    resp = MagicMock()
+    resp.content = content
+    resp.reasoning = None
+    resp.thinking = None
+    if tool_calls is not None:
+        resp.tool_calls = tool_calls
+    else:
+        resp.tool_calls = []
+        del resp.tool_calls  # hasattr returns False
+    return resp
+
+
+def make_tool_call(name: str, args: dict, tc_id: str = "tc_1") -> dict:
+    """Build a tool_call dict for LLM response."""
+    return {
+        "id": tc_id,
+        "function": {"name": name, "arguments": args},
+    }
+
+
+@pytest.fixture
+def llm_response_factory():
+    """Factory fixture for creating LLM response mocks."""
+    return make_llm_response
+
+
+@pytest.fixture
+def tool_call_factory():
+    """Factory fixture for creating tool call dicts."""
+    return make_tool_call

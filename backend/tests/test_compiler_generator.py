@@ -396,8 +396,12 @@ steps:
   - name: step_1
     browser_ops:
       - goto: https://old-url.com
+    check:
+      ignore: true
   - name: step_2
     tool_name: extract
+    check:
+      ignore: true
 """
 
     def test_update_existing_step(self):

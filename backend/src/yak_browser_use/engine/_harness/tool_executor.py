@@ -239,6 +239,10 @@ async def _execute_single_tool_call(
             if source_key and shared_store is not None:
                 shared_store[source_key] = result.get("result", result) if result.get("ok") else result
 
+            if resolve_errors:
+                result["ok"] = False
+                result["resolve_errors"] = resolve_errors
+
             prepend_resolve_errors(result, resolve_errors)
 
             return result
@@ -457,9 +461,9 @@ def _apply_heavy_data_filter(
             return
 
         elif mode == "full":
-            result_dict.pop("screenshot_base64", "")
-            html = result_dict.pop("html", "")
-            result_dict["result"] = "\U0001F4F8 完整快照已获取（含截图+HTML）"
+            result_dict["_screenshot_base64"] = result_dict.pop("screenshot_base64", "")
+            result_dict["_html"] = result_dict.pop("html", "")
+            result_dict["result"] = "📸 完整快照已获取（含截图+HTML）"
             return
 
         else:

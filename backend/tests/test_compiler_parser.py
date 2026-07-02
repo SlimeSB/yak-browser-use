@@ -24,6 +24,8 @@ steps:
     description: Go to the site
     browser_ops:
       - goto: https://example.com
+    check:
+      ignore: true
   - name: search
     description: Search for keyword
     depends_on:
@@ -32,9 +34,13 @@ steps:
       - fill:
           selector: "#q"
           value: "{{keyword}}"
+    check:
+      ignore: true
   - name: extract
     description: Extract data
     tool_name: extract_table
+    check:
+      ignore: true
 """
 
 SAMPLE_YAML_WITH_TEMPLATES = """name: my_pipeline
@@ -43,6 +49,8 @@ steps:
     system_prompt: "{{template:default-system-prompt}}"
     browser_ops:
       - goto: https://example.com
+    check:
+      ignore: true
 """
 
 
@@ -69,6 +77,8 @@ steps:
   - name: s1
     browser_ops:
       - goto: "{{alias:home}}"
+    check:
+      ignore: true
 """
         result = parse_pipeline(yaml_text)
         assert result.name == "aliased"
@@ -99,6 +109,8 @@ steps:
     browser_ops:
       - goto: https://x.com
     goal_description: do something
+    check:
+      ignore: true
 """
         with pytest.raises(Exception, match="mutually exclusive"):
             parse_pipeline(yaml_text)
@@ -109,6 +121,8 @@ steps:
   - name: s1
     tool_name: extract_table
     description: Extract data
+    check:
+      ignore: true
 """
         result = parse_pipeline(yaml_text)
         assert result.steps[0].tool_name == "extract_table"
@@ -119,6 +133,8 @@ steps:
 steps:
   - name: s1
     goal_description: Analyze the results
+    check:
+      ignore: true
 """
         result = parse_pipeline(yaml_text)
         assert result.steps[0].is_goal is True
@@ -129,6 +145,8 @@ steps:
 steps:
   - name: s1
     description: Just a step
+    check:
+      ignore: true
 """
         result = parse_pipeline(yaml_text)
         assert result.steps[0].is_goal is True
@@ -140,14 +158,20 @@ steps:
   - name: s1
     browser_ops:
       - goto: https://x.com
+    check:
+      ignore: true
   - name: s2
     browser_ops:
       - click: "#btn"
     depends_on:
       - s1
+    check:
+      ignore: true
   - name: s3
     depends_on:
       - s2
+    check:
+      ignore: true
 """
         result = parse_pipeline(yaml_text)
         assert result.steps[0].depends_on == []

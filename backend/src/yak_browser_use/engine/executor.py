@@ -836,7 +836,20 @@ async def execute_browser_step(
             else:
                 core_params = {k: v for k, v in op.items() if k != "type"}
 
-            core_params, _ = resolve_params(core_params, shared_store)
+            core_params, core_resolve_errors = resolve_params(core_params, shared_store)
+            if core_resolve_errors:
+                op_record["ok"] = False
+                op_record["error"] = f"参数模板解析失败: {core_resolve_errors}"
+                op_record["duration_ms"] = 0
+                result["ops"].append(op_record)
+                result["status"] = "failed"
+                result["error"] = {
+                    "code": "RESOLVE_ERROR",
+                    "message": op_record["error"],
+                    "stack": None,
+                }
+                result["duration_ms"] = int((time.time() - start) * 1000)
+                return result
 
             retry = op.get("retry", 0)
             optional = op.get("optional", False)
@@ -1003,6 +1016,10 @@ async def execute_tool_step(
         core_result = await execute_tool(tool_name, resolved_params, tools_dir, cdp_helpers)
     else:
         core_result = dispatch_result
+
+    if resolve_errors:
+        core_result["ok"] = False
+        core_result["resolve_errors"] = resolve_errors
 
     prepend_resolve_errors(core_result, resolve_errors)
 

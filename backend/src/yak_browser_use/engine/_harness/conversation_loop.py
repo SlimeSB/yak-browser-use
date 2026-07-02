@@ -52,7 +52,10 @@ _DEFAULT_MAX_LLM_RETRIES = 3
 _DEFAULT_LLM_RETRY_BASE_MS = 1000
 _DEFAULT_LLM_RETRY_MAX_MS = 30000
 
-# Max consecutive LLM failures before giving up
+# Max consecutive *turns* that exhaust all internal LLM retries (see
+# _call_llm_with_retry) before the agent gives up.  Each turn already
+# retries up to _DEFAULT_MAX_LLM_RETRIES times internally, so the total
+# API calls before halt is roughly this value × _DEFAULT_MAX_LLM_RETRIES.
 _MAX_CONSECUTIVE_LLM_FAILURES = 5
 
 

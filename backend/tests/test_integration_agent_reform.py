@@ -249,7 +249,7 @@ class TestRunCheckIntegration:
 
     @pytest.mark.asyncio
     async def test_none_check_passes(self):
-        result = await run_check(None, None)
+        result = await run_check({"ignore": True}, None)
         assert result["ok"] is True
 
     @pytest.mark.asyncio
@@ -282,15 +282,16 @@ class TestCheckFieldRoundTrip:
         runtime = sd.to_runtime_dict()
         assert runtime["check"] == {"url_contains": "x.com"}
 
-    def test_step_without_check_is_none(self):
+    def test_step_without_check_uses_ignore_default(self):
         step = StepYaml.model_validate({
             "name": "simple",
             "browser_ops": [{"goto": "https://x.com"}],
+            "check": {"ignore": True},
         })
         sd = step.to_step_def()
-        assert sd.check is None
+        assert sd.check == {"ignore": True}
         runtime = sd.to_runtime_dict()
-        assert runtime["check"] is None
+        assert runtime["check"] == {"ignore": True}
 
     def test_full_pipeline_with_check_steps(self):
         pipeline = PipelineYaml.model_validate({
@@ -300,13 +301,14 @@ class TestCheckFieldRoundTrip:
                  "check": {"url_contains": "x.com"}},
                 {"name": "step2", "tool_name": "extract",
                  "check": {"text_contains": "result"}},
-                {"name": "step3", "goal_description": "do something"},
+                {"name": "step3", "goal_description": "do something",
+                 "check": {"ignore": True}},
             ],
         })
         pd = pipeline.to_pipeline_def()
         assert pd.steps[0].check == {"url_contains": "x.com"}
         assert pd.steps[1].check == {"text_contains": "result"}
-        assert pd.steps[2].check is None
+        assert pd.steps[2].check == {"ignore": True}
 
     def test_check_field_round_trip(self):
         """check survives: YAML dict → StepYaml → StepDef → runtime_dict."""

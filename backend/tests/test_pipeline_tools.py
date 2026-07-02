@@ -27,22 +27,26 @@ SAMPLE_PIPELINE = {
             "name": "step_1",
             "description": "Navigate to site",
             "browser_ops": [{"goto": "https://example.com"}],
+            "check": {"ignore": True},
         },
         {
             "name": "step_2",
             "description": "Search for keyword",
             "browser_ops": [{"fill": {"selector": "#q", "value": "test"}}],
             "depends_on": ["step_1"],
+            "check": {"ignore": True},
         },
         {
             "name": "step_3",
             "description": "Run a custom tool",
             "tool_name": "my_tool",
+            "check": {"ignore": True},
         },
         {
             "name": "step_4",
             "description": "Goal step",
             "goal_description": "Analyze the results",
+            "check": {"ignore": True},
         },
     ],
 }
@@ -357,6 +361,7 @@ async def test_pipeline_add_step_append(sample_pipeline_file):
             step_name="step_5",
             description="Appended step",
             browser_ops=[{"snapshot": {}}],
+            check={"ignore": True},
             explanation="test",
         )
     data = result
@@ -376,6 +381,7 @@ async def test_pipeline_add_step_insert_after(sample_pipeline_file):
             description="Inserted step",
             browser_ops=[{"click": "#x"}],
             after="step_1",
+            check={"ignore": True},
             explanation="test",
         )
     data = result
@@ -392,6 +398,7 @@ async def test_pipeline_add_step_anchor_not_found(sample_pipeline_file):
         step_name="step_x",
         description="x",
         browser_ops=[{"goto": "x"}],
+        check={"ignore": True},
         after="nonexistent",
     )
     data = result
@@ -406,6 +413,7 @@ async def test_pipeline_add_step_pipeline_not_found(temp_presets_dir):
         step_name="step_1",
         description="x",
         browser_ops=[{"goto": "x"}],
+        check={"ignore": True},
     )
     data = result
     assert data["ok"] is False
@@ -421,6 +429,7 @@ async def test_pipeline_add_step_with_depends_on(sample_pipeline_file):
             description="With deps",
             browser_ops=[{"click": "#x"}],
             depends_on=["step_1", "step_2"],
+            check={"ignore": True},
             explanation="test",
         )
     data = result
@@ -438,6 +447,7 @@ async def test_pipeline_add_step_type_conflict(sample_pipeline_file):
         description="Conflict",
         browser_ops=[{"goto": "x"}],
         tool_name="t",
+        check={"ignore": True},
     )
     data = result
     assert data["ok"] is False
@@ -450,6 +460,7 @@ async def test_pipeline_add_step_duplicate_name(sample_pipeline_file):
         step_name="step_1",
         description="Duplicate",
         browser_ops=[{"goto": "x"}],
+        check={"ignore": True},
     )
     data = result
     assert data["ok"] is False
@@ -465,6 +476,7 @@ async def test_pipeline_add_step_with_op_type(sample_pipeline_file):
             description="Op type step",
             op_type="goto",
             op_args={"url": "https://example.com"},
+            check={"ignore": True},
             explanation="test",
         )
     data = result
@@ -539,7 +551,7 @@ async def test_pipeline_remove_last_step(temp_presets_dir):
         "name": "single",
         "description": "Only one step",
         "steps": [
-            {"name": "only", "description": "The only step", "browser_ops": [{"goto": "x"}]},
+            {"name": "only", "description": "The only step", "browser_ops": [{"goto": "x"}], "check": {"ignore": True}},
         ],
     }
     path = temp_presets_dir / "single" / "pipeline.yaml"
@@ -564,8 +576,8 @@ async def test_pipeline_create(temp_presets_dir):
             pipeline_name="new_pipeline",
             description="A new pipeline",
             steps=[
-                {"name": "s1", "description": "Step 1", "browser_ops": [{"goto": "https://x.com"}]},
-                {"name": "s2", "description": "Step 2", "tool_name": "my_tool"},
+                {"name": "s1", "description": "Step 1", "browser_ops": [{"goto": "https://x.com"}], "check": {"ignore": True}},
+                {"name": "s2", "description": "Step 2", "tool_name": "my_tool", "check": {"ignore": True}},
             ],
             explanation="test",
         )
@@ -585,7 +597,7 @@ async def test_pipeline_create_duplicate(sample_pipeline_file):
     result = await pipeline_create(
         pipeline_name="test_pipeline",
         description="dup",
-        steps=[{"name": "s1", "description": "x", "browser_ops": [{"goto": "x"}]}],
+        steps=[{"name": "s1", "description": "x", "browser_ops": [{"goto": "x"}], "check": {"ignore": True}}],
     )
     data = result
     assert data["ok"] is False
@@ -597,7 +609,7 @@ async def test_pipeline_create_invalid_name(temp_presets_dir):
     result = await pipeline_create(
         pipeline_name="bad/name",
         description="x",
-        steps=[{"name": "s1", "description": "x", "browser_ops": [{"goto": "x"}]}],
+        steps=[{"name": "s1", "description": "x", "browser_ops": [{"goto": "x"}], "check": {"ignore": True}}],
     )
     data = result
     assert data["ok"] is False
@@ -621,7 +633,7 @@ async def test_pipeline_create_type_conflict(temp_presets_dir):
         pipeline_name="conflict",
         description="x",
         steps=[
-            {"name": "s1", "description": "x", "browser_ops": [{"goto": "x"}], "tool_name": "t"},
+            {"name": "s1", "description": "x", "browser_ops": [{"goto": "x"}], "tool_name": "t", "check": {"ignore": True}},
         ],
     )
     data = result
@@ -648,7 +660,7 @@ def test_dump_pipeline_yaml_roundtrip():
         name="test",
         description="desc",
         steps=[
-            StepYaml(name="s1", description="d1", browser_ops=[{"goto": "https://x.com"}]),
+            StepYaml(name="s1", description="d1", browser_ops=[{"goto": "https://x.com"}], check={"ignore": True}),
         ],
     )
     yaml_str = _dump_pipeline_yaml(pipeline)
