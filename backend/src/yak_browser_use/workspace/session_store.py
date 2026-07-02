@@ -107,8 +107,12 @@ class SessionStore:
 
     # ── session CRUD ──
 
-    def new_session(self) -> str:
-        """Create a new session ID and register it in the index."""
+    def new_session(self) -> dict:
+        """Create a new session ID and register it in the index.
+
+        Also creates a corresponding run directory (``create_run("agent")``)
+        for download isolation. Returns ``{"session_id": ..., "run_id": ...}``.
+        """
         session_id = _generate_session_id()
         index = self._read_index()
         if session_id not in index:
@@ -121,8 +125,17 @@ class SessionStore:
                 "status": "idle",
             }
             self._write_index(index)
-            logger.info("session_store: new session %s in %s", session_id, self.pipeline_name)
-        return session_id
+            # Create corresponding run directory for download isolation
+            from yak_browser_use.workspace.manager import WorkspaceManager
+            wm = WorkspaceManager(self.pipeline_name)
+            run_dir = wm.create_run("agent")
+            run_id = run_dir.name
+            index[session_id]["run_id"] = run_id
+            self._write_index(index)
+            logger.info("session_store: new session %s (run %s) in %s", session_id, run_id, self.pipeline_name)
+        else:
+            run_id = index[session_id].get("run_id", "")
+        return {"session_id": session_id, "run_id": run_id}
 
     def save_session(self, session_id: str, session_dict: dict) -> None:
         """Save full session data to {session_id}.json and update index."""

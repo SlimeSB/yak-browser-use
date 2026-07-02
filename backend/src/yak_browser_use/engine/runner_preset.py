@@ -18,6 +18,7 @@ import traceback
 from copy import deepcopy
 from pathlib import Path
 
+from yak_browser_use.engine import truncate_step_result as _truncate_result
 from yak_browser_use.engine.events import EventSink
 from yak_browser_use.engine.executor import (
     execute_browser_step,
@@ -141,7 +142,6 @@ async def run_pipeline(
     cdp_helpers=None,
     max_runs: int = DEFAULT_MAX_RUNS,
     version: str | None = None,
-    pipeline_path: Path | None = None,
     frontmatter: dict | None = None,
     resume_from_index: int = 0,
     ws_clients: list | None = None,
@@ -158,7 +158,6 @@ async def run_pipeline(
         cdp_helpers: CDPHelpers instance for browser operations.
         max_runs: Maximum number of runs to keep in the workspace.
         version: Optional version string override.
-        pipeline_path: Optional path to pipeline.yaml for snapshot context.
         frontmatter: Optional pipeline frontmatter dict.
         resume_from_index: Step index to resume from (0 = start).
         ws_clients: Optional list of WebSocket client queues for event broadcast.
@@ -172,8 +171,14 @@ async def run_pipeline(
     wm.detect_crashed_runs()
     wm.cleanup_old_runs(max_runs)
 
-    run_dir = wm.create_run()
+    run_dir = wm.create_run("preset")
     wm.set_status(run_dir, "running")
+
+    # Bind browser download path to this run
+    if cdp_helpers is not None:
+        bridge = getattr(cdp_helpers, "bridge", None)
+        if bridge is not None:
+            await bridge.set_download_dir(pipeline_name, run_dir.name)
 
     pg = PathGuard(wm.root, run_dir)
     events = EventSink(run_dir, ws_clients=ws_clients or [])
@@ -194,21 +199,6 @@ async def run_pipeline(
         steps = _resolve_step_urls(steps, url_aliases)
 
     events.emit_run_start(pipeline_name, ctx.run_id, ver or "0")
-
-    # ── Snapshot pipeline.yaml at start ──
-    if pipeline_path and pipeline_path.exists():
-        wm.versions_dir.mkdir(parents=True, exist_ok=True)
-        snapshot_path = wm.versions_dir / f"snapshot_{int(time.time())}.pipeline.yaml"
-        try:
-            shutil.copy2(pipeline_path, snapshot_path)
-        except PermissionError:
-            if str(pipeline_path.resolve()) != str(snapshot_path.resolve()):
-                raise
-        logger.info("snapshot saved: %s", snapshot_path)
-        # Also copy to workspace root
-        pipe_path = wm.root / "pipeline.yaml"
-        shutil.copy2(pipeline_path, pipe_path)
-        logger.info("pipeline.yaml saved: %s", pipe_path)
 
     total_start = time.time()
     logger.info(
@@ -416,9 +406,29 @@ async def run_pipeline(
                     mask_sensitive_patterns(error_msg),
                 )
                 logger.error("  ✗ %s: %s", ctx.current_step, error_msg)
-                wm.set_status(run_dir, "failed")
-                final_status = "failed"
+
+                # Collect failure context for recovery
+                step_result_truncated = _truncate_result(step_result, max_chars=10000)
+                tree = machine.to_execution_tree()
+                tree["pipeline"] = pipeline_name
+                completed_steps = [
+                    {"index": n.index, "name": machine.steps[n.index].get("name", f"step_{n.index}"), "status": n.status.value}
+                    for n in machine.nodes if n.status == StepStatus.SUCCESS
+                ]
+                ctx.failure_context = {
+                    "pipeline_name": pipeline_name,
+                    "step_index": node.index,
+                    "step_name": ctx.current_step,
+                    "step_def": step_def,
+                    "error_code": error_code,
+                    "error_message": error_msg,
+                    "step_result": step_result_truncated,
+                    "execution_tree": tree,
+                    "completed_steps": completed_steps,
+                }
+                final_status = "needs_recovery"
                 _write_execution_tree(run_dir, machine, pipeline_name)
+                # Do NOT set status to "failed" — keep "running" for recovery
 
                 compromised = [
                     op for op in (compensation_data or []) if not op.get("reversible", True)
@@ -429,34 +439,10 @@ async def run_pipeline(
                 break
 
         # ── Finalise run ──
-        if not ctx.errors and final_status not in ("paused", "cancelled"):
+        if not ctx.errors and final_status not in ("paused", "cancelled", "needs_recovery"):
             wm.set_status(run_dir, "completed")
             last_step_dir = run_dir / _safe_dirname(ctx.current_step)
             wm.fill_final(run_dir, last_step_dir)
-
-        # ── Version snapshot at end ──
-        if pipeline_path and pipeline_path.exists():
-            from yak_browser_use.workspace.version_manager import VersionManager
-
-            vm = VersionManager(wm.versions_dir, ctx.pipeline_name)
-            upgraded = getattr(ctx, "upgraded_tools", [])
-            learned = getattr(ctx, "learned_goals", [])
-            summary_parts = []
-            if upgraded:
-                summary_parts.append(f"upgraded tools: {', '.join(upgraded)}")
-            if learned:
-                summary_parts.append(f"learned goals: {', '.join(learned)}")
-            if not summary_parts:
-                summary_parts.append(f"pipeline {final_status}")
-            vm.create_version(
-                trigger_run_id=ctx.run_id,
-                summary="; ".join(summary_parts),
-                pipe_pipeline=pipeline_path,
-                tools_dir=wm.tools_dir,
-                upgraded_tools=upgraded,
-                learned_goals=learned,
-            )
-            logger.info("version snapshot created for run %s", ctx.run_id)
 
         total_ms = int((time.time() - total_start) * 1000)
         events.emit_run_end(final_status, total_ms)

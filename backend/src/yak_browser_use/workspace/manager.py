@@ -44,17 +44,30 @@ class WorkspaceManager:
         self.tools_dir.mkdir(exist_ok=True)
         return self.root
 
-    def create_run(self) -> Path:
-        """Create a new run directory with metadata."""
+    def create_run(self, exec_type: str = "preset") -> Path:
+        """Create a new run directory with metadata.
+
+        Args:
+            exec_type: ``"preset"`` for preset pipeline runs, ``"agent"`` for agent sessions.
+        """
         self.ensure_workspace()
-        run_id = _generate_run_id(self.runs_dir)
+        if exec_type == "preset":
+            run_id = _generate_run_id(self.runs_dir)
+        elif exec_type == "agent":
+            run_id = _generate_agent_run_id(self.runs_dir)
+        else:
+            raise ValueError(f"Unknown exec_type '{exec_type}'. Must be 'preset' or 'agent'.")
+
         run_dir = self.runs_dir / run_id
         run_dir.mkdir(parents=True, exist_ok=True)
-        (run_dir / "final").mkdir(exist_ok=True)
+        (run_dir / "downloads").mkdir(exist_ok=True)
+        if exec_type == "preset":
+            (run_dir / "final").mkdir(exist_ok=True)
 
         meta = {
             "pipeline": self.pipeline_name,
             "run_id": run_id,
+            "type": exec_type,
             "status": "pending",
             "version": _read_latest_version(self.versions_dir),
             "created_at": _now_iso(),
@@ -63,7 +76,7 @@ class WorkspaceManager:
         }
         _write_json(run_dir / "_run.json", meta)
 
-        logger.info("workspace: created run %s/%s", self.pipeline_name, run_id)
+        logger.info("workspace: created %s run %s/%s", exec_type, self.pipeline_name, run_id)
         return run_dir
 
     # ── run lifecycle ──
@@ -111,7 +124,10 @@ class WorkspaceManager:
     # ── crash detection ──
 
     def detect_crashed_runs(self) -> list[Path]:
-        """Find runs still marked as 'running' and mark them as 'crashed'."""
+        """Find preset runs still marked as 'running' and mark them as 'crashed'.
+
+        Only processes runs with ``type == "preset"``; agent runs are skipped.
+        """
         runs = sorted(self.runs_dir.glob("*"), key=lambda p: p.name)
         crashed = []
         for run_dir in runs:
@@ -120,7 +136,7 @@ class WorkspaceManager:
             run_json = run_dir / "_run.json"
             if run_json.exists():
                 meta = _read_json(run_json)
-                if meta.get("status") == "running":
+                if meta.get("type") == "preset" and meta.get("status") == "running":
                     meta["status"] = "crashed"
                     meta["crashed_detected_at"] = _now_iso()
                     meta["completed_at"] = _now_iso()
@@ -172,8 +188,23 @@ def _generate_run_id(runs_dir: Path) -> str:
     return candidate
 
 
+def _generate_agent_run_id(runs_dir: Path) -> str:
+    """Generate a run ID for agent sessions with ``recovery_`` prefix."""
+    import secrets
+    base = datetime.now().strftime("%Y%m%d_%H%M%S")
+    hex_suffix = secrets.token_hex(3)  # 6 hex chars
+    candidate = f"recovery_{base}_{hex_suffix}"
+    n = 2
+    while (runs_dir / candidate).exists():
+        candidate = f"recovery_{base}_{hex_suffix}_{n}"
+        n += 1
+    return candidate
+
+
 def _looks_like_run_id(name: str) -> bool:
-    return bool(re.match(r"^\d{8}_\d{6}(_\d+)?$", name))
+    return bool(re.match(r"^\d{8}_\d{6}(_\d+)?$", name)) or bool(
+        re.match(r"^recovery_\d{8}_\d{6}_[0-9a-f]{6}(_\d+)?$", name)
+    )
 
 
 def _read_latest_version(versions_dir: Path) -> str | None:

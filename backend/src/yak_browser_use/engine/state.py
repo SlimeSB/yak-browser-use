@@ -18,3 +18,4 @@ class RunContext:
     compensation_history: list[dict] = field(default_factory=list)
     learned_goals: list[str] = field(default_factory=list)
     upgraded_tools: list[str] = field(default_factory=list)
+    failure_context: dict | None = None

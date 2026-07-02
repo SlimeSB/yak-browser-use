@@ -22,6 +22,7 @@ def _mock_cdp_helpers():
     """Create a mock CDPHelpers with a bridge."""
     helpers = MagicMock()
     bridge = MagicMock()
+    bridge.set_download_dir = AsyncMock()
     helpers.bridge = bridge
     return helpers
 
@@ -77,11 +78,13 @@ async def _run_with_mocks(steps, executor_mock, frontmatter=None, cdp_helpers=No
 
         run_counter = [0]
 
-        def _create_run():
+        def _create_run(exec_type="preset"):
             run_counter[0] += 1
             run_dir = workdir / f"run_{run_counter[0]}"
             run_dir.mkdir(parents=True, exist_ok=True)
-            (run_dir / "final").mkdir(exist_ok=True)
+            (run_dir / "downloads").mkdir(exist_ok=True)
+            if exec_type == "preset":
+                (run_dir / "final").mkdir(exist_ok=True)
             return run_dir
 
         mock_wm.create_run = _create_run

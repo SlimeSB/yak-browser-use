@@ -58,8 +58,11 @@ def test_ensure_session_dir(tmp_store):
 
 def test_new_session(tmp_store):
     tmp_store.ensure_session_dir()
-    sid = tmp_store.new_session()
+    result = tmp_store.new_session()
+    sid = result["session_id"]
     assert sid
+    assert "run_id" in result
+    assert result["run_id"].startswith("recovery_")
 
     index = tmp_store._read_index()
     assert sid in index
@@ -69,10 +72,11 @@ def test_new_session(tmp_store):
 
 def test_save_and_load_session(tmp_store):
     tmp_store.ensure_session_dir()
-    sid = tmp_store.new_session()
+    result = tmp_store.new_session()
+    sid_str = result["session_id"]
 
     session_dict = {
-        "session_id": sid,
+        "session_id": sid_str,
         "pipeline_name": "test_pipeline",
         "status": "completed",
         "messages": [
@@ -80,23 +84,24 @@ def test_save_and_load_session(tmp_store):
             {"role": "assistant", "content": "Hi there"},
         ],
     }
-    tmp_store.save_session(sid, session_dict)
+    tmp_store.save_session(sid_str, session_dict)
 
-    loaded = tmp_store.load_session(sid)
+    loaded = tmp_store.load_session(sid_str)
     assert loaded is not None
-    assert loaded["session_id"] == sid
+    assert loaded["session_id"] == sid_str
     assert len(loaded["messages"]) == 2
     assert loaded["messages"][0]["content"] == "Hello"
 
     # Check index was updated
     index = tmp_store._read_index()
-    assert index[sid]["message_count"] == 2
+    assert index[sid_str]["message_count"] == 2
 
 
 def test_list_sessions(tmp_store):
     tmp_store.ensure_session_dir()
-    s1 = tmp_store.new_session()
-    s2 = tmp_store.new_session()
+    r1 = tmp_store.new_session()
+    r2 = tmp_store.new_session()
+    s1, s2 = r1["session_id"], r2["session_id"]
     sessions = tmp_store.list_sessions()
     assert len(sessions) == 2
     # Should be sorted descending by created_at
@@ -142,9 +147,10 @@ def test_last_active(tmp_store):
 def test_session_id_sort(tmp_store):
     import time
     tmp_store.ensure_session_dir()
-    ids = [tmp_store.new_session() for _ in range(5)]
+    results = [tmp_store.new_session() for _ in range(5)]
     # IDs in same second won't necessarily sort — just verify format
-    for sid in ids:
+    for r in results:
+        sid = r["session_id"]
         parts = sid.split("_")
         assert len(parts) == 3
         assert len(parts[0]) == 8  # YYYYMMDD

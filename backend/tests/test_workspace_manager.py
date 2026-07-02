@@ -10,6 +10,7 @@ import pytest
 from yak_browser_use.workspace.manager import (
     WorkspaceManager,
     _generate_run_id,
+    _generate_agent_run_id,
     _looks_like_run_id,
     _now_iso,
     _read_json,
@@ -26,12 +27,16 @@ class TestLookLikeRunId:
     def test_valid_format(self):
         assert _looks_like_run_id("20240101_120000") is True
         assert _looks_like_run_id("20240101_120000_2") is True
+        assert _looks_like_run_id("recovery_20240101_120000_a1b2c3") is True
+        assert _looks_like_run_id("recovery_20240101_120000_a1b2c3_2") is True
 
     def test_invalid_format(self):
         assert _looks_like_run_id("") is False
         assert _looks_like_run_id("abc") is False
         assert _looks_like_run_id("2024-01-01") is False
         assert _looks_like_run_id("20240101") is False
+        assert _looks_like_run_id("recovery_20240101") is False
+        assert _looks_like_run_id("recovery_") is False
 
 
 class TestGenerateRunId:
@@ -45,6 +50,11 @@ class TestGenerateRunId:
         (tmp_path / first).mkdir()
         second = _generate_run_id(tmp_path)
         assert second != first  # should have a suffix
+
+    def test_agent_run_id_format(self, tmp_path):
+        run_id = _generate_agent_run_id(tmp_path)
+        assert run_id.startswith("recovery_")
+        assert _looks_like_run_id(run_id) is True
 
 
 class TestReadWriteJson:
@@ -114,28 +124,48 @@ class TestWorkspaceManagerCreateRun:
     def test_creates_run_directory(self, tmp_path, monkeypatch):
         monkeypatch.setattr("yak_browser_use.workspace.manager.WORKSPACES_ROOT", tmp_path)
         wm = WorkspaceManager("test_pipe")
-        run_dir = wm.create_run()
+        run_dir = wm.create_run("preset")
         assert run_dir.exists()
         assert (run_dir / "final").exists()
+        assert (run_dir / "downloads").exists()
+        assert (run_dir / "_run.json").exists()
+
+    def test_creates_agent_run_directory(self, tmp_path, monkeypatch):
+        monkeypatch.setattr("yak_browser_use.workspace.manager.WORKSPACES_ROOT", tmp_path)
+        wm = WorkspaceManager("test_pipe")
+        run_dir = wm.create_run("agent")
+        assert run_dir.exists()
+        assert run_dir.name.startswith("recovery_")
+        assert (run_dir / "downloads").exists()
+        assert not (run_dir / "final").exists()
         assert (run_dir / "_run.json").exists()
 
     def test_run_metadata(self, tmp_path, monkeypatch):
         monkeypatch.setattr("yak_browser_use.workspace.manager.WORKSPACES_ROOT", tmp_path)
         wm = WorkspaceManager("test_pipe")
-        run_dir = wm.create_run()
+        run_dir = wm.create_run("preset")
         meta = json.loads((run_dir / "_run.json").read_text(encoding="utf-8"))
         assert meta["pipeline"] == "test_pipe"
+        assert meta["type"] == "preset"
         assert meta["status"] == "pending"
         assert "run_id" in meta
         assert "created_at" in meta
         assert meta["version"] is None  # no versions yet
+
+    def test_agent_run_metadata(self, tmp_path, monkeypatch):
+        monkeypatch.setattr("yak_browser_use.workspace.manager.WORKSPACES_ROOT", tmp_path)
+        wm = WorkspaceManager("test_pipe")
+        run_dir = wm.create_run("agent")
+        meta = json.loads((run_dir / "_run.json").read_text(encoding="utf-8"))
+        assert meta["type"] == "agent"
+        assert meta["run_id"].startswith("recovery_")
 
 
 class TestWorkspaceManagerSetGetStatus:
     def test_set_status(self, tmp_path, monkeypatch):
         monkeypatch.setattr("yak_browser_use.workspace.manager.WORKSPACES_ROOT", tmp_path)
         wm = WorkspaceManager("test_pipe")
-        run_dir = wm.create_run()
+        run_dir = wm.create_run("preset")
         wm.set_status(run_dir, "running")
         meta = json.loads((run_dir / "_run.json").read_text(encoding="utf-8"))
         assert meta["status"] == "running"
@@ -143,14 +173,14 @@ class TestWorkspaceManagerSetGetStatus:
     def test_get_status(self, tmp_path, monkeypatch):
         monkeypatch.setattr("yak_browser_use.workspace.manager.WORKSPACES_ROOT", tmp_path)
         wm = WorkspaceManager("test_pipe")
-        run_dir = wm.create_run()
+        run_dir = wm.create_run("preset")
         wm.set_status(run_dir, "completed")
         assert wm.get_status(run_dir) == "completed"
 
     def test_set_status_with_current_step(self, tmp_path, monkeypatch):
         monkeypatch.setattr("yak_browser_use.workspace.manager.WORKSPACES_ROOT", tmp_path)
         wm = WorkspaceManager("test_pipe")
-        run_dir = wm.create_run()
+        run_dir = wm.create_run("preset")
         wm.set_status(run_dir, "running", current_step="step_1")
         meta = json.loads((run_dir / "_run.json").read_text(encoding="utf-8"))
         assert meta["current_step"] == "step_1"
@@ -158,14 +188,14 @@ class TestWorkspaceManagerSetGetStatus:
     def test_invalid_status_raises(self, tmp_path, monkeypatch):
         monkeypatch.setattr("yak_browser_use.workspace.manager.WORKSPACES_ROOT", tmp_path)
         wm = WorkspaceManager("test_pipe")
-        run_dir = wm.create_run()
+        run_dir = wm.create_run("preset")
         with pytest.raises(ValueError, match="Invalid status"):
             wm.set_status(run_dir, "invalid_status")
 
     def test_completed_sets_completed_at(self, tmp_path, monkeypatch):
         monkeypatch.setattr("yak_browser_use.workspace.manager.WORKSPACES_ROOT", tmp_path)
         wm = WorkspaceManager("test_pipe")
-        run_dir = wm.create_run()
+        run_dir = wm.create_run("preset")
         wm.set_status(run_dir, "completed")
         meta = json.loads((run_dir / "_run.json").read_text(encoding="utf-8"))
         assert meta["completed_at"] is not None
@@ -173,7 +203,7 @@ class TestWorkspaceManagerSetGetStatus:
     def test_failed_sets_completed_at(self, tmp_path, monkeypatch):
         monkeypatch.setattr("yak_browser_use.workspace.manager.WORKSPACES_ROOT", tmp_path)
         wm = WorkspaceManager("test_pipe")
-        run_dir = wm.create_run()
+        run_dir = wm.create_run("preset")
         wm.set_status(run_dir, "failed")
         meta = json.loads((run_dir / "_run.json").read_text(encoding="utf-8"))
         assert meta["completed_at"] is not None
@@ -181,7 +211,7 @@ class TestWorkspaceManagerSetGetStatus:
     def test_crashed_sets_both_timestamps(self, tmp_path, monkeypatch):
         monkeypatch.setattr("yak_browser_use.workspace.manager.WORKSPACES_ROOT", tmp_path)
         wm = WorkspaceManager("test_pipe")
-        run_dir = wm.create_run()
+        run_dir = wm.create_run("preset")
         wm.set_status(run_dir, "crashed")
         meta = json.loads((run_dir / "_run.json").read_text(encoding="utf-8"))
         assert meta["completed_at"] is not None
@@ -202,8 +232,8 @@ class TestWorkspaceManagerListRuns:
     def test_returns_metadata(self, tmp_path, monkeypatch):
         monkeypatch.setattr("yak_browser_use.workspace.manager.WORKSPACES_ROOT", tmp_path)
         wm = WorkspaceManager("test_pipe")
-        run1 = wm.create_run()
-        run2 = wm.create_run()
+        run1 = wm.create_run("preset")
+        run2 = wm.create_run("preset")
         wm.set_status(run1, "completed")
         wm.set_status(run2, "running")
 
@@ -218,7 +248,7 @@ class TestWorkspaceManagerDetectCrashed:
     def test_no_crashed_runs(self, tmp_path, monkeypatch):
         monkeypatch.setattr("yak_browser_use.workspace.manager.WORKSPACES_ROOT", tmp_path)
         wm = WorkspaceManager("test_pipe")
-        run_dir = wm.create_run()
+        run_dir = wm.create_run("preset")
         wm.set_status(run_dir, "completed")
         crashed = wm.detect_crashed_runs()
         assert crashed == []
@@ -226,7 +256,7 @@ class TestWorkspaceManagerDetectCrashed:
     def test_detects_running_as_crashed(self, tmp_path, monkeypatch):
         monkeypatch.setattr("yak_browser_use.workspace.manager.WORKSPACES_ROOT", tmp_path)
         wm = WorkspaceManager("test_pipe")
-        run_dir = wm.create_run()
+        run_dir = wm.create_run("preset")
         wm.set_status(run_dir, "running")
         crashed = wm.detect_crashed_runs()
         assert len(crashed) == 1
@@ -246,9 +276,9 @@ class TestWorkspaceManagerDetectCrashed:
     def test_detect_only_marks_running(self, tmp_path, monkeypatch):
         monkeypatch.setattr("yak_browser_use.workspace.manager.WORKSPACES_ROOT", tmp_path)
         wm = WorkspaceManager("test_pipe")
-        r1 = wm.create_run()
-        r2 = wm.create_run()
-        r3 = wm.create_run()
+        r1 = wm.create_run("preset")
+        r2 = wm.create_run("preset")
+        r3 = wm.create_run("preset")
         wm.set_status(r1, "running")
         wm.set_status(r2, "completed")
         wm.set_status(r3, "failed")
@@ -264,7 +294,7 @@ class TestWorkspaceManagerCleanup:
         wm = WorkspaceManager("test_pipe")
         # Create 5 runs
         for _ in range(5):
-            wm.create_run()
+            wm.create_run("preset")
         removed = wm.cleanup_old_runs(max_runs=3)
         assert removed == 2
         assert len(wm.list_runs()) == 3
@@ -273,7 +303,7 @@ class TestWorkspaceManagerCleanup:
         monkeypatch.setattr("yak_browser_use.workspace.manager.WORKSPACES_ROOT", tmp_path)
         wm = WorkspaceManager("test_pipe")
         for _ in range(3):
-            wm.create_run()
+            wm.create_run("preset")
         removed = wm.cleanup_old_runs(max_runs=5)
         assert removed == 0
         assert len(wm.list_runs()) == 3
@@ -290,7 +320,7 @@ class TestWorkspaceManagerFillFinal:
     def test_copies_step_directory(self, tmp_path, monkeypatch):
         monkeypatch.setattr("yak_browser_use.workspace.manager.WORKSPACES_ROOT", tmp_path)
         wm = WorkspaceManager("test_pipe")
-        run_dir = wm.create_run()
+        run_dir = wm.create_run("preset")
 
         # Create a last_step_dir with some files
         last_step = run_dir / "last_step"
@@ -306,14 +336,14 @@ class TestWorkspaceManagerFillFinal:
     def test_handles_missing_last_step_dir(self, tmp_path, monkeypatch):
         monkeypatch.setattr("yak_browser_use.workspace.manager.WORKSPACES_ROOT", tmp_path)
         wm = WorkspaceManager("test_pipe")
-        run_dir = wm.create_run()
+        run_dir = wm.create_run("preset")
         # Should not crash when last_step_dir doesn't exist
         wm.fill_final(run_dir, run_dir / "nonexistent")
 
     def test_copies_subdirectories(self, tmp_path, monkeypatch):
         monkeypatch.setattr("yak_browser_use.workspace.manager.WORKSPACES_ROOT", tmp_path)
         wm = WorkspaceManager("test_pipe")
-        run_dir = wm.create_run()
+        run_dir = wm.create_run("preset")
 
         last_step = run_dir / "last_step"
         last_step.mkdir()

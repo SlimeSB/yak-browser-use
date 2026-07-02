@@ -9,8 +9,6 @@ import time
 from pathlib import Path
 from typing import Any
 
-import shutil
-
 from fastapi import FastAPI, Query, WebSocket, WebSocketDisconnect
 from fastapi.responses import JSONResponse
 
@@ -223,62 +221,154 @@ def register_all_routes(app: FastAPI) -> None:
             pipeline_name = _extract_pipeline_name(pipeline_text)
             wm = _get_workspace_manager(pipeline_name)
             wm.ensure_workspace()
-            ts = int(time.time())
-            snapshot_path = wm.versions_dir / f"snapshot_{ts}.pipeline.yaml"
-            snapshot_path.write_text(pipeline_text, encoding="utf-8")
 
-            _snapshot_cleaned = False
+            from yak_browser_use.compiler.parser import inject_params_to_pipeline
+            pipeline_text = inject_params_to_pipeline(pipeline_text, params)
+
+            parsed, steps = _prepare_steps(pipeline_text, wm.root / "pipeline.yaml")
+
+            if params:
+                for step in steps:
+                    if step.get("is_goal"):
+                        desc = step.get("goal_description", "") or step.get("description", "")
+                        extras = " | ".join(f"{k}={v}" for k, v in params.items())
+                        step["goal_description"] = f"{desc} (params: {extras})"
+
+            from yak_browser_use.cdp.helpers import CDPHelpers
+            browser = CDPHelpers(engine_state.bridge)
+            from yak_browser_use.engine.agent import _create_chat_llm_call
+
             try:
-                from yak_browser_use.compiler.parser import inject_params_to_pipeline
-                pipeline_text = inject_params_to_pipeline(pipeline_text, params)
+                from yak_browser_use.engine.runner_preset import run_pipeline
+            except ImportError:
+                raise ServerError(
+                    "engine.runner_preset is not yet available — pipeline execution cannot start."
+                )
 
-                parsed, steps = _prepare_steps(pipeline_text, snapshot_path)
+            ctx = await run_pipeline(
+                pipeline_name=parsed.name,
+                steps=steps,
+                cdp_helpers=browser,
+                frontmatter=parsed.frontmatter,
+                ws_clients=engine_state.ws_clients,
+            )
 
-                if params:
-                    for step in steps:
-                        if step.get("is_goal"):
-                            desc = step.get("goal_description", "") or step.get("description", "")
-                            extras = " | ".join(f"{k}={v}" for k, v in params.items())
-                            step["goal_description"] = f"{desc} (params: {extras})"
+            # ── Recovery loop ──
+            recovery_attempt = 0
+            while ctx.failure_context is not None and recovery_attempt < MAX_RECOVERY_ATTEMPTS:
+                recovery_attempt += 1
+                logger.info(
+                    "recovery attempt %d/%d for pipeline '%s'",
+                    recovery_attempt, MAX_RECOVERY_ATTEMPTS, parsed.name,
+                )
 
-                from yak_browser_use.cdp.helpers import CDPHelpers
-                browser = CDPHelpers(engine_state.bridge)
+                # Re-read pipeline.yaml (agent may have edited it)
+                pipe_yaml = wm.root / "pipeline.yaml"
+                if pipe_yaml.exists():
+                    recovery_text = pipe_yaml.read_text(encoding="utf-8")
+                    recovery_parsed, recovery_steps = _prepare_steps(recovery_text, pipe_yaml)
+                else:
+                    recovery_text = pipeline_text
+                    recovery_parsed, recovery_steps = parsed, steps
 
-                try:
-                    from yak_browser_use.engine.runner_preset import run_pipeline
-                except ImportError:
-                    raise ServerError(
-                        "engine.runner_preset is not yet available — pipeline execution cannot start."
-                    )
+                # Create independent recovery session
+                service = await _get_service()
+                session_result = service.new_session(parsed.name)
+                recovery_session_id = session_result["session_id"]
+                recovery_run_id = session_result.get("run_id", "")
+
+                # Bind browser download to recovery session
+                if recovery_run_id and engine_state.bridge is not None:
+                    await engine_state.bridge.set_download_dir(parsed.name, recovery_run_id)
+
+                # Build and send recovery prompt
+                llm_call = _create_chat_llm_call()
+
+                recovery_prompt = _build_recovery_prompt(ctx.failure_context, recovery_attempt)
+                chat_result = await service.process_chat_message(
+                    recovery_prompt,
+                    cdp_helpers=browser,
+                    pipeline_name=parsed.name,
+                    llm_call=llm_call,
+                )
+
+                # Check if agent called pipeline_finish(status="failed") — abort recovery
+                agent_aborted = False
+                if chat_result.get("ok"):
+                    agent_session = service.get_session(parsed.name)
+                    if agent_session and agent_session.messages:
+                        for msg in agent_session.messages:
+                            if not isinstance(msg, dict):
+                                continue
+                            tool_calls = msg.get("tool_calls", [])
+                            if not tool_calls:
+                                continue
+                            for tc in tool_calls:
+                                if not isinstance(tc, dict):
+                                    continue
+                                func = tc.get("function", {})
+                                if not isinstance(func, dict):
+                                    continue
+                                tc_name = func.get("name", "")
+                                tc_args = func.get("arguments", "{}")
+                                if tc_name == "pipeline_finish":
+                                    try:
+                                        args_dict = json.loads(tc_args) if isinstance(tc_args, str) else tc_args
+                                    except Exception:
+                                        args_dict = {}
+                                    if args_dict.get("status") == "failed":
+                                        logger.info("recovery: agent called pipeline_finish(status='failed'), aborting")
+                                        agent_aborted = True
+                                        break
+                            if agent_aborted:
+                                break
+
+                    # Archive recovery session to keep session list clean
+                    if recovery_session_id:
+                        service.sessions.archive_session(parsed.name, recovery_session_id)
+
+                    if agent_aborted:
+                        ctx.failure_context = None
+                        wm.set_status(ctx.run_dir, "failed")
+                        break
+
+                # Re-run pipeline from updated pipeline.yaml
+                if pipe_yaml.exists():
+                    rerun_text = pipe_yaml.read_text(encoding="utf-8")
+                    rerun_parsed, rerun_steps = _prepare_steps(rerun_text, pipe_yaml)
+                else:
+                    rerun_text = recovery_text
+                    rerun_parsed, rerun_steps = recovery_parsed, recovery_steps
+
+                rerun_browser = CDPHelpers(engine_state.bridge)
 
                 ctx = await run_pipeline(
-                    pipeline_name=parsed.name,
-                    steps=steps,
-                    cdp_helpers=browser,
-                    pipeline_path=snapshot_path,
-                    frontmatter=parsed.frontmatter,
+                    pipeline_name=rerun_parsed.name,
+                    steps=rerun_steps,
+                    cdp_helpers=rerun_browser,
+                    frontmatter=rerun_parsed.frontmatter,
                     ws_clients=engine_state.ws_clients,
                 )
 
-                status = "completed" if not ctx.errors else "failed"
-                first_error = ctx.errors[0].get("message", str(ctx.errors[0])) if ctx.errors else None
-                _snapshot_cleaned = True
-                return JSONResponse({
-                    "run_id": ctx.run_id,
-                    "pipeline": ctx.pipeline_name,
-                    "status": status,
-                    "step_count": len(steps),
-                    "errors": ctx.errors,
-                    "error": first_error,
-                })
-            finally:
-                if not _snapshot_cleaned and snapshot_path.exists():
-                    try:
-                        errors_dir = snapshot_path.parent / "_errors"
-                        errors_dir.mkdir(parents=True, exist_ok=True)
-                        shutil.move(str(snapshot_path), str(errors_dir / snapshot_path.name))
-                    except Exception:
-                        pass
+                if ctx.failure_context is None:
+                    logger.info("recovery: pipeline re-run succeeded after attempt %d", recovery_attempt)
+                    break
+
+            # ── Handle recovery exhaustion ──
+            if ctx.failure_context is not None:
+                logger.warning("recovery exhausted after %d attempts for pipeline '%s'", recovery_attempt, parsed.name)
+                wm.set_status(ctx.run_dir, "failed")
+
+            status = "completed" if not ctx.errors else "failed"
+            first_error = ctx.errors[0].get("message", str(ctx.errors[0])) if ctx.errors else None
+            return JSONResponse({
+                "run_id": ctx.run_id,
+                "pipeline": ctx.pipeline_name,
+                "status": status,
+                "step_count": len(steps),
+                "errors": ctx.errors,
+                "error": first_error,
+            })
         except APIError:
             raise
         except Exception as exc:
@@ -745,59 +835,38 @@ def register_all_routes(app: FastAPI) -> None:
                     last_success = max(success_nodes, key=lambda n: n.get("index", 0))
                     resume_from_index = last_success.get("index", 0) + 1
 
-            from yak_browser_use.workspace.version_manager import VersionManager
-            vm = VersionManager(wm.versions_dir, pipeline_name)
-            latest_ver = vm.get_latest()
-            if not latest_ver:
-                raise APIError("no version found for pipeline", status_code=404)
+            pipe_yaml = wm.root / "pipeline.yaml"
+            if not pipe_yaml.exists():
+                raise APIError("pipeline.yaml not found at %s" % pipe_yaml, status_code=404)
+            pipeline_text = pipe_yaml.read_text(encoding="utf-8")
 
-            loaded = vm.load_version(latest_ver)
-            if not loaded:
-                raise APIError("version data not found", status_code=404)
-            pipeline_path, _ = loaded
-            pipeline_text = pipeline_path.read_text(encoding="utf-8")
+            parsed, steps = _prepare_steps(pipeline_text, pipe_yaml)
 
-            parsed, steps = _prepare_steps(pipeline_text, pipeline_path)
-
-            ts = int(time.time())
-            snapshot_path = wm.versions_dir / f"snapshot_{ts}.pipeline.yaml"
-            snapshot_path.write_text(pipeline_text, encoding="utf-8")
-
-            _snapshot_cleaned = False
             try:
-                try:
-                    from yak_browser_use.engine.runner_preset import run_pipeline
-                except ImportError:
-                    raise ServerError("engine.runner_preset is not yet available")
+                from yak_browser_use.engine.runner_preset import run_pipeline
+            except ImportError:
+                raise ServerError("engine.runner_preset is not yet available")
 
-                from yak_browser_use.cdp.helpers import CDPHelpers
-                browser = CDPHelpers(engine_state.bridge)
+            from yak_browser_use.cdp.helpers import CDPHelpers
+            browser = CDPHelpers(engine_state.bridge)
 
-                ctx = await run_pipeline(
-                    pipeline_name=pipeline_name,
-                    steps=steps,
-                    cdp_helpers=browser,
-                    pipeline_path=snapshot_path,
-                    frontmatter=parsed.frontmatter,
-                    resume_from_index=resume_from_index,
-                    ws_clients=engine_state.ws_clients,
-                )
+            ctx = await run_pipeline(
+                pipeline_name=pipeline_name,
+                steps=steps,
+                cdp_helpers=browser,
+                frontmatter=parsed.frontmatter,
+                resume_from_index=resume_from_index,
+                ws_clients=engine_state.ws_clients,
+            )
 
-                final_status = "completed" if not ctx.errors else "failed"
-                _snapshot_cleaned = True
-                return JSONResponse({
-                    "status": "restarted",
-                    "run_id": ctx.run_id,
-                    "pipeline": ctx.pipeline_name,
-                    "resume_from_index": resume_from_index,
-                    "pipeline_status": final_status,
-                })
-            finally:
-                if not _snapshot_cleaned and snapshot_path.exists():
-                    try:
-                        snapshot_path.unlink()
-                    except Exception:
-                        pass
+            final_status = "completed" if not ctx.errors else "failed"
+            return JSONResponse({
+                "status": "restarted",
+                "run_id": ctx.run_id,
+                "pipeline": ctx.pipeline_name,
+                "resume_from_index": resume_from_index,
+                "pipeline_status": final_status,
+            })
         except APIError:
             raise
         except Exception as exc:
@@ -1165,12 +1234,6 @@ def register_all_routes(app: FastAPI) -> None:
         pipeline_name = request.pipeline_name
         sessions = service.switch_session(pipeline_name)
 
-        if engine_state.bridge is not None:
-            try:
-                await engine_state.bridge.set_download_pipeline(pipeline_name)
-            except Exception:
-                logger.debug("session_switch: set_download_pipeline failed", exc_info=True)
-
         return JSONResponse({"sessions": sessions})
 
     @app.get("/api/session/{pipeline_name}/list")
@@ -1445,6 +1508,53 @@ def _get_workspace_manager(pipeline_name: str) -> Any:
     """Return a WorkspaceManager for *pipeline_name*."""
     from yak_browser_use.workspace.manager import WorkspaceManager
     return WorkspaceManager(pipeline_name)
+
+
+MAX_RECOVERY_ATTEMPTS = 3
+
+
+
+
+
+def _build_recovery_prompt(failure_context: dict, attempt: int) -> str:
+    """Build a recovery prompt from failure context."""
+    import json as _json
+
+    step_def_json = _json.dumps(failure_context.get("step_def", {}), ensure_ascii=False, indent=2)
+    step_result = failure_context.get("step_result", {})
+    step_result_str = _json.dumps(step_result, ensure_ascii=False, indent=2, default=str)[:10000]
+    execution_tree = failure_context.get("execution_tree", {})
+    execution_tree_json = _json.dumps(execution_tree, ensure_ascii=False, indent=2)[:5000]
+    completed_steps = failure_context.get("completed_steps", [])
+
+    completed_lines = "\n".join(
+        f"- Step {s.get('index', '?')}: {s.get('name', '?')} ({s.get('status', '?')})"
+        for s in completed_steps
+    ) or "None"
+
+    return (
+        f"## Pipeline Recovery (Attempt {attempt}/{MAX_RECOVERY_ATTEMPTS})\n\n"
+        f"The preset pipeline \"{failure_context.get('pipeline_name', 'unknown')}\" failed "
+        f"at step {failure_context.get('step_index', '?')} "
+        f"\"{failure_context.get('step_name', '?')}\".\n\n"
+        f"### Error\n"
+        f"- Code: {failure_context.get('error_code', '?')}\n"
+        f"- Message: {failure_context.get('error_message', '?')}\n\n"
+        f"### Failed Step Definition\n"
+        f"```json\n{step_def_json}\n```\n\n"
+        f"### Step Result (truncated)\n"
+        f"{step_result_str}\n\n"
+        f"### Execution Tree\n"
+        f"```json\n{execution_tree_json}\n```\n\n"
+        f"### Completed Steps\n"
+        f"{completed_lines}\n\n"
+        f"### Instructions\n"
+        f"1. Use `pipeline_view` to see the full pipeline\n"
+        f"2. Use browser tools (`snapshot`, `click`, etc.) to diagnose the current page state\n"
+        f"3. Use `edit_pipeline` to fix the yaml\n"
+        f"4. Call `pipeline_finish(status=\"completed\")` when done, or "
+        f"`pipeline_finish(status=\"failed\", summary=\"<reason>\")` if you cannot fix it\n"
+    )
 
 
 def _prepare_steps(content: str, pipeline_path: Path) -> tuple[Any, list[dict]]:

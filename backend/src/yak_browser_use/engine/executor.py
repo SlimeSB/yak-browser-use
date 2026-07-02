@@ -973,9 +973,12 @@ def _resolve_path(ref: str, run_dir: Path) -> Path:
         # Resolve relative to workspace root (run_dir/../../data/)
         return run_dir.parents[2] / ref
 
-    # downloads/ prefix → workspace download dir
+    # downloads/ prefix → run directory download dir
     if ref.startswith("downloads/"):
-        return run_dir.parents[2] / ref
+        resolved = run_dir / ref
+        if not resolved.exists():
+            logger.warning("Input path not found: %s", resolved)
+        return resolved
 
     # step_key.file_name → run_dir/step_key/file_name
     parts = ref.split(".", 1)

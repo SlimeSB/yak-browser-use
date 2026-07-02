@@ -146,15 +146,18 @@ class SessionManager:
         normalized = self.normalize_pipeline(pipeline_name)
         store = SessionStore(normalized)
         store.ensure_session_dir()
-        session_id = store.new_session()
+        result = store.new_session()
+        session_id = result["session_id"]
+        run_id = result.get("run_id", "")
 
         session = SessionState(session_id=session_id, pipeline_name=normalized)
         self._sessions[normalized] = session
         self._active_pipeline = normalized
 
-        logger.info("new_session: %s for pipeline %s", session_id, normalized)
+        logger.info("new_session: %s (run %s) for pipeline %s", session_id, run_id, normalized)
         return {
             "session_id": session_id,
+            "run_id": run_id,
             "created_at": session.created_at,
             "pipeline_name": normalized,
         }

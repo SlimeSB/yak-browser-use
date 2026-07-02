@@ -251,7 +251,9 @@ class TestRunPipeline:
             MockEvents.return_value = mock_events
 
             mock_cdp = MagicMock()
-            mock_cdp.bridge = MagicMock()
+            mock_bridge = MagicMock()
+            mock_bridge.set_download_dir = AsyncMock()
+            mock_cdp.bridge = mock_bridge
 
             ctx = await run_pipeline(
                 pipeline_name="browser_test",
@@ -293,10 +295,15 @@ class TestRunPipeline:
             mock_events = MagicMock()
             MockEvents.return_value = mock_events
 
+            mock_cdp = MagicMock()
+            mock_bridge = MagicMock()
+            mock_bridge.set_download_dir = AsyncMock()
+            mock_cdp.bridge = mock_bridge
+
             ctx = await run_pipeline(
                 pipeline_name="cancel_test",
                 steps=steps,
-                cdp_helpers=MagicMock(),
+                cdp_helpers=mock_cdp,
             )
 
             assert ctx is not None
@@ -374,7 +381,9 @@ class TestRunPipeline:
             MockEvents.return_value = mock_events
 
             mock_cdp = MagicMock()
-            mock_cdp.bridge = MagicMock()
+            mock_bridge = MagicMock()
+            mock_bridge.set_download_dir = AsyncMock()
+            mock_cdp.bridge = mock_bridge
 
             ctx = await run_pipeline(
                 pipeline_name="fail_test",
@@ -422,7 +431,9 @@ class TestRunPipeline:
             MockEvents.return_value = mock_events
 
             mock_cdp = MagicMock()
-            mock_cdp.bridge = MagicMock()
+            mock_bridge = MagicMock()
+            mock_bridge.set_download_dir = AsyncMock()
+            mock_cdp.bridge = mock_bridge
 
             ctx = await run_pipeline(
                 pipeline_name="retry_test",

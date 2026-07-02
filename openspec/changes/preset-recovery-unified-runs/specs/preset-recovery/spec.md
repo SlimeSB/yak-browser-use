@@ -38,45 +38,17 @@
 - **AND** 最终 status 为 "failed"
 
 ### Requirement: Recovery prompt SHALL include complete failure context
-`_build_recovery_prompt()` MUST 将 failure_context 格式化为包含以下信息的 user message。prompt 模板如下：
-
-```
-## Pipeline Recovery (Attempt {attempt}/{max_attempts})
-
-The preset pipeline "{pipeline_name}" failed at step {step_index} "{step_name}".
-
-### Error
-- Code: {error_code}
-- Message: {error_message}
-
-### Failed Step Definition
-```json
-{step_def_json}
-```
-
-### Step Result (truncated)
-{step_result_truncated}
-
-### Execution Tree
-```json
-{execution_tree_json}
-```
-
-### Completed Steps
-{completed_steps_list}
-
-### Instructions
-1. Use `pipeline_view` to see the full pipeline
-2. Use browser tools (`snapshot`, `click`, etc.) to diagnose the current page state
-3. Use `edit_pipeline` to fix the yaml
-4. Call `pipeline_finish(status="completed")` when done, or `pipeline_finish(status="failed", summary="<reason>")` if you cannot fix it
-```
+`_build_recovery_prompt()` MUST 将 failure_context 格式化为包含 pipeline 名称、失败 step 的 index/name、错误码、错误信息、失败 step 定义 JSON（含 browser_ops）、执行结果（截断后）、execution tree、已完成步骤列表的 user message。
 
 #### Scenario: Build prompt for selector error
 - **WHEN** failure_context 包含 error_code="SELECTOR_NOT_FOUND"
-- **THEN** 生成的 prompt MUST 按上述模板格式化
+- **THEN** 生成的 prompt MUST 使用以下模板格式：
+- **AND** MUST 包含 "## Pipeline Recovery (Attempt {attempt}/{max_attempts})" 标题
+- **AND** MUST 包含错误码和错误信息
 - **AND** MUST 包含失败 step 的完整 browser_ops 定义（在 Failed Step Definition JSON 中）
+- **AND** MUST 包含 execution tree JSON
 - **AND** MUST 包含 recovery 指令（pipeline_view → browser tools → edit_pipeline → pipeline_finish）
+- **AND** MUST 提示 agent 调用 pipeline_finish(status="completed") 或 pipeline_finish(status="failed")
 
 ### Requirement: Recovery session SHALL be independent and identifiable
 每次 recovery MUST 通过 service.new_session() 创建全新独立 session，不污染现有 chat session 历史。recovery session 的 run_id 必须以 `recovery_` 前缀标识。

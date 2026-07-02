@@ -744,6 +744,7 @@ class PlaywrightBridge:
     def __init__(self, cdp_url: str = "http://127.0.0.1:9222", pipeline_name: str = "__chat__") -> None:
         self._cdp_url = cdp_url
         self._pipeline_name = pipeline_name
+        self._run_id: str | None = None
         self._playwright: Any = None
         self._browser: Browser | None = None
         self._context: BrowserContext | None = None
@@ -822,12 +823,9 @@ class PlaywrightBridge:
         for p in self._context.pages:
             if p is not self._page:
                 await self.ensure_highlights(p)
-        # 为所有已有页面设置 CDP download behavior
+        # 不再在连接时绑定下载路径 — 由 set_download_dir 在 run_pipeline 开始时调用
         for p in self._context.pages:
-            ok = await self._set_page_download_behavior(p)
             self._seen_pages.add(p)
-            if not ok:
-                self._bind_download_fallback(p)
 
         # 自动扫描当前页面，让开局就有高亮（不依赖 chat tool call）
         # 注意：不 await，让 scan 在后台跑，否则 CDP getFullAXTree/DOM.getDocument
@@ -918,11 +916,12 @@ class PlaywrightBridge:
         except Exception:
             logger.debug("_on_new_page highlight injection failed", exc_info=True)
 
-        # 设置 CDP download behavior
-        ok = await self._set_page_download_behavior(page)
         self._seen_pages.add(page)
-        if not ok:
-            self._bind_download_fallback(page)
+        # 如果有活跃 run，为新页面设置下载路径
+        if self._run_id is not None:
+            ok = await self._set_page_download_behavior(page)
+            if not ok:
+                self._bind_download_fallback(page)
 
         # 新标签页自动设为活动页（让用户点链接后马上看到高亮）
         self._page = page
@@ -992,8 +991,11 @@ class PlaywrightBridge:
 
         Returns True on success, False if CDP command failed (caller
         should fall back to ``page.on("download")`` + ``save_as()``).
+        Skips if no run is active (``_run_id`` is None).
         """
         path = self._resolve_download_path()
+        if path is None:
+            return False
         cdp_session = None
         try:
             cdp_session = await self._context.new_cdp_session(page)
@@ -1009,33 +1011,39 @@ class PlaywrightBridge:
             if cdp_session is not None:
                 await cdp_session.detach()
 
-    def _resolve_download_path(self, pipeline_name: str | None = None) -> Path:
-        """Resolve the download directory for *pipeline_name* (or current).
+    def _resolve_download_path(self, pipeline_name: str | None = None) -> Path | None:
+        """Resolve the download directory for the current run.
 
-        Creates the directory if it does not exist.
+        Returns ``WORKSPACES_ROOT / pipeline_name / "runs" / run_id / "downloads"``
+        when ``_run_id`` is set, or ``None`` if no run is active.
         """
+        if self._run_id is None:
+            return None
         name = pipeline_name or self._pipeline_name
-        path = WORKSPACES_ROOT / name / "downloads"
+        path = WORKSPACES_ROOT / name / "runs" / self._run_id / "downloads"
         path.mkdir(parents=True, exist_ok=True)
         return path
 
-    async def set_download_pipeline(self, pipeline_name: str) -> None:
-        """Switch download directory at runtime for all known pages."""
+    async def set_download_dir(self, pipeline_name: str, run_id: str) -> None:
+        """Set the download directory for the current run on all known pages."""
         self._pipeline_name = pipeline_name
+        self._run_id = run_id
         for page in list(self._seen_pages):
             try:
                 await self._set_page_download_behavior(page)
             except Exception:
-                logger.debug("set_download_pipeline: failed for page %s", page, exc_info=True)
+                logger.debug("set_download_dir: failed for page %s", page, exc_info=True)
 
     def _bind_download_fallback(self, page: Page) -> None:
         """Fallback: listen for Playwright ``download`` event when CDP fails.
 
-        Saves the downloaded file to the pipeline download directory via
-        ``download.save_as()``.
+        Saves the downloaded file to the run download directory via
+        ``download.save_as()``. Skips if no run is active.
         """
         async def _on_download(download):
             path = self._resolve_download_path()
+            if path is None:
+                return
             dest = path / download.suggested_filename
             try:
                 await download.save_as(dest)
@@ -1059,6 +1067,8 @@ class PlaywrightBridge:
         Known limitation: does not support concurrent downloads.
         """
         target_dir = self._resolve_download_path()
+        if target_dir is None:
+            return {"ok": False, "error": "no_active_run"}
         known = set(target_dir.iterdir()) if target_dir.exists() else set()
 
         deadline = asyncio.get_event_loop().time() + timeout
