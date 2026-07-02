@@ -1,53 +1,46 @@
-﻿# Frontend Store
+﻿## ADDED Requirements
 
-## Requirements
+### Requirement: frontend components MUST use stores instead of props
+All frontend tab components and App.tsx MUST 不再通过 props 接收业务状态，全部改为从对应 store 内部 selector 读取。App.tsx MUST 瘦身为纯布局编排器：TitleBar、ConnectionBar、TabBar、TabContent、StatusBar。
 
-### uiStore 必须提供所有全局 UI 偏好状态
-系统 MUST 提供 uiStore，暴露 ctiveTab、	heme、chatLayoutReversed、sidebarCollapsed 字段以及对应的 setter action。所有 UI 偏好 MUST 在变更时同步写入 localStorage 以保持持久化。
+#### Scenario: App.tsx 渲染
+- **WHEN** 首次渲染
+- **THEN** App MUST 渲染各 Tab 组件且 MUST 不传递任何业务 props
+- **AND** App.tsx MUST 不包含任何 useState/setChatMessages/setEvents/setConnected/setLoading 等内联状态操作
 
-#### Scenario: 用户切换 Tab
-- **WHEN** 用户点击某个 Tab 按钮
-- **THEN** 系统 MUST 调用 uiStore.setActiveTab(tabName)，且所有订阅该字段的组件 MUST 收到新值
+#### Scenario: ChatTab 从 store 获取数据
+- **WHEN** ChatTab 被激活
+- **THEN** ChatTab MUST 从 chatStore / connectionStore / pipelineStore 内部 selector 读取
+- **AND** MUST NOT 接收 23+ 个 props
+- **AND** 内部 api.chat 调用 MUST 改为调 chatStore.send(text)
 
-#### Scenario: 用户切换主题
-- **WHEN** 用户在设置中点击"亮色/暗色"按钮
-- **THEN** 系统 MUST 调用 uiStore.setTheme('light' | 'dark')，同步写入 localStorage('theme', ...)，并设置 document.documentElement.setAttribute('data-theme', ...)
+#### Scenario: ExecTab 从 pipelineStore 获取状态
+- **WHEN** 用户点击运行
+- **THEN** ExecTab MUST 调 pipelineStore.run(params)
+- **AND** MUST NOT 通过 props.onRun
 
-#### Scenario: 用户切换 Chat 面板顺序
-- **WHEN** 用户在 SettingsTab 中点击"Editor First / Chat First"
-- **THEN** 系统 MUST 调用 uiStore.setChatLayoutReversed(true|false)，同步写入 localStorage('chat-layout-reversed', ...)
+#### Scenario: LogTab 从 pipelineStore 获取状态
+- **WHEN** 用户清空 events
+- **THEN** LogTab MUST 调 pipelineStore.clearEvents()
 
-#### Scenario: 用户折叠/展开 Chat Sidebar
-- **WHEN** 用户点击 sidebar 折叠按钮
-- **THEN** 系统 MUST 调用 uiStore.setSidebarCollapsed(true|false)，同步写入 localStorage('chat-sidebar-collapsed', ...)
+#### Scenario: PipelinesTab 从 store 获取数据
+- **WHEN** 渲染 pipelines 列表
+- **THEN** MUST 展示来自 `usePipelineStore(s => s.pipelines)` 的卡片列表
+- **AND** 点击 Run 按钮 MUST 调 `pipelineStore.setActivePreset(name)` + `uiStore.setActiveTab('exec')`
 
-### connectionStore 必须管理浏览器连接全生命周期
-系统 MUST 提供 connectionStore，持有 connected、wsUrl、connectionError、profiles、selectedProfile、connectMode、estartDialog、estarting、highlightMode 状态；提供 connect、disconnect、estart、createProfile action；提供 connectedRef（store 外部的模块级布尔变量，用于 chrome_disconnected handler 中检测跳变）和 connectGen（模块级数字，用于 generation counter 过期检测）。MUST 提供 handleBrowserDisconnect action 供 gateway 调用。
+#### Scenario: SettingsTab 从 store 获取状态
+- **WHEN** 用户切换 reviewMode/theme/highlightMode
+- **THEN** MUST 调对应 store 的 action，不通过 props
 
-#### Scenario: generation counter 正确递增
-- **WHEN** 用户点击 connect 按钮
-- **THEN** 系统 MUST 在 connect action 入口处执行 connectGen++ 并保存为 localGen，异步操作完成后 MUST 检查 if (localGen !== connectGen) return;，确保过期响应被丢弃
+#### Scenario: ParamsTab 从 credentialStore 获取状态
+- **WHEN** 渲染凭据列表
+- **THEN** MUST 通过 `useCredentialStore(s => s.credKeys)` 获取凭据列表
 
-#### Scenario: uiStore localStorage 静默失败
-- **WHEN** uiStore 任何 setter 调用 localStorage.setItem/setAttribute 时
-- **THEN** MUST 在 try-catch 中执行，异常 MUST 静默吞掉
+#### Scenario: StatusBar 从 store 获取状态
+- **WHEN** 渲染 StatusBar
+- **THEN** MUST 展示 conn-dot 指示器（useConnectionStore）+ 步骤进度（pipelineStore.events）
 
-#### Scenario: 用户点击连接按钮
-- **WHEN** 前端调用 connectionStore.connect(mode, profile)
-- **THEN** 系统 MUST 调 pi.connectBrowser(mode, profile, highlightMode)，成功时 set connected=true，失败时 set connectionError
-
-#### Scenario: 后端推送 chrome_disconnected 事件
-- **WHEN** wsGateway 分发 chrome_disconnected 事件
-- **THEN** connectionStore MUST 调 handleBrowserDisconnect()，将 connected 置为 false、wsUrl 清空
-
-### pipelineStore 必须管理管道数据和执行状态
-系统 MUST 提供 pipelineStore，持有 pipelines、ctivePreset、pipelineCache、pipelineEditor、events、esult、esultErrors、loading、currentRunId、currentPipeline、cancelling、pendingReview、eviewMode 状态。
-
-### pipelineStore 必须从 events 计算 stages/stepNames
-pipelineStore 必须在内部维护 derivation 逻辑：从 events 数组计算 stepNames、stepStarts、stepEnds、getStepStatus(name) 函数。
-
-### chatStore 必须管理聊天全状态
-系统 MUST 提供 chatStore，持有 chatMessages、pendingEdits、processedEditIds（模块级 Set）、currentSessionId、chatSessions、pipelineSessions、expandedNodes、loadingSession 状态和内部可变的 streamStates。
-
-### credentialStore 必须管理凭据
-系统 MUST 提供 credentialStore，持有 credKeys、credKey、credValue 状态，并提供 setCredKey、setCredValue、ddCredential、emoveCredential action。
+#### Scenario: ConnectionBar 从 connectionStore 获取状态
+- **WHEN** 用户点击连接/断开按钮
+- **THEN** MUST 调 connectionStore.connect()/disconnect()，不通过 props.onConnect/onDisconnect
+- **AND** highlightMode MUST 存入 connectionStore

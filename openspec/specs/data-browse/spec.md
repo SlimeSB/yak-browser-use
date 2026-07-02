@@ -5,8 +5,7 @@
 
 #### Scenario: 浏览元素列表
 - **WHEN** LLM 调用 `data_browse(key="elements", limit=20, offset=0)` 且 shared_store["elements"] 为元素列表
-- **THEN** 返回 `{ok: true, key: "elements", offset: 0, limit: 20, total: N, items: ["@e_0 <button> ...", ...]}`
-- **AND** 每个元素使用 `_build_snapshot_summary` 的单行格式
+- **THEN** 返回 `{ok: true, key: "elements", offset: 0, limit: 20, total: N, items: [...]}`
 
 #### Scenario: 浏览字符串
 - **WHEN** LLM 调用 `data_browse(key="html", limit=500, offset=0)` 且 shared_store["html"] 为字符串
@@ -26,4 +25,21 @@
 
 #### Scenario: shared_store 不可用
 - **WHEN** LLM 调用 `data_browse(key="x")` 但 `ctx.shared_store` 为 None
+- **THEN** 返回 `{ok: false, error: "shared_store 不可用"}`
+
+### Requirement: data_keys 工具注册
+系统 MUST 在 `registry.py` 中注册 `data_keys` 工具，LLM 可调用以列出 shared_store 中所有 key。
+
+#### Scenario: 列出所有 key
+- **WHEN** LLM 调用 `data_keys()`
+- **THEN** 返回 `{ok: true, keys: [{name, type, size}]}`
+- **AND** `type` 为 `"list"`、`"dict"`、`"str"` 或 `"other"`
+- **AND** `size` 为元素数（list/dict）或字符数（str）
+
+#### Scenario: shared_store 为空
+- **WHEN** LLM 调用 `data_keys()` 且 shared_store 为空
+- **THEN** 返回 `{ok: true, keys: []}`
+
+#### Scenario: shared_store 不可用
+- **WHEN** LLM 调用 `data_keys()` 但 `ctx.shared_store` 为 None
 - **THEN** 返回 `{ok: false, error: "shared_store 不可用"}`

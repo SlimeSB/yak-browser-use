@@ -1,6 +1,7 @@
 ## MODIFIED Requirements
 
 ### Requirement: CDPHelpers 构造参数变更
+
 `CDPHelpers.__init__` MUST 从接受 `CDPDaemon` 改为接受 `PlaywrightBridge`，所有方法重写为调用 PlaywrightBridge 的方法。
 
 #### Scenario: 构造参数变更
@@ -9,6 +10,7 @@
 - **AND** 不再依赖 `CDPDaemon` 实例
 
 ### Requirement: CDPHelpers 已有方法重写
+
 `CDPHelpers` 的所有已有方法 MUST 重写为调用 PlaywrightBridge 的对应方法。
 
 #### Scenario: goto_url 透传
@@ -60,6 +62,7 @@
 - **THEN** 内部调用 `self._bridge.wait_for_page_load()`
 
 ### Requirement: CDPHelpers 新增方法
+
 `CDPHelpers` MUST 新增 hover、unhover、focus_selector、select_option、clear_input、keyboard_key、keyboard_text、navigate、wait、tab_new、tab_switch、tab_close、tab_list、copy_to_clipboard、paste_from_clipboard 方法，全部透传 PlaywrightBridge。
 
 #### Scenario: hover 透传
@@ -123,6 +126,7 @@
 - **THEN** 内部调用 `self._bridge.paste_from_clipboard("#dst")`
 
 ### Requirement: CDPHelpers 移除的方法
+
 `CDPHelpers` MUST 移除 `_cdp()` 私有方法、`click_at_xy()` 方法、`target_session` 方法。
 
 #### Scenario: _cdp 已移除
@@ -132,6 +136,7 @@
 - **AND** 不包含 `target_session` 方法
 
 ### Requirement: CDPHelpers 保留辅助方法
+
 `CDPHelpers` MUST 保留 `reset_ref_map()` 和 `get_element_by_index()` 辅助方法，内部透传 PlaywrightBridge。
 
 #### Scenario: reset_ref_map 透传
@@ -141,3 +146,32 @@
 #### Scenario: get_element_by_index 透传
 - **WHEN** 调用 `cdp_helpers.get_element_by_index("@e5")`
 - **THEN** 内部调用 `self._bridge.get_element_by_index("@e5")`
+
+### Requirement: ToolCDPHelpers（工具层轻量包装）
+
+`ToolCDPHelpers.__init__` MUST 接受 `PlaywrightBridge`，内部持有 `self._bridge`。click/fill 方法透传 bridge。MUST 新增 `evaluate(js)` 方法透传 `bridge.evaluate()`，供 `extract.py` 等工具跑任意 JS。MUST 保留 circuit breaker 逻辑：连续失败 3 次后抛出 `RuntimeError`，成功后重置计数。
+
+#### Scenario: 构造参数变更
+- **WHEN** 创建 `ToolCDPHelpers(bridge)` 传入 `PlaywrightBridge` 实例
+- **THEN** 内部持有 `self._bridge` 引用
+- **AND** 不再依赖 `CDPHelpers` 实例
+
+#### Scenario: click 方法透传
+- **WHEN** 工具脚本调用 `tool_cdp.click("#btn")`
+- **THEN** `ToolCDPHelpers` 通过 `self._bridge.click("#btn")` 执行
+- **AND** circuit breaker 在调用前后检查/重置失败计数
+
+#### Scenario: evaluate 方法
+- **WHEN** 工具脚本调用 `tool_cdp.evaluate("document.title")`
+- **THEN** `ToolCDPHelpers` 通过 `self._bridge.evaluate("document.title")` 执行
+- **AND** circuit breaker 在调用前后检查/重置失败计数
+- **AND** 返回 JS 执行结果
+
+#### Scenario: 连续失败触发熔断
+- **WHEN** 工具脚本连续 3 次调用均失败
+- **THEN** 第 4 次调用时 `_check_failures()` 抛出 `RuntimeError("Circuit breaker: 3 consecutive failures")`
+
+#### Scenario: 成功后重置计数
+- **WHEN** 工具脚本在失败后成功调用一次
+- **THEN** `_fail_count` 重置为 0
+- **AND** 后续调用不受熔断限制

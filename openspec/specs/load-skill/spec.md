@@ -1,11 +1,8 @@
-# load-skill Specification
-
-## Purpose
-TBD - created by archiving change skill-system. Update Purpose after archive.
 ## Requirements
+
 ### Requirement: 加载 skill body（去 frontmatter）
 
-系统 MUST 提供 `load_skill(name)` 函数，返回 skill 的 body 部分（去掉 YAML frontmatter），供 system prompt 等代码层使用。
+系统 MUST 提供 `load_skill(name)` 函数（位于 `backend/prompts/_loader.py`），返回 skill 的 body 部分（去掉 YAML frontmatter），供 system prompt 等代码层使用。内部通过 `skill_loader.skill_view(name)` 实现。
 
 #### Scenario: 成功加载子目录格式 skill
 
@@ -33,3 +30,10 @@ TBD - created by archiving change skill-system. Update Purpose after archive.
 - **THEN** 系统以文件的完整文本内容作为 body（视 frontmatter 为 body 的一部分）
 - **AND** 记录 warning 日志
 
+### Requirement: 加载 prompt 模板
+
+系统 MUST 提供 `load_prompt(name, **variables)` 函数（位于 `backend/prompts/_loader.py`），加载 `prompts/{name}.md` 模板文件并支持 `{variable}` 占位符替换。未提供的变量保持原样（不抛 KeyError）。
+
+### Requirement: 构建 system prompt
+
+`build_system_prompt()` MUST 加载 `prompts/chat/system.md` 基础 prompt，然后追加所有带 `system` tag 的 skill body 文本。使用 `skill_list(include_body=True)` 一次性获取全部 skill 内容。

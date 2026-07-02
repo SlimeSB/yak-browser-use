@@ -1,76 +1,64 @@
 ## ADDED Requirements
 
-### Requirement: eval_js 工具注册
-系统 MUST 在 `tools/registry.py` 中注册名为 `eval_js` 的工具，替代原有的 `browser_eval` op。
+### Requirement: browser_eval_js 工具注册
 
-#### Scenario: eval_js 出现在工具列表中
+系统 MUST 在 `tools/registry.py` 中注册名为 `browser_eval_js` 的工具（非 `eval_js`），通过独立 handler 执行（不在 `_BROWSER_OPS` 循环中）。
+
+#### Scenario: browser_eval_js 出现在工具列表中
 - **WHEN** `registry.get_schemas()` 被调用
-- **THEN** 返回的 schema 列表中包含 `eval_js` 而非 `browser_eval`
+- **THEN** 返回的 schema 列表中包含 `browser_eval_js`
 
-#### Scenario: eval_js 参数结构
-- **WHEN** LLM 查看 `eval_js` 的 tool schema
-- **THEN** schema 包含唯一必填参数 `code`（string，要执行的 JavaScript 代码）
-- **AND** 不包含 `js_file`、`params`、`poll_seconds`、`output_file`、`silent`、`timeout` 等参数
+### Requirement: browser_eval_js 通过 registry 执行
 
-### Requirement: eval_js 通过 registry 执行
-`eval_js` MUST 通过 `registry.dispatch()` 执行，handler 通过 `ctx.cdp_helpers` 获取 bridge 调用 `evaluate()`。
+`browser_eval_js` MUST 通过 `registry.dispatch()` 执行。handler 从 `ctx.cdp_helpers` 获取 bridge，优先读取 `script_file` 参数指定的文件内容作为 JS 代码，通过 `bridge.evaluate()` 执行。
 
-#### Scenario: 执行内联 JS
-- **WHEN** LLM 调用 `eval_js(code="document.title")`
-- **THEN** 系统通过 ctx.cdp_helpers 执行 `bridge.evaluate("document.title")`
-- **AND** 返回当前页面 title 字符串
-- **AND** 结果通过 `source_key` 写入 shared_store，可被 `{path}` 引用
+#### Scenario: 使用 script_file 执行 JS
+- **WHEN** Agent 调用 `browser_eval_js(script_file="tools/extract.js")`
+- **THEN** handler 通过 `validate_path` 校验路径后读取文件内容
+- **AND** 调用 `bridge.evaluate(code)` 执行
+- **AND** 返回执行结果
 
-### Requirement: eval_js 结果走数据流
-`eval_js` 的执行结果 MUST 支持 `source_key` 参数写入 shared_store，与 `file_read`/`captcha` 一致。
+#### Scenario: script_file 不存在时返回错误
+- **WHEN** Agent 调用 `browser_eval_js(script_file="scripts/nonexistent.js")`
+- **THEN** 返回 `{"ok": False, "error": "脚本文件不存在: scripts/nonexistent.js"}`
 
-#### Scenario: source_key 写入 shared_store
-- **WHEN** LLM 调用 `eval_js(code="JSON.stringify({a:1})", source_key="my_data")`
-- **THEN** `shared_store["my_data"]` 被设为 eval 执行结果
-- **AND** 后续 tool 可通过 `{my_data}` 引用该结果
+#### Scenario: script_file 路径越界时返回错误
+- **WHEN** Agent 调用 `browser_eval_js(script_file="../../../etc/passwd")`
+- **THEN** 系统通过 `validate_path` 拒绝并返回越界错误
 
----
+### Requirement: browser_eval_js 结果走数据流
 
-## ADDED Requirements (data-pipeline-bind-variables)
+`browser_eval_js` 的执行结果 MUST 支持 `output_to` 参数写入 shared_store，与 `file_read` 等工具一致。
 
-### Requirement: browser_eval_js SHALL 支持 output_to 参数将执行结果存入 shared_store
-
-当 Agent 调用 `browser_eval_js` 并提供 `output_to` 参数时，系统 MUST 在 JS 执行完成后将结果存入 `ctx.shared_store[output_to]` 变量中。
-
-#### Scenario: Agent 将 eval_js 结果存入变量供后续使用
-
-- **WHEN** Agent 调用 `browser_eval_js(code="document.querySelectorAll('a').length", output_to="link_count")`
-- **THEN** 执行完成后 `ctx.shared_store["link_count"]` MUST 等于 `bridge.evaluate()` 的返回值
-- **AND** 返回给 LLM 的 result MUST 与不加 `output_to` 时保持一致（不改变现有返回格式）
+#### Scenario: output_to 写入 shared_store
+- **WHEN** Agent 调用 `browser_eval_js(script_file="extract.js", output_to="my_data")`
+- **THEN** `ctx.shared_store["my_data"]` 被设为 evaluate 执行结果
+- **AND** 返回给 LLM 的 result MUST 与不加 `output_to` 时保持一致
 
 #### Scenario: Agent 不提供 output_to 参数
-
-- **WHEN** Agent 调用 `browser_eval_js(code="1+1")` 且不提供 `output_to`
+- **WHEN** Agent 调用 `browser_eval_js(script_file="extract.js")` 且不提供 `output_to`
 - **THEN** 系统 MUST 不修改 `ctx.shared_store`，行为与变更前完全相同
 
----
-
-### Requirement: browser_eval_js SHALL 支持 return_format 参数控制返回格式
+### Requirement: browser_eval_js 支持 return_format 参数
 
 `return_format` 参数 MUST 接受三个可选值：`raw`（默认）、`json`、`csv`。
 
 #### Scenario: return_format=csv 时将数组转为 CSV 文本
-
-- **WHEN** Agent 调用 `browser_eval_js(code="[{'a':1},{'a':2}]", return_format="csv")`
-- **THEN** 返回的 result MUST 是 CSV 格式的文本（第一行为表头 `a`，第二行为 `1`，第三行为 `2`）
-- **AND** CSV MUST 正确处理特殊字符（逗号、引号、换行）的转义
+- **WHEN** Agent 调用 `browser_eval_js(script_file="extract.js", return_format="csv")` 且结果为数组
+- **THEN** 返回的 result MUST 是 CSV 格式的文本
 
 #### Scenario: return_format=json 时将结果转为 JSON 文本
-
-- **WHEN** Agent 调用 `browser_eval_js(code="1+1", return_format="json")`
-- **THEN** 返回的 result MUST 是 `"2"`（JSON.stringify 后的文本）
+- **WHEN** Agent 调用 `browser_eval_js(script_file="extract.js", return_format="json")`
+- **THEN** 返回的 result MUST 是 `json.dumps(result, ensure_ascii=False)` 后的文本
 
 #### Scenario: return_format=raw 时保持原样返回
-
-- **WHEN** Agent 调用 `browser_eval_js(code="1+1", return_format="raw")`
-- **THEN** 返回的 result MUST 等于 `bridge.evaluate()` 的原始返回值（数字 2）
+- **WHEN** Agent 调用 `browser_eval_js(script_file="extract.js", return_format="raw")`
+- **THEN** 返回的 result MUST 等于 `bridge.evaluate()` 的原始返回值
 
 #### Scenario: return_format=csv 但结果不是数组
+- **WHEN** Agent 调用 `browser_eval_js(script_file="extract.js", return_format="csv")` 但结果为字符串
+- **THEN** MUST 返回 `"return_format=csv requires array result, got str"`
 
-- **WHEN** Agent 调用 `browser_eval_js(code="'hello'", return_format="csv")`
-- **THEN** MUST 返回错误提示 `"return_format=csv requires array result, got str"` 或降级为 raw 格式
+### Requirement: browser_eval_js tool description 更新
+
+`browser_eval_js` 的 tool description MUST 包含以下提示信息：脚本在 `() => { ... }` 中执行，顶层不要写 `return`；如需多行逻辑使用箭头函数；必须提供 `script_file` 参数从 workspace 加载 JS 文件。
