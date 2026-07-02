@@ -115,13 +115,10 @@ function EditorPanel() {
             {t('chat.save', 'Save')}
           </button>
         )}
-        <button
-          className={`btn btn-small ${wrap ? 'btn-primary' : 'btn-secondary'}`}
-          onClick={() => setWrap(!wrap)}
-          title={wrap ? t('chat.wrapOn', 'Wrap: ON') : t('chat.wrapOff', 'Wrap: OFF')}
-        >
-          ↩
-        </button>
+        <label className="chat-editor-toolbar-label">
+          <input type="checkbox" checked={wrap} onChange={e => setWrap(e.target.checked)} />
+          <span>{t('chat.wordWrap', '自动换行')}</span>
+        </label>
       </div>
       {pendingEdit && (
         <>

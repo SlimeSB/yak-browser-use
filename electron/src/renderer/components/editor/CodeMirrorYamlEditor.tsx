@@ -82,12 +82,14 @@ export default function CodeMirrorYamlEditor({
   }, [hasDiff, original, isDark, wrap]);
 
   return (
-    <div style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
+    <div className="cm-editor-wrapper">
       <CodeMirror
         value={value}
         onChange={onChange}
         extensions={extensions}
         theme={cmTheme}
+        width="100%"
+        height="100%"
         basicSetup={{
           lineNumbers: true,
           tabSize: 2,
